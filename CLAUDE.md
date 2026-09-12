@@ -13,11 +13,12 @@ Kotlin 2.3 / Spring Boot 4.1 / Java 25 / PostgreSQL / 단일 Gradle 모듈.
 ```bash
 ./gradlew build          # 전체 빌드
 ./gradlew test           # 테스트
-./gradlew bootRun        # 로컬 실행 (compose.yaml 의 PostgreSQL 자동 기동)
+./gradlew bootRun        # 로컬 실행 (compose.yaml 의 PostgreSQL·Redis 자동 기동)
 ```
 
-로컬 DB는 `compose.yaml` 로 정의되어 있고 `bootRun` 시 스프링이 띄운다. Docker 가 실행 중이어야 한다.
-데이터소스 접속 정보는 `application.yaml` 에 적지 않는다 — Docker Compose 지원이 자동으로 연결한다.
+로컬 인프라(PostgreSQL 18, Redis 8)는 `compose.yaml` 로 정의되어 있고 `bootRun` 시 스프링이 띄운다.
+Docker 가 실행 중이어야 한다.
+접속 정보는 `application.yaml` 에 적지 않는다 — Docker Compose 지원이 자동으로 연결한다.
 
 ---
 
