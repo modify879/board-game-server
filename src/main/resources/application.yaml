@@ -2,8 +2,8 @@ spring:
   application:
     name: board-game
 
-  # 로컬에서는 compose.yaml 의 postgres 가 자동 기동되고
-  # 데이터소스가 자동으로 연결된다. url/username/password 를 적지 않는다.
+  # 로컬에서는 compose.yaml 의 postgres, redis 가 자동 기동되고
+  # 데이터소스와 Redis 접속이 자동으로 연결된다. host/url/username/password 를 적지 않는다.
   docker:
     compose:
       lifecycle-management: start_and_stop
