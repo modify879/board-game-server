@@ -4,6 +4,7 @@ import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
 import com.jsm.boardgame.user.application.port.IssuedTokens
+import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.domain.exception.InvalidRefreshTokenException
 import com.jsm.boardgame.user.domain.exception.UserErrorCode
 import java.time.Duration
@@ -89,6 +90,28 @@ private class RefreshInMemoryAuthSessionStore(
     }
 
     override fun isAccessTokenBlacklisted(accessTokenId: String): Boolean = blacklist.containsKey(accessTokenId)
+
+    /**
+     * 실제 [com.jsm.boardgame.user.infrastructure.security.RedisAuthSessionStore.rotate] 와 같은 규칙으로
+     * 대조와 교체를 한 번에 수행한다 — 현재 토큰이거나 유예 안의 직전 토큰이면 교체하고, 아니면 세션을
+     * 건드리지 않은 채 Mismatch 를 돌려준다.
+     */
+    override fun rotate(userId: Long, presentedRefreshToken: String, next: AuthSession): RotationResult {
+        val session = sessions[userId] ?: return RotationResult.Mismatch
+
+        val matches = if (session.refreshToken == presentedRefreshToken) {
+            true
+        } else {
+            val previous = session.previousRefreshToken
+            previous != null && previous == presentedRefreshToken && Instant.now().isBefore(graceExpiresAt[userId])
+        }
+
+        if (!matches) return RotationResult.Mismatch
+
+        val previousAccessTokenId = session.accessTokenId
+        start(userId, next)
+        return RotationResult.Rotated(previousAccessTokenId)
+    }
 }
 
 class RefreshTokenServiceTest {
@@ -167,6 +190,26 @@ class RefreshTokenServiceTest {
         // 재사용 탐지로 세션 전체가 폐기됐으므로, 아직 회수하지 않은 최신 토큰마저 통하지 않는다.
         assertFalse(sessions.matchesRefreshToken(userId, rotatedAgain.refreshToken))
         assertNull(sessions.currentAccessTokenId(userId))
+    }
+
+    @Test
+    fun `재사용 탐지 시 그 시점까지 살아 있던 액세스 토큰이 clear 이전에 블랙리스트에 등록된다`() {
+        val userId = 8L
+        val first = loginSession(userId)
+        val rotated = service.refresh(RefreshTokenCommand(first.refreshToken))
+        // 유예는 바로 직전 한 세대에만 적용된다. first 가 두 세대 전이 되도록 한 번 더 회전시켜야
+        // 재사용 탐지 경로(clear 이전 블랙리스트 등록)를 탄다.
+        val rotatedAgain = service.refresh(RefreshTokenCommand(rotated.refreshToken))
+
+        assertFalse(sessions.isAccessTokenBlacklisted(rotatedAgain.accessTokenId))
+
+        assertFailsWith<InvalidRefreshTokenException> {
+            service.refresh(RefreshTokenCommand(first.refreshToken))
+        }
+
+        // clear() 가 세션을 지우기 전에 그 시점의 액세스 토큰을 블랙리스트에 넣어야 한다 —
+        // 순서가 뒤바뀌면 currentAccessTokenId 가 이미 null 이라 블랙리스트에 넣을 방법이 없어진다.
+        assertTrue(sessions.isAccessTokenBlacklisted(rotatedAgain.accessTokenId))
     }
 
     @Test

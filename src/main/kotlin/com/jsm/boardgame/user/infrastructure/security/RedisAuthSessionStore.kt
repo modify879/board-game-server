@@ -2,7 +2,10 @@ package com.jsm.boardgame.user.infrastructure.security
 
 import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
+import com.jsm.boardgame.user.application.port.RotationResult
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.script.DefaultRedisScript
+import org.springframework.data.redis.core.script.RedisScript
 import org.springframework.stereotype.Component
 import java.security.MessageDigest
 import java.time.Duration
@@ -44,6 +47,34 @@ import java.time.Instant
  * 저장되고 회전할 때마다 덮어써지므로, 두 세대 이상 전 토큰은 애초에 저장소에 남아 있지 않다.
  * 그런 토큰이 오면 유예 시각과 무관하게 `matchesRefreshToken` 이 false 를 돌려주고,
  * 호출자([RefreshTokenService])가 재사용 탐지로 세션 전체를 폐기한다.
+ *
+ * ### 동시 갱신 경합과 원자적 회전
+ *
+ * [matchesRefreshToken] 으로 확인한 뒤 별도로 [start] 를 호출하는 "확인 후 실행"은 원자적이지
+ * 않다. 같은 리프레시 토큰으로 두 요청이 동시에 오면 둘 다 확인을 통과하고, 각자 새 토큰을
+ * 발급한 뒤 나중에 SET 하는 쪽이 이겨 먼저 응답받은 클라이언트는 저장소에 없는 토큰을 들고
+ * 남는다. [rotate] 는 확인과 교체를 Lua 스크립트로 묶어 Redis 서버에서 한 번에 원자적으로
+ * 처리해 이 경합을 없앤다. 해시 계산과 현재 시각·TTL 계산은 스크립트가 아니라 여기(Kotlin)에서
+ * 하고 결과만 인자로 넘긴다 — 원문 토큰이 Redis 로 전달되지 않게 하고, 스크립트가 직접 시계를
+ * 읽어 테스트 재현성이 떨어지는 것을 막기 위해서다.
+ *
+ * ### 즉시 경합 가드 (MIN_GRACE_ELAPSED_MILLIS)
+ *
+ * 원자성만으로는 충분하지 않다. 두 요청이 정말 동시에 같은(아직 회전되지 않은) 토큰을 제시하면,
+ * Redis 가 두 Lua 실행을 직렬화하므로 그중 하나만 "현재 토큰과 일치"로 통과한다 — 그런데
+ * 나머지 하나는, 방금 그 하나가 연 유예 창 안에서 "직전 토큰과 일치"로 **똑같이 통과해버린다**.
+ * 유예는 원래 "응답 유실 후 나중에 재시도"를 위한 것이지만, 저장된 값만 보면 "몇 초 뒤의 재시도"와
+ * "몇 마이크로초 뒤의 동시 경합"을 구별할 수 없다. 방치하면 진 쪽도 200 과 함께 유효해 보이는
+ * 토큰을 받고, 그 액세스 토큰마저 이긴 쪽의 다음 회전에 딸려 블랙리스트에 오르며, 이후 그 고아
+ * 토큰이 제시되면 재사용 탐지로 오인돼 이긴 쪽의 정상 세션까지 강제 로그아웃된다 — 없앤 줄 알았던
+ * 경합이 유예 경로로 되살아나는 셈이다.
+ *
+ * 그래서 유예 통과 조건에 "이 유예 창이 열린 뒤 [MIN_GRACE_ELAPSED_MILLIS] 이상 지났는가"를
+ * 추가한다. 실제 클라이언트의 응답 유실 재시도는 최소 한 번의 요청 타임아웃(보통 수백 ms~수 초)
+ * 이후에나 일어나므로 전혀 영향받지 않는다. 반면 같은 Redis 인스턴스에서 두 Lua 스크립트가
+ * 등에 업혀 실행되는 간격은 마이크로초~저수 ms 수준이라 이 가드에 안정적으로 걸린다. 이 값은
+ * 인스턴스마다 달라지는 [refreshReuseGrace] 와 달리 순수한 구현 상수라 스크립트 텍스트에
+ * 직접 새겨 넣는다(요청마다 인자로 넘길 이유가 없다).
  */
 @Component
 class RedisAuthSessionStore(
@@ -57,21 +88,7 @@ class RedisAuthSessionStore(
         val ttl = Duration.between(Instant.now(), session.refreshTokenExpiresAt)
         if (ttl.isNegative || ttl.isZero) return
 
-        val previousRefreshTokenHash = session.previousRefreshToken?.let { hash(it) } ?: ""
-        val graceExpiresAtEpochMilli = if (session.previousRefreshToken != null) {
-            Instant.now().plus(refreshReuseGrace).toEpochMilli()
-        } else {
-            0L
-        }
-
-        val value = listOf(
-            session.accessTokenId,
-            hash(session.refreshToken),
-            previousRefreshTokenHash,
-            graceExpiresAtEpochMilli.toString(),
-        ).joinToString(FIELD_DELIMITER)
-
-        redisTemplate.opsForValue().set(sessionKey(userId), value, ttl)
+        redisTemplate.opsForValue().set(sessionKey(userId), serialize(session), ttl)
     }
 
     override fun matchesRefreshToken(userId: Long, refreshToken: String): Boolean {
@@ -102,6 +119,46 @@ class RedisAuthSessionStore(
 
     override fun isAccessTokenBlacklisted(accessTokenId: String): Boolean =
         redisTemplate.hasKey(blacklistKey(accessTokenId))
+
+    override fun rotate(userId: Long, presentedRefreshToken: String, next: AuthSession): RotationResult {
+        val ttl = Duration.between(Instant.now(), next.refreshTokenExpiresAt)
+        // tokenIssuer 는 항상 미래 만료 시각의 토큰을 발급하므로 실제로는 항상 양수다 — SET 의 EX 에
+        // 0 이하를 넘기면 Redis 가 에러를 내므로 방어적으로 최소 1초를 보장한다.
+        val ttlSeconds = ttl.seconds.coerceAtLeast(1)
+
+        val previousAccessTokenId = redisTemplate.execute(
+            ROTATE_SCRIPT,
+            listOf(sessionKey(userId)),
+            hash(presentedRefreshToken),
+            Instant.now().toEpochMilli().toString(),
+            serialize(next),
+            ttlSeconds.toString(),
+            refreshReuseGrace.toMillis().toString(),
+        )
+
+        return if (previousAccessTokenId != null) {
+            RotationResult.Rotated(previousAccessTokenId)
+        } else {
+            RotationResult.Mismatch
+        }
+    }
+
+    /** 세션을 저장 문자열 포맷(`accessTokenId:hash:prevHash:graceMillis`)으로 직렬화한다. [start], [rotate] 공용. */
+    private fun serialize(session: AuthSession): String {
+        val previousRefreshTokenHash = session.previousRefreshToken?.let { hash(it) } ?: ""
+        val graceExpiresAtEpochMilli = if (session.previousRefreshToken != null) {
+            Instant.now().plus(refreshReuseGrace).toEpochMilli()
+        } else {
+            0L
+        }
+
+        return listOf(
+            session.accessTokenId,
+            hash(session.refreshToken),
+            previousRefreshTokenHash,
+            graceExpiresAtEpochMilli.toString(),
+        ).joinToString(FIELD_DELIMITER)
+    }
 
     /** 세션 값을 필드로 분리한다. 세션이 없거나 형식이 깨졌으면 null. */
     private fun parseSession(userId: Long): ParsedSession? {
@@ -143,5 +200,68 @@ class RedisAuthSessionStore(
         private const val BLACKLIST_KEY_PREFIX = "auth:blacklist:"
         private const val FIELD_DELIMITER = ":"
         private const val BLACKLISTED_MARKER = "1"
+
+        /** [rotate] 의 즉시 경합 가드. 클래스 docs "즉시 경합 가드" 절 참고. */
+        private const val MIN_GRACE_ELAPSED_MILLIS = 100L
+
+        /**
+         * KEYS[1] = 세션 키
+         * ARGV[1] = 제시된 리프레시 토큰의 SHA-256 해시
+         * ARGV[2] = 현재 시각(epoch millis, 문자열) — Kotlin 이 계산해 넘긴다
+         * ARGV[3] = 교체될 다음 세션 값(직렬화된 문자열)
+         * ARGV[4] = 다음 세션의 TTL(초, 문자열)
+         * ARGV[5] = 이 저장소 인스턴스의 [refreshReuseGrace](밀리초, 문자열)
+         *
+         * 저장된 값이 없으면 nil(불일치). 있으면 `accessTokenId:hash:prevHash:graceMillis` 로 나눠
+         * 제시된 해시가 현재 해시와 같으면 곧바로 통과. 아니면 직전 해시와 같고 아직 유예 시각
+         * 이전이면서, 그 유예 창이 열린 지 [MIN_GRACE_ELAPSED_MILLIS] 이상 지났을 때만 통과시킨다
+         * (즉시 경합 가드 — 클래스 docs 참고). 통과하면 SET key ARGV[3] EX ARGV[4] 로 교체하고
+         * 교체 전 accessTokenId 를 돌려준다. 그 외에는 nil.
+         *
+         * GET 부터 SET 까지가 단일 Lua 스크립트 실행 안에서 끝나므로(Redis 는 스크립트 실행 중
+         * 다른 명령을 끼워 넣지 않는다) 동시에 들어온 두 rotate 호출 중 하나만 통과한다.
+         */
+        private val ROTATE_SCRIPT: RedisScript<String> = DefaultRedisScript(
+            """
+            local current = redis.call('GET', KEYS[1])
+            if not current then
+              return nil
+            end
+
+            local sep1 = string.find(current, ':', 1, true)
+            if not sep1 then return nil end
+            local sep2 = string.find(current, ':', sep1 + 1, true)
+            if not sep2 then return nil end
+            local sep3 = string.find(current, ':', sep2 + 1, true)
+            if not sep3 then return nil end
+
+            local accessTokenId = string.sub(current, 1, sep1 - 1)
+            local hash = string.sub(current, sep1 + 1, sep2 - 1)
+            local prevHash = string.sub(current, sep2 + 1, sep3 - 1)
+            local graceMillis = tonumber(string.sub(current, sep3 + 1))
+
+            local presentedHash = ARGV[1]
+            local nowMillis = tonumber(ARGV[2])
+            local refreshReuseGraceMillis = tonumber(ARGV[5])
+
+            local matched = false
+            if presentedHash == hash then
+              matched = true
+            elseif prevHash ~= '' and prevHash == presentedHash and graceMillis and graceMillis > nowMillis then
+              local elapsedSinceRotationMillis = refreshReuseGraceMillis - (graceMillis - nowMillis)
+              if elapsedSinceRotationMillis >= $MIN_GRACE_ELAPSED_MILLIS then
+                matched = true
+              end
+            end
+
+            if not matched then
+              return nil
+            end
+
+            redis.call('SET', KEYS[1], ARGV[3], 'EX', ARGV[4])
+            return accessTokenId
+            """.trimIndent(),
+            String::class.java,
+        )
     }
 }

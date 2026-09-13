@@ -1,5 +1,6 @@
 package com.jsm.boardgame.user.presentation.rest
 
+import com.jsm.boardgame.common.support.AuthenticationRequiredException
 import com.jsm.boardgame.user.application.command.LoginUseCase
 import com.jsm.boardgame.user.application.command.LogoutUseCase
 import com.jsm.boardgame.user.application.command.RefreshTokenUseCase
@@ -31,6 +32,11 @@ class AuthController(
     @PostMapping("/logout")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun logout(@AuthenticationPrincipal jwt: Jwt) {
-        logoutUseCase.logout(checkNotNull(jwt.subject) { "인증된 JWT 는 subject 를 가져야 한다" }.toLong())
+        // subject 가 숫자가 아니면(현재 발급기로는 도달 불가 — 토큰 출처가 늘거나 키가 약해질
+        // 경우를 대비한 방어) NumberFormatException 이 그대로 새어나가 본문 없는 500 이 된다.
+        // toLongOrNull() 로 받아 인증 실패(401 + 오류 계약)로 변환한다.
+        val userId = jwt.subject?.toLongOrNull()
+            ?: throw AuthenticationRequiredException("인증된 JWT 의 subject 를 사용자 식별자로 파싱할 수 없다: subject=${jwt.subject}")
+        logoutUseCase.logout(userId)
     }
 }

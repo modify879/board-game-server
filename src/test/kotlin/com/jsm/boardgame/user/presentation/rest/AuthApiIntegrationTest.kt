@@ -222,6 +222,36 @@ class AuthApiIntegrationTest {
     }
 
     @Test
+    fun `리프레시 토큰 재사용이 탐지되면 기존 액세스 토큰도 즉시 차단된다`() {
+        val username = uniqueUsername()
+        val password = "password123"
+        val signUpResult = signUp(signUpBody(username = username, password = password))
+            .andExpect(status().isCreated)
+        val id = idFromLocation(locationOf(signUpResult))
+
+        val loginResult = login(username, password).andExpect(status().isOk)
+        val refreshTokenR = refreshTokenOf(loginResult)
+
+        // R → R2, 새 액세스 A2
+        val firstRefreshResult = refresh(refreshTokenR).andExpect(status().isOk)
+        val refreshTokenR2 = refreshTokenOf(firstRefreshResult)
+
+        // 유예(5초)를 벗어나도록 한 번 더 갱신한다(R2 → R3) — 이제 R 은 두 세대 전이라
+        // 유예와 무관하게 재사용 탐지가 그대로 동작해야 한다. 이 시점의 액세스 토큰이 A3.
+        val secondRefreshResult = refresh(refreshTokenR2).andExpect(status().isOk)
+        val accessTokenA3 = accessTokenOf(secondRefreshResult)
+
+        // R 로 갱신 시도 → 재사용 탐지로 401
+        refresh(refreshTokenR)
+            .andExpect(status().isUnauthorized)
+            .andExpect(jsonPath("$.errorCode").value("REFRESH_TOKEN_INVALID"))
+
+        // 재사용 탐지 시점에 살아 있던 액세스 토큰(A3)도 즉시 블랙리스트에 들어가 더 이상 통하면 안 된다.
+        getProfile(id, accessTokenA3)
+            .andExpect(status().isUnauthorized)
+    }
+
+    @Test
     fun `리프레시 토큰을 Bearer 로 쓰면 401 이다`() {
         val username = uniqueUsername()
         val password = "password123"

@@ -4,6 +4,7 @@ import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
 import com.jsm.boardgame.user.application.port.IssuedTokens
+import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.domain.exception.LoginFailedException
 import com.jsm.boardgame.user.domain.exception.UserErrorCode
 import com.jsm.boardgame.user.domain.model.Nickname
@@ -120,6 +121,17 @@ private class LoginInMemoryAuthSessionStore : AuthSessionStore {
     }
 
     override fun isAccessTokenBlacklisted(accessTokenId: String): Boolean = blacklist.containsKey(accessTokenId)
+
+    // 이 픽스처는 그레이스 개념 없이 정확히 일치할 때만 통과한다 — LoginService 는 rotate() 를
+    // 쓰지 않고 항상 start() 로 세션을 여므로, 여기서는 인터페이스 구현을 위한 최소 구현이다.
+    override fun rotate(userId: Long, presentedRefreshToken: String, next: AuthSession): RotationResult {
+        val session = sessions[userId] ?: return RotationResult.Mismatch
+        if (session.refreshToken != presentedRefreshToken) return RotationResult.Mismatch
+
+        val previousAccessTokenId = session.accessTokenId
+        start(userId, next)
+        return RotationResult.Rotated(previousAccessTokenId)
+    }
 }
 
 class LoginServiceTest {
