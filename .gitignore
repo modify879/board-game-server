@@ -38,6 +38,7 @@ out/
 
 ### Claude Code ###
 .claude/
+.claude.local.md
 
 ### Kotlin ###
 .kotlin

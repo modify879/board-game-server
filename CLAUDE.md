@@ -20,8 +20,30 @@ Kotlin 2.3 / Spring Boot 4.1 / Java 25 / PostgreSQL / 단일 Gradle 모듈.
 Docker 가 실행 중이어야 한다.
 접속 정보는 `application.yaml` 에 적지 않는다 — Docker Compose 지원이 자동으로 연결한다.
 
+---
+
+## 테스트
+
+```bash
+./gradlew test                          # 전체
+./gradlew test --tests '*NicknameTest'  # 하나만
+```
+
 테스트는 Testcontainers 로 자기 컨테이너를 띄운다. `compose.yaml` 과 무관하며 역시 Docker 가 필요하다.
 도메인 테스트는 스프링도 컨테이너도 없이 돈다 — 그게 도메인을 분리해서 얻는 것이다.
+
+- **통합 테스트에는 `@Import(TestcontainersConfiguration::class)` 가 필요하다.**
+  빠뜨리면 "Failed to determine a suitable driver class" 로 컨텍스트가 뜨지 않는다
+- **목 라이브러리를 쓰지 않는다.** 인메모리 페이크를 테스트 파일 안에 직접 만든다
+  (`SignUpServiceTest` 의 `FakeUserRepository` 참조)
+- **예외는 메시지가 아니라 `errorCode` 로 검증한다.** 메시지로 검증하면 규칙 8 이 무의미해진다
+- 테스트 이름은 백틱을 쓴 한국어 문장으로 쓴다
+
+**규칙을 테스트로 못 박을 때는 성격이 다른 경로를 여럿 잡아라.**
+이 저장소에서 세 번 같은 방식으로 뚫렸다 — 중복 검사는 응용 계층 사전 체크 경로만 타서
+DB 제약 위반 변환이 한 번도 실행되지 않았고, 오류 계약은 스프링이 body 를 미리 만들어 주는
+경로만 타서 `body=null` 로 오는 405·404 가 통째로 빠져 있었다.
+대표 케이스 하나를 통과했다고 그 규칙이 검증된 것이 아니다.
 
 ---
 
