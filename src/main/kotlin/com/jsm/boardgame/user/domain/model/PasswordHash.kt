@@ -1,6 +1,7 @@
 package com.jsm.boardgame.user.domain.model
 
 import com.jsm.boardgame.user.domain.exception.InvalidPasswordException
+import com.jsm.boardgame.user.domain.exception.UserErrorCode
 
 /**
  * Username/Nickname/RawPassword 와 달리 입력을 정규화할 필요가 없다 — 이미
@@ -12,7 +13,7 @@ value class PasswordHash(val value: String) {
 
     init {
         if (value.isBlank()) {
-            throw InvalidPasswordException("비밀번호 해시가 비어 있습니다")
+            throw InvalidPasswordException(UserErrorCode.PASSWORD_TOO_SHORT, "비밀번호 해시가 비어 있습니다")
         }
     }
 

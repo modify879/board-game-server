@@ -9,6 +9,7 @@ enum class UserErrorCode(override val kind: ErrorKind) : ErrorCode {
     NICKNAME_BLANK(ErrorKind.INVALID),
     USERNAME_FORMAT(ErrorKind.INVALID),
     PASSWORD_TOO_SHORT(ErrorKind.INVALID),
+    PASSWORD_TOO_LONG(ErrorKind.INVALID),
     PASSWORD_CONFIRM_MISMATCH(ErrorKind.INVALID),
     PROFILE_IMAGE_KEY_INVALID(ErrorKind.INVALID),
     DUPLICATE_USERNAME(ErrorKind.CONFLICT),

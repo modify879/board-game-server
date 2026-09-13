@@ -108,4 +108,14 @@ class NicknameTest {
         val e = assertFailsWith<InvalidNicknameException> { Nickname.of("​") }
         assertEquals(UserErrorCode.NICKNAME_FORBIDDEN_CHARACTER, e.errorCode)
     }
+
+    @Test
+    fun `restore 는 현재 규칙을 위반하는 값도 예외 없이 복원하고, of 는 같은 값을 거부한다`() {
+        val tooLong = "현재규칙을위반하는아주긴닉네임" // 15자 — 현재 상한(12자)을 넘는다
+
+        assertEquals(tooLong, Nickname.restore(tooLong).value)
+
+        val e = assertFailsWith<InvalidNicknameException> { Nickname.of(tooLong) }
+        assertEquals(UserErrorCode.NICKNAME_LENGTH, e.errorCode)
+    }
 }

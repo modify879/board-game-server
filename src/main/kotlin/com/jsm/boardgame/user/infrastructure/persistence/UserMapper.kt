@@ -8,12 +8,12 @@ import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.domain.model.Username
 
 fun UserJpaEntity.toDomain(): User =
-    User.reconstitute(
+    User.restore(
         id = UserId(id),
-        username = Username.of(username),
+        username = Username.restore(username),
         passwordHash = PasswordHash(passwordHash),
-        nickname = Nickname.of(nickname),
-        profileImageKey = profileImageKey?.let { ProfileImageKey.of(it) },
+        nickname = Nickname.restore(nickname),
+        profileImageKey = profileImageKey?.let(ProfileImageKey::restore),
     )
 
 fun User.toJpaEntity(): UserJpaEntity =

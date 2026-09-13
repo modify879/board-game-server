@@ -112,6 +112,15 @@ class UserApiTest {
     }
 
     @Test
+    fun `한글 25자(75바이트) 비밀번호로 가입하면 400과 PASSWORD_TOO_LONG 을 응답한다`() {
+        val longPassword = "가".repeat(25)
+
+        signUp(signUpBody(password = longPassword, passwordConfirm = longPassword))
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("PASSWORD_TOO_LONG"))
+    }
+
+    @Test
     fun `닉네임에 제로폭 문자가 있으면 400과 NICKNAME_FORBIDDEN_CHARACTER 를 응답한다`() {
         val nicknameWithZeroWidthSpace = "ad" + "\u200B" + "min"
 

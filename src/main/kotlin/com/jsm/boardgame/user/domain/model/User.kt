@@ -20,7 +20,7 @@ class User private constructor(
             User(id = null, username = username, passwordHash = passwordHash, nickname = nickname, profileImageKey = null)
 
         /** 영속 계층에서 복원할 때만 쓴다. */
-        fun reconstitute(
+        fun restore(
             id: UserId,
             username: Username,
             passwordHash: PasswordHash,
