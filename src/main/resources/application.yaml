@@ -18,3 +18,13 @@ spring:
     properties:
       hibernate:
         format_sql: true
+
+logging:
+  pattern:
+    level: "%5p [%X{traceId:-}]"
+
+app:
+  profile-image:
+    # 실제 CDN 이 붙기 전까지의 로컬 기본값
+    base-url: "http://localhost:8080/images/profiles/"
+    default-url: "http://localhost:8080/images/profiles/default.png"
