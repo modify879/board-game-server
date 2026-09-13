@@ -33,7 +33,7 @@ private class FakeUserRepository : UserRepository {
 
     override fun save(user: User): User {
         sequence += 1
-        val saved = User.restore(
+        val saved = User.reconstitute(
             id = UserId(sequence),
             username = user.username,
             passwordHash = user.passwordHash,
