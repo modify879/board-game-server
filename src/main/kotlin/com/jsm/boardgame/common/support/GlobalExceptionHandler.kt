@@ -105,6 +105,7 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
 
     private fun ErrorKind.toHttpStatus(): HttpStatus = when (this) {
         ErrorKind.INVALID -> HttpStatus.BAD_REQUEST
+        ErrorKind.UNAUTHORIZED -> HttpStatus.UNAUTHORIZED
         ErrorKind.CONFLICT -> HttpStatus.CONFLICT
         ErrorKind.NOT_FOUND -> HttpStatus.NOT_FOUND
         ErrorKind.FORBIDDEN -> HttpStatus.FORBIDDEN

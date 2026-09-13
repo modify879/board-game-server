@@ -1,0 +1,192 @@
+package com.jsm.boardgame.user.application.command
+
+import com.jsm.boardgame.user.application.port.AuthSession
+import com.jsm.boardgame.user.application.port.AuthSessionStore
+import com.jsm.boardgame.user.application.port.AuthTokenIssuer
+import com.jsm.boardgame.user.application.port.IssuedTokens
+import com.jsm.boardgame.user.domain.exception.LoginFailedException
+import com.jsm.boardgame.user.domain.exception.UserErrorCode
+import com.jsm.boardgame.user.domain.model.Nickname
+import com.jsm.boardgame.user.domain.model.PasswordHash
+import com.jsm.boardgame.user.domain.model.RawPassword
+import com.jsm.boardgame.user.domain.model.User
+import com.jsm.boardgame.user.domain.model.UserId
+import com.jsm.boardgame.user.domain.model.Username
+import com.jsm.boardgame.user.domain.repository.UserRepository
+import com.jsm.boardgame.user.domain.service.PasswordHasher
+import java.time.Duration
+import java.time.Instant
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
+
+// 파일 최상위 클래스는 private 이어도 JVM 클래스명은 그대로 노출되어, 같은 패키지의
+// 다른 테스트 파일(SignUpServiceTest 등)과 이름이 겹치면 실제로 충돌한다(Redeclaration).
+// 그래서 이 파일의 픽스처는 Login 접두어를 붙여 파일 간 이름 충돌을 피한다.
+private class LoginFakeUserRepository : UserRepository {
+    val stored = mutableListOf<User>()
+
+    override fun findById(id: UserId): User? = stored.find { it.id == id }
+
+    override fun findByUsername(username: Username): User? = stored.find { it.username == username }
+
+    override fun existsByUsername(username: Username): Boolean = stored.any { it.username == username }
+
+    override fun existsByNickname(nickname: Nickname): Boolean = stored.any { it.nickname == nickname }
+
+    override fun save(user: User): User {
+        stored += user
+        return user
+    }
+
+    fun seed(id: Long, username: String, rawPassword: String, nickname: String): User {
+        val user = User.reconstitute(
+            id = UserId(id),
+            username = Username.of(username),
+            passwordHash = PasswordHash("hashed:$rawPassword"),
+            nickname = Nickname.of(nickname),
+            profileImageKey = null,
+        )
+        stored += user
+        return user
+    }
+}
+
+/**
+ * hash = "hashed:" + raw 규약으로 실제 문자열 비교를 한다.
+ * hash 가 null 로 호출되면(= 계정 열거 방지용 더미 비교) [calledWithNullHash] 에 기록하고 false 를 돌려준다.
+ */
+private class LoginFakePasswordHasher : PasswordHasher {
+    var calledWithNullHash = false
+        private set
+
+    override fun hash(raw: RawPassword): PasswordHash = PasswordHash("hashed:${raw.value}")
+
+    override fun matches(raw: RawPassword, hash: PasswordHash?): Boolean {
+        if (hash == null) {
+            calledWithNullHash = true
+            return false
+        }
+        return hash.value == "hashed:${raw.value}"
+    }
+}
+
+/**
+ * 발급한 모든 리프레시 토큰을 userId 로 영구히 기억한다 — 회전 이후에도 "옛 토큰"이라는
+ * 사실만 잊지 않는다(실제 JWT 서명은 회전 후에도 유효하다). 세션 스토어의 "이게 최신인가"
+ * 판단과는 별개다.
+ */
+private class LoginFakeAuthTokenIssuer : AuthTokenIssuer {
+    private var counter = 0
+    private val issuedRefreshTokens = mutableMapOf<String, Long>()
+
+    override fun issue(userId: Long): IssuedTokens {
+        counter += 1
+        val refreshToken = "rt-$counter"
+        val accessToken = "at-$counter"
+        issuedRefreshTokens[refreshToken] = userId
+        return IssuedTokens(
+            accessToken = accessToken,
+            accessTokenId = "jti-$counter",
+            accessTokenExpiresAt = Instant.now().plusSeconds(1_800),
+            refreshToken = refreshToken,
+            refreshTokenExpiresAt = Instant.now().plusSeconds(1_209_600),
+        )
+    }
+
+    override fun userIdFromRefreshToken(refreshToken: String): Long? = issuedRefreshTokens[refreshToken]
+}
+
+private class LoginInMemoryAuthSessionStore : AuthSessionStore {
+    private val sessions = mutableMapOf<Long, AuthSession>()
+    private val blacklist = mutableMapOf<String, Instant>()
+
+    override fun start(userId: Long, session: AuthSession) {
+        sessions[userId] = session
+    }
+
+    override fun matchesRefreshToken(userId: Long, refreshToken: String): Boolean =
+        sessions[userId]?.refreshToken == refreshToken
+
+    override fun currentAccessTokenId(userId: Long): String? = sessions[userId]?.accessTokenId
+
+    override fun clear(userId: Long) {
+        sessions.remove(userId)
+    }
+
+    override fun blacklistAccessToken(accessTokenId: String, expiresAt: Instant) {
+        blacklist[accessTokenId] = expiresAt
+    }
+
+    override fun isAccessTokenBlacklisted(accessTokenId: String): Boolean = blacklist.containsKey(accessTokenId)
+}
+
+class LoginServiceTest {
+
+    private val users = LoginFakeUserRepository()
+    private val passwordHasher = LoginFakePasswordHasher()
+    private val tokenIssuer = LoginFakeAuthTokenIssuer()
+    private val sessions = LoginInMemoryAuthSessionStore()
+    private val service = LoginService(users, passwordHasher, tokenIssuer, sessions, Duration.ofMinutes(30))
+
+    @Test
+    fun `존재하지 않는 사용자명이면 LoginFailedException 이 발생한다`() {
+        val e = assertFailsWith<LoginFailedException> {
+            service.login(LoginCommand(username = "user_01", password = "password1"))
+        }
+        assertEquals(UserErrorCode.LOGIN_FAILED, e.errorCode)
+    }
+
+    @Test
+    fun `존재하지 않는 사용자명이어도 비밀번호 비교가 수행된다`() {
+        // 계정 열거 방지의 핵심: 아이디가 없을 때도 PasswordHasher.matches 를 호출해
+        // "비밀번호 틀림" 케이스와 같은 시간이 걸리게 해야 한다. 시간 자체는 재지 않고
+        // (환경마다 흔들려 신뢰할 수 없다), 호출이 실제로 일어났는지만 확인한다.
+        assertFailsWith<LoginFailedException> {
+            service.login(LoginCommand(username = "user_01", password = "password1"))
+        }
+        assertTrue(passwordHasher.calledWithNullHash)
+    }
+
+    @Test
+    fun `비밀번호가 틀리면 LoginFailedException 이 발생한다`() {
+        users.seed(id = 1, username = "user_01", rawPassword = "password1", nickname = "길동이")
+
+        val e = assertFailsWith<LoginFailedException> {
+            service.login(LoginCommand(username = "user_01", password = "wrong-password"))
+        }
+        assertEquals(UserErrorCode.LOGIN_FAILED, e.errorCode)
+    }
+
+    @Test
+    fun `사용자명 형식이 잘못돼도 LoginFailedException 으로만 노출된다`() {
+        val e = assertFailsWith<LoginFailedException> {
+            service.login(LoginCommand(username = "1", password = "password1"))
+        }
+        assertEquals(UserErrorCode.LOGIN_FAILED, e.errorCode)
+    }
+
+    @Test
+    fun `재로그인하면 이전 액세스 토큰이 블랙리스트에 오른다`() {
+        users.seed(id = 1, username = "user_01", rawPassword = "password1", nickname = "길동이")
+
+        val first = service.login(LoginCommand(username = "user_01", password = "password1"))
+        assertTrue(!sessions.isAccessTokenBlacklisted(first.accessTokenId))
+
+        service.login(LoginCommand(username = "user_01", password = "password1"))
+        assertTrue(sessions.isAccessTokenBlacklisted(first.accessTokenId))
+    }
+
+    @Test
+    fun `정상 로그인하면 토큰이 발급되고 세션이 시작된다`() {
+        val userId = 1L
+        users.seed(id = userId, username = "user_01", rawPassword = "password1", nickname = "길동이")
+
+        val tokens = service.login(LoginCommand(username = "user_01", password = "password1"))
+
+        assertTrue(tokens.accessToken.isNotBlank())
+        assertTrue(tokens.refreshToken.isNotBlank())
+        assertTrue(sessions.matchesRefreshToken(userId, tokens.refreshToken))
+    }
+}
