@@ -127,9 +127,20 @@ presentation → application → domain ← infrastructure
 | 결과 | 없음 또는 식별자 | 응답 DTO 직접 프로젝션 |
 | 입력 포트 | UseCase 인터페이스를 **둔다** | **두지 않는다.** 서비스 클래스 하나 |
 | 출력 포트 | `domain/repository` | `application/query` |
+| 쿼리 작성 | Spring Data 파생 쿼리로 충분 | **Kotlin JDSL** |
 
 조회가 `JpaEntity → 도메인 → 응답 DTO` 로 두 번 매핑되면 안 된다.
-JPA 프로젝션으로 응답 DTO 를 바로 만든다.
+생성자 프로젝션으로 응답 DTO 를 바로 만든다.
+
+**`application/query` 경로의 읽기는 Kotlin JDSL 로 작성한다.**
+"모든 DB 접근"이 아니라 조회 경로만이다 — 명령 경로에서 애그리거트를 불러오거나
+`existsBy...` 로 사전 확인하는 것은 Spring Data 파생 쿼리로 충분하다.
+경계는 이미 있는 명령/조회 분리선과 같으므로 새로 판단할 것이 없다.
+
+JPQL 문자열을 쓰지 않는 이유: 조건이 선택적인 쿼리(검색·필터·랭킹)가 생기면
+문자열을 이어붙이거나 쿼리를 여러 벌 두게 되고, 필드 이름이 바뀌어도 컴파일이 통과한다.
+
+단건 조회에서는 JDSL 이 JPQL 문자열보다 장황하다. 그건 규칙을 하나로 유지하는 값이다.
 
 입력 포트를 명령에만 두는 이유: 의존성 역전이 필요한 건 **나가는** 방향뿐이다.
 들어오는 방향은 `presentation → application` 이 이미 올바른 방향이라 뒤집을 게 없다.

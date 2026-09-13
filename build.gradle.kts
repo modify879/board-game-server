@@ -29,6 +29,10 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
 
+    implementation("com.linecorp.kotlin-jdsl:jpql-dsl:3.9.0")
+    implementation("com.linecorp.kotlin-jdsl:jpql-render:3.9.0")
+    implementation("com.linecorp.kotlin-jdsl:spring-data-jpa-boot4-support:3.9.0")
+
     runtimeOnly("org.postgresql:postgresql")
     developmentOnly("org.springframework.boot:spring-boot-docker-compose")
 
