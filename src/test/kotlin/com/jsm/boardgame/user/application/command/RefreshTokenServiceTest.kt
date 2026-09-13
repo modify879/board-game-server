@@ -13,7 +13,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * 발급한 모든 리프레시 토큰을 userId 로 영구히 기억한다 — 회전 이후에도 "옛 토큰"이라는
@@ -45,16 +47,36 @@ private class RefreshFakeAuthTokenIssuer : AuthTokenIssuer {
     override fun userIdFromRefreshToken(refreshToken: String): Long? = issuedRefreshTokens[refreshToken]
 }
 
-private class RefreshInMemoryAuthSessionStore : AuthSessionStore {
+/**
+ * 실제 [com.jsm.boardgame.user.infrastructure.security.RedisAuthSessionStore] 와 같은 유예 규칙을
+ * 흉내 낸다 — previousRefreshToken 은 한 세대만 기억하고, 그 세대에 한해서만 [refreshReuseGrace]
+ * 동안 재사용을 허용한다. 두 세대 전 토큰은 애초에 기억하지 않으므로 유예와 무관하게 거부된다.
+ */
+private class RefreshInMemoryAuthSessionStore(
+    private val refreshReuseGrace: Duration = Duration.ofSeconds(30),
+) : AuthSessionStore {
     private val sessions = mutableMapOf<Long, AuthSession>()
+    private val graceExpiresAt = mutableMapOf<Long, Instant>()
     private val blacklist = mutableMapOf<String, Instant>()
 
     override fun start(userId: Long, session: AuthSession) {
         sessions[userId] = session
+        graceExpiresAt[userId] = if (session.previousRefreshToken != null) {
+            Instant.now().plus(refreshReuseGrace)
+        } else {
+            Instant.EPOCH
+        }
     }
 
-    override fun matchesRefreshToken(userId: Long, refreshToken: String): Boolean =
-        sessions[userId]?.refreshToken == refreshToken
+    override fun matchesRefreshToken(userId: Long, refreshToken: String): Boolean {
+        val session = sessions[userId] ?: return false
+        if (session.refreshToken == refreshToken) return true
+
+        val previous = session.previousRefreshToken ?: return false
+        if (previous != refreshToken) return false
+
+        return Instant.now().isBefore(graceExpiresAt[userId])
+    }
 
     override fun currentAccessTokenId(userId: Long): String? = sessions[userId]?.accessTokenId
 
@@ -82,7 +104,7 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    fun `유효한 리프레시 토큰으로 갱신하면 새 토큰이 발급되고 옛 리프레시 토큰은 더 이상 통하지 않는다`() {
+    fun `유효한 리프레시 토큰으로 갱신하면 새 토큰이 발급된다`() {
         val userId = 1L
         val first = loginSession(userId)
 
@@ -90,7 +112,42 @@ class RefreshTokenServiceTest {
 
         assertNotEquals(first.refreshToken, rotated.refreshToken)
         assertNotEquals(first.accessToken, rotated.accessToken)
-        assertFalse(sessions.matchesRefreshToken(userId, first.refreshToken))
+        // 직전 한 세대는 응답 유실 재시도를 위한 유예 대상이라 아직 통과한다 —
+        // "완전히 무효화됨"은 두 세대 전부터다. 아래 두 세대 전 테스트가 그 경계를 검증한다.
+        assertTrue(sessions.matchesRefreshToken(userId, first.refreshToken))
+    }
+
+    @Test
+    fun `유예 안에서 회전된 옛 리프레시 토큰으로 재시도하면 세션이 폐기되지 않고 계속 갱신할 수 있다`() {
+        val userId = 6L
+        val first = loginSession(userId)
+        val rotated = service.refresh(RefreshTokenCommand(first.refreshToken))
+
+        // 회전 응답이 유실돼 클라이언트가 같은(옛) 토큰으로 재시도하는 상황을 재현한다.
+        val retried = service.refresh(RefreshTokenCommand(first.refreshToken))
+
+        assertNotEquals(rotated.refreshToken, retried.refreshToken)
+        assertNotNull(sessions.currentAccessTokenId(userId))
+
+        // 세션이 폐기되지 않았으므로 최신 토큰으로 계속 갱신할 수 있다.
+        val next = service.refresh(RefreshTokenCommand(retried.refreshToken))
+        assertNotEquals(retried.refreshToken, next.refreshToken)
+    }
+
+    @Test
+    fun `두 세대 전 리프레시 토큰을 쓰면 유예와 무관하게 세션이 폐기된다`() {
+        val userId = 7L
+        val first = loginSession(userId)
+        val rotated = service.refresh(RefreshTokenCommand(first.refreshToken))
+        service.refresh(RefreshTokenCommand(rotated.refreshToken))
+
+        // first 는 이제 두 세대 전 토큰이다 — 유예는 바로 직전 한 세대에만 적용되므로
+        // 유예 여부와 무관하게 재사용 탐지가 그대로 동작해야 한다.
+        val e = assertFailsWith<InvalidRefreshTokenException> {
+            service.refresh(RefreshTokenCommand(first.refreshToken))
+        }
+        assertEquals(UserErrorCode.REFRESH_TOKEN_INVALID, e.errorCode)
+        assertNull(sessions.currentAccessTokenId(userId))
     }
 
     @Test
@@ -98,6 +155,9 @@ class RefreshTokenServiceTest {
         val userId = 2L
         val first = loginSession(userId)
         val rotated = service.refresh(RefreshTokenCommand(first.refreshToken))
+        // 유예는 바로 직전 한 세대에만 적용된다. first 가 유예 밖(두 세대 전)이 되도록
+        // 한 번 더 회전시켜야, 이 테스트가 순수한 재사용 탐지(유예 대상이 아닌 경우)를 검증한다.
+        val rotatedAgain = service.refresh(RefreshTokenCommand(rotated.refreshToken))
 
         val e = assertFailsWith<InvalidRefreshTokenException> {
             service.refresh(RefreshTokenCommand(first.refreshToken))
@@ -105,7 +165,7 @@ class RefreshTokenServiceTest {
         assertEquals(UserErrorCode.REFRESH_TOKEN_INVALID, e.errorCode)
 
         // 재사용 탐지로 세션 전체가 폐기됐으므로, 아직 회수하지 않은 최신 토큰마저 통하지 않는다.
-        assertFalse(sessions.matchesRefreshToken(userId, rotated.refreshToken))
+        assertFalse(sessions.matchesRefreshToken(userId, rotatedAgain.refreshToken))
         assertNull(sessions.currentAccessTokenId(userId))
     }
 

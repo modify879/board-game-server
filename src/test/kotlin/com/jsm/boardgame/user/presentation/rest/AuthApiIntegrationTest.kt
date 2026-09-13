@@ -208,7 +208,13 @@ class AuthApiIntegrationTest {
         val loginResult = login(username, password).andExpect(status().isOk)
         val oldRefreshToken = refreshTokenOf(loginResult)
 
-        refresh(oldRefreshToken).andExpect(status().isOk)
+        val firstRefreshResult = refresh(oldRefreshToken).andExpect(status().isOk)
+        val onceRotatedRefreshToken = refreshTokenOf(firstRefreshResult)
+
+        // 응답 유실 재시도를 위한 유예는 바로 직전 한 세대에만 적용된다.
+        // oldRefreshToken 이 유예 밖(두 세대 전)이 되도록 한 번 더 회전시켜야
+        // 이 테스트가 순수한 재사용 탐지(유예 대상이 아닌 경우)를 검증한다.
+        refresh(onceRotatedRefreshToken).andExpect(status().isOk)
 
         refresh(oldRefreshToken)
             .andExpect(status().isUnauthorized)

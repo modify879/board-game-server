@@ -36,7 +36,17 @@ class RefreshTokenService(
         }
 
         val tokens = tokenIssuer.issue(userId)
-        sessions.start(userId, AuthSession(tokens.accessTokenId, tokens.refreshToken, tokens.refreshTokenExpiresAt))
+        sessions.start(
+            userId,
+            AuthSession(
+                accessTokenId = tokens.accessTokenId,
+                refreshToken = tokens.refreshToken,
+                refreshTokenExpiresAt = tokens.refreshTokenExpiresAt,
+                // 정상 회전이든 유예 안의 재시도든, 이번에 제시된 토큰을 직전 토큰으로 기록한다 —
+                // 다음 한 번의 재시도까지만 유예를 허용하기 위함이다(두 세대 전은 유예 대상이 아니다).
+                previousRefreshToken = command.refreshToken,
+            ),
+        )
         return tokens
     }
 }

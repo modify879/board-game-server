@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.data.redis.core.StringRedisTemplate
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
@@ -92,18 +93,86 @@ class RedisAuthSessionStoreIntegrationTest {
 
         authSessionStore.start(userId, session)
 
-        val storedHash = redisTemplate.opsForHash<String, String>()
-            .get("auth:session:$userId", "refreshTokenHash")
+        val storedValue = redisTemplate.opsForValue().get("auth:session:$userId")
 
-        assertThat(storedHash).isNotNull()
-        assertThat(storedHash).isNotEqualTo(session.refreshToken)
+        assertThat(storedValue).isNotNull()
+        assertThat(storedValue).doesNotContain(session.refreshToken)
+    }
+
+    @Test
+    fun `start 직후 키에 TTL 이 설정되어 있다`() {
+        val userId = newUserId()
+        val session = newSession()
+
+        authSessionStore.start(userId, session)
+
+        val ttl = redisTemplate.getExpire("auth:session:$userId")
+
+        assertThat(ttl).isPositive()
+    }
+
+    @Test
+    fun `유예 안에서는 직전 리프레시 토큰도 통과한다`() {
+        val userId = newUserId()
+        val first = newSession()
+        authSessionStore.start(userId, first)
+
+        val rotated = newSession(previousRefreshToken = first.refreshToken)
+        authSessionStore.start(userId, rotated)
+
+        // 새로 발급된 현재 토큰과, 응답 유실로 재시도될 수 있는 직전 토큰 모두 통과해야 한다.
+        assertThat(authSessionStore.matchesRefreshToken(userId, rotated.refreshToken)).isTrue()
+        assertThat(authSessionStore.matchesRefreshToken(userId, first.refreshToken)).isTrue()
+    }
+
+    @Test
+    fun `두 세대 전 토큰은 유예 안이어도 거부된다`() {
+        val userId = newUserId()
+        val gen0 = newSession()
+        authSessionStore.start(userId, gen0)
+
+        val gen1 = newSession(previousRefreshToken = gen0.refreshToken)
+        authSessionStore.start(userId, gen1)
+
+        val gen2 = newSession(previousRefreshToken = gen1.refreshToken)
+        authSessionStore.start(userId, gen2)
+
+        // 저장소는 직전 한 세대(gen1)만 기억한다 — gen0 은 유예 여부와 무관하게 더 이상 통하지 않는다.
+        assertThat(authSessionStore.matchesRefreshToken(userId, gen0.refreshToken)).isFalse()
+        assertThat(authSessionStore.matchesRefreshToken(userId, gen1.refreshToken)).isTrue()
+        assertThat(authSessionStore.matchesRefreshToken(userId, gen2.refreshToken)).isTrue()
+    }
+
+    @Test
+    fun `유예가 지나면 직전 토큰이 거부된다`() {
+        val shortGraceStore = RedisAuthSessionStore(
+            redisTemplate,
+            JwtProperties(
+                secret = "test-only-secret-value-not-used-by-this-store-12345",
+                accessTokenTtl = Duration.ofMinutes(30),
+                refreshTokenTtl = Duration.ofDays(14),
+                refreshReuseGrace = Duration.ofMillis(200),
+            ),
+        )
+        val userId = newUserId()
+        val first = newSession()
+        shortGraceStore.start(userId, first)
+
+        val rotated = newSession(previousRefreshToken = first.refreshToken)
+        shortGraceStore.start(userId, rotated)
+
+        Thread.sleep(300)
+
+        assertThat(shortGraceStore.matchesRefreshToken(userId, first.refreshToken)).isFalse()
+        assertThat(shortGraceStore.matchesRefreshToken(userId, rotated.refreshToken)).isTrue()
     }
 
     private fun newSession(
         accessTokenId: String = "access-${UUID.randomUUID()}",
         refreshToken: String = "refresh-${UUID.randomUUID()}",
         refreshTokenExpiresAt: Instant = Instant.now().plusSeconds(60 * 60 * 24 * 7),
-    ) = AuthSession(accessTokenId, refreshToken, refreshTokenExpiresAt)
+        previousRefreshToken: String? = null,
+    ) = AuthSession(accessTokenId, refreshToken, refreshTokenExpiresAt, previousRefreshToken)
 
     private fun newUserId(): Long = userIdSequence.getAndIncrement()
 

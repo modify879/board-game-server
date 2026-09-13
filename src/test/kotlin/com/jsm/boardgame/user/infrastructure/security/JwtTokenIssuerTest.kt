@@ -25,7 +25,8 @@ class JwtTokenIssuerTest {
         secret: String = "test-secret-key-at-least-32-bytes-long!!",
         accessTokenTtl: Duration = Duration.ofMinutes(30),
         refreshTokenTtl: Duration = Duration.ofDays(14),
-    ) = JwtProperties(secret, accessTokenTtl, refreshTokenTtl)
+        refreshReuseGrace: Duration = Duration.ofSeconds(5),
+    ) = JwtProperties(secret, accessTokenTtl, refreshTokenTtl, refreshReuseGrace)
 
     @Test
     fun `발급한 액세스 토큰의 sub 가 요청한 userId 다`() {

@@ -8,4 +8,6 @@ data class JwtProperties(
     val secret: String,
     val accessTokenTtl: Duration,
     val refreshTokenTtl: Duration,
+    /** 응답 유실로 인한 재시도를 탈취와 구분하기 위한 유예. 직전 토큰 한 세대에만 적용된다. */
+    val refreshReuseGrace: Duration,
 )

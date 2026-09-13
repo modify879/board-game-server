@@ -34,3 +34,5 @@ app:
     secret: "${APP_JWT_SECRET:local-development-only-not-for-production-use-1234}"
     access-token-ttl: 30m
     refresh-token-ttl: 14d
+    # 응답 유실로 인한 재시도를 탈취와 구분하기 위한 유예. 직전 토큰 한 세대에만 적용된다.
+    refresh-reuse-grace: 5s

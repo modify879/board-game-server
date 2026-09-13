@@ -31,4 +31,6 @@ data class AuthSession(
     val accessTokenId: String,
     val refreshToken: String,
     val refreshTokenExpiresAt: Instant,
+    /** 이번 회전에서 소모된 직전 토큰. 짧은 유예 동안만 재사용을 허용한다. 신규 로그인은 null. */
+    val previousRefreshToken: String? = null,
 )
