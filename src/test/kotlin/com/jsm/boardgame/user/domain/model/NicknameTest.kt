@@ -42,6 +42,25 @@ class NicknameTest {
     }
 
     @Test
+    fun `NBSP 로 구분된 닉네임과 ASCII 공백으로 구분된 닉네임은 같은 값으로 수렴한다`() {
+        // U+00A0 (NBSP) 는 Char.isWhitespace() 로는 공백이지만 Regex("\\s") 는 ASCII 전용이라
+        // 놓친다. 화면에서는 ASCII 공백과 구분되지 않으므로 같은 값이 되어야 한다 —
+        // 그렇지 않으면 existsByNickname 중복 검사를 피해가는 사칭 닉네임이 생긴다.
+        assertEquals(Nickname.of("홍 길동").value, Nickname.of("홍 길동").value)
+    }
+
+    @Test
+    fun `전각공백으로 구분된 닉네임도 ASCII 공백과 같은 값으로 수렴한다`() {
+        assertEquals(Nickname.of("홍 길동").value, Nickname.of("홍　길동").value)
+    }
+
+    @Test
+    fun `유니코드 공백이 연속되어도 하나로 축약된다`() {
+        // 가운데에 NBSP 두 개가 연속된 경우. Regex("\\s+") 로는 축약되지 않고 그대로 남는다.
+        assertEquals("홍 길동", Nickname.of("홍  길동").value)
+    }
+
+    @Test
     fun `제로폭 문자가 포함되면 거부된다`() {
         val e = assertFailsWith<InvalidNicknameException> { Nickname.of("ad​min") }
         assertEquals(UserErrorCode.NICKNAME_FORBIDDEN_CHARACTER, e.errorCode)
