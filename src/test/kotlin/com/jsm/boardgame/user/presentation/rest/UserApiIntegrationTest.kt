@@ -29,7 +29,7 @@ import java.util.UUID
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
-class UserApiTest {
+class UserApiIntegrationTest {
 
     @Autowired
     private lateinit var mockMvc: MockMvc

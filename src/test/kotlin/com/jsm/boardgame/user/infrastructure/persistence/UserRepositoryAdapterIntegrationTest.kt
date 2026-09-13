@@ -32,7 +32,7 @@ import kotlin.test.assertFailsWith
  */
 @SpringBootTest
 @Import(TestcontainersConfiguration::class)
-class UserRepositoryAdapterTest {
+class UserRepositoryAdapterIntegrationTest {
 
     @Autowired
     private lateinit var users: UserRepository
