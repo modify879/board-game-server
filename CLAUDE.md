@@ -20,6 +20,9 @@ Kotlin 2.3 / Spring Boot 4.1 / Java 25 / PostgreSQL / 단일 Gradle 모듈.
 Docker 가 실행 중이어야 한다.
 접속 정보는 `application.yaml` 에 적지 않는다 — Docker Compose 지원이 자동으로 연결한다.
 
+테스트는 Testcontainers 로 자기 컨테이너를 띄운다. `compose.yaml` 과 무관하며 역시 Docker 가 필요하다.
+도메인 테스트는 스프링도 컨테이너도 없이 돈다 — 그게 도메인을 분리해서 얻는 것이다.
+
 ---
 
 ## 아키텍처
@@ -32,17 +35,21 @@ Docker 가 실행 중이어야 한다.
 com.jsm.boardgame
 ├── common/                       # 기술 설정·횡단 관심사만. 도메인 개념 금지
 │   ├── config/                   # 스프링 설정 (Security, WebSocket, Jackson)
-│   └── support/                  # 공통 예외, 응답 래퍼
+│   └── support/                  # 오류 계약(ErrorCode/ErrorKind), 전역 예외 핸들러, traceId 필터
 │
 └── user/                         # ← 모든 바운디드 컨텍스트가 이 형태를 따른다
     ├── domain/
     │   ├── model/                # 애그리거트, 엔티티, VO — 순수 Kotlin
-    │   └── repository/           # 출력 포트 (애그리거트를 다룸)
+    │   ├── repository/           # 출력 포트 (애그리거트를 다룸)
+    │   ├── service/              # 도메인이 필요로 하지만 스스로 구현 못 하는 출력 포트
+    │   │                         #   (해싱, 셔플, 주사위, 시계)
+    │   └── exception/            # 이 컨텍스트의 에러 코드와 도메인 예외
     ├── application/
     │   ├── command/              # UseCase 인터페이스 + 구현 + Command
     │   └── query/                # 조회 서비스 + 조회 출력 포트 + 응답 DTO
     ├── infrastructure/
-    │   └── persistence/          # JpaEntity, Spring Data, 매퍼, 어댑터
+    │   ├── persistence/          # JpaEntity, Spring Data, 매퍼, 어댑터
+    │   └── security/             # 해싱 등 보안 관련 어댑터
     └── presentation/
         ├── rest/                 # Controller + Request/Response
         └── ws/                   # WebSocket 핸들러
@@ -71,7 +78,7 @@ presentation → application → domain ← infrastructure
 
 | 컨텍스트 | 상태 | 책임 |
 |---|---|---|
-| `user` | 디렉토리만 | 사용자, 닉네임 |
+| `user` | 회원가입·프로필 조회 구현됨 | 사용자, 아이디, 비밀번호, 닉네임, 프로필 이미지 |
 | 각 게임 | 미정 | 그 게임의 규칙 전부 |
 | 방/좌석 | 미정 | 세션 수명주기. 좌석 모델이 게임에 좌우되므로 첫 게임과 함께 설계 |
 
@@ -161,163 +168,72 @@ fun interface DiceRoller { fun roll(count: Int): List<Int> }
 베팅액·자산은 각 게임 컨텍스트가 자기 VO 로 갖는다. `Int`/`Long` 으로 다루지 않는다.
 음수 방지와 연산 캡슐화가 목적이다. 게임 간에 이 타입을 공유하지 않는다.
 
+### 8. 오류는 코드로 계약하고, 문구는 클라이언트가 만든다
+
+구현은 `common/support/` 와 각 컨텍스트의 `domain/exception/` 을 참조한다.
+여기에는 코드만 봐서는 되돌리기 쉬운 결정의 이유만 적는다.
+
+- 예외는 규칙을 소유한 컨텍스트가 소유한다. `common` 에 범용 예외를 두지 않는다
+  — 타입이 아니라 메시지 문자열이 의미를 나르게 되어 아이디 중복인지 닉네임 중복인지 구분할 수 없다
+- `ErrorCode` 는 `HttpStatus` 를 모른다. 도메인이 참조하는 타입이라 스프링이 들어오면 규칙 2가 깨진다.
+  도메인은 `ErrorKind`(INVALID/CONFLICT/NOT_FOUND/FORBIDDEN)까지만 알고, 상태 매핑은 핸들러가 한다
+- 응답에는 `errorCode`, 로그에는 `logMessage`. 둘은 `traceId` 로 잇는다
+  — 분리만 하고 잇지 않으면 사용자 신고를 받아도 어느 로그인지 찾을 수 없다
+- 서버는 사용자 문구를 내려보내지 않는다. `detail` 은 **비어 있는 게 정상**이다.
+  `type`/`title` 도 스프링 기본값 그대로 둔다
+- 4xx 는 WARN 에 스택 없이, 5xx 는 ERROR 에 스택 포함
+  — 중복 가입 시도마다 스택이 찍히면 로그가 쓸모없어진다
+- 로그 메시지에 비밀번호를 남기지 않는다. `RawPassword`·`PasswordHash` 는 `toString()` 이 마스킹되어 있다
+
 ---
 
 ## 표준 형태
 
-`user` 컨텍스트를 예로 든 참조 구현. 실제 소스는 아직 없다 — 첫 기능을 만들 때 이 형태를 따른다.
+`user` 컨텍스트가 참조 구현이다. 새 컨텍스트는 그 파일 배치를 그대로 따른다.
+여기에는 **코드를 봐도 의도가 드러나지 않는 것**만 적는다.
 
-### 1) 도메인 — VO 는 `init` 에서 불변식을 지킨다
+### VO 는 팩토리에서 정규화하고, 실패하면 에러 코드를 가진 도메인 예외를 던진다
 
 ```kotlin
-// user/domain/model/Nickname.kt
 @JvmInline
-value class Nickname(val value: String) {
-    init {
-        require(value.length in 2..20) { "닉네임은 2~20자여야 합니다" }
-        require(PATTERN.matches(value)) { "닉네임에 사용할 수 없는 문자가 있습니다" }
-    }
-
+value class Nickname private constructor(val value: String) {
     companion object {
-        private val PATTERN = Regex("^[가-힣a-zA-Z0-9_]+$")
-    }
-}
-
-// user/domain/model/UserId.kt
-@JvmInline
-value class UserId(val value: Long)
-```
-
-### 2) 도메인 — 애그리거트와 출력 포트
-
-```kotlin
-// user/domain/model/User.kt
-class User(
-    val id: UserId,
-    nickname: Nickname,
-) {
-    var nickname: Nickname = nickname
-        private set
-
-    fun rename(new: Nickname) {
-        require(new != nickname) { "기존 닉네임과 동일합니다" }
-        nickname = new
-    }
-}
-
-// user/domain/repository/UserRepository.kt
-interface UserRepository {
-    fun findById(id: UserId): User?
-    fun existsByNickname(nickname: Nickname): Boolean
-    fun save(user: User): User
-}
-```
-
-### 3) 애플리케이션 — 명령은 인터페이스를 둔다
-
-```kotlin
-// user/application/command/ChangeNicknameUseCase.kt
-interface ChangeNicknameUseCase {
-    fun changeNickname(command: ChangeNicknameCommand)
-}
-
-data class ChangeNicknameCommand(val userId: Long, val nickname: String)
-
-// user/application/command/ChangeNicknameService.kt
-@Service
-@Transactional
-class ChangeNicknameService(
-    private val users: UserRepository,
-) : ChangeNicknameUseCase {
-
-    override fun changeNickname(command: ChangeNicknameCommand) {
-        val nickname = Nickname(command.nickname)
-        require(!users.existsByNickname(nickname)) { "이미 사용 중인 닉네임입니다" }
-
-        val user = users.findById(UserId(command.userId))
-            ?: throw NoSuchElementException("사용자를 찾을 수 없습니다")
-
-        user.rename(nickname)
-        users.save(user)
+        fun of(raw: String): Nickname {
+            val normalized = ... // NFC 정규화 → trim → 연속 공백 축약
+            if (...) throw InvalidNicknameException(UserErrorCode.NICKNAME_LENGTH, "...")
+            return Nickname(normalized)
+        }
     }
 }
 ```
 
-### 4) 애플리케이션 — 조회는 도메인을 거치지 않고, 입력 포트도 없다
+- **`private` 생성자 + `of()` 팩토리인 이유**: value class 는 `init` 에서 값을 바꿀 수 없어 정규화를 할 수 없다.
+  정규화가 필요 없는 VO(`UserId`, `PasswordHash`)는 일반 생성자 + `init` 검증을 쓴다. 이 비대칭은 의도된 것이다.
+- **`require` 를 쓰지 않는 이유**: `IllegalArgumentException` 하나로는 클라이언트가 길이 문제인지
+  금지 문자 문제인지 구분할 수 없고, 도메인이 UX 문구를 소유하게 된다 (규칙 8).
+- 길이는 `codePointCount` 로 센다. `String.length` 는 UTF-16 코드 단위라 이모지가 2자로 세어진다.
 
-```kotlin
-// user/application/query/UserSummary.kt
-data class UserSummary(val id: Long, val nickname: String)
+### 애그리거트의 식별자는 nullable 이다
 
-// user/application/query/UserQueryRepository.kt   ← 출력 포트. 도메인이 아닌 DTO 를 반환한다
-interface UserQueryRepository {
-    fun findSummaryById(id: Long): UserSummary?
-}
+`val id: UserId?` 에서 `null` 은 아직 저장되지 않았다는 뜻이다.
+`UserId(0)` 같은 센티넬을 쓰면 JPA 의 관례를 도메인이 물려받는 것이다.
+신규 생성은 `register()`, 영속 계층에서의 복원은 `reconstitute()` 로 의도를 갈라 놓는다.
 
-// user/application/query/UserQueryService.kt      ← 인터페이스 없음
-@Service
-@Transactional(readOnly = true)
-class UserQueryService(
-    private val query: UserQueryRepository,
-) {
-    fun findSummary(id: Long): UserSummary =
-        query.findSummaryById(id) ?: throw NoSuchElementException("사용자를 찾을 수 없습니다")
-}
-```
+### 유일성은 DB 가 보장한다
 
-### 5) 인프라 — JPA 엔티티, 매퍼, 어댑터
+응용 계층의 `existsBy...` 사전 체크는 친절한 오류 응답을 위한 것이고 **동시 요청을 막지 못한다.**
+**이름을 붙인** unique 제약(`uk_users_username`)이 실제 보장이다 — 이름이 있어야 어댑터가 어느 제약이
+깨졌는지 구분해 도메인 예외로 변환할 수 있다. 스프링 예외가 `application` 까지 올라가면 의존성 방향이 깨진다.
 
-```kotlin
-// user/infrastructure/persistence/UserJpaRepository.kt
-interface UserJpaRepository : JpaRepository<UserJpaEntity, Long> {
-    fun existsByNickname(nickname: String): Boolean
+### 문자열 컬럼은 `text` 다
 
-    // 조회 전용 프로젝션. 도메인을 거치지 않고 응답 DTO 를 바로 만든다.
-    @Query("select new com.jsm.boardgame.user.application.query.UserSummary(u.id, u.nickname) from UserJpaEntity u where u.id = :id")
-    fun findSummaryById(id: Long): UserSummary?
-}
+PostgreSQL 에서 `text` 와 `varchar(n)` 은 성능이 같다.
+대신 길이 제약이 DB 에서 사라지므로 **VO 가 유일한 방어선**이 된다.
 
-// user/infrastructure/persistence/UserJpaEntity.kt
-@Entity
-@Table(name = "users")
-class UserJpaEntity(
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
-    val id: Long = 0,
+### 외부 리소스는 키만 저장하고 URL 은 presentation 이 조립한다
 
-    @Column(length = 20, nullable = false, unique = true)
-    var nickname: String,
-)
-
-// user/infrastructure/persistence/UserMapper.kt
-fun UserJpaEntity.toDomain() = User(UserId(id), Nickname(nickname))
-fun User.toJpaEntity() = UserJpaEntity(id.value, nickname.value)
-
-// user/infrastructure/persistence/UserRepositoryAdapter.kt
-@Repository
-class UserRepositoryAdapter(
-    private val jpa: UserJpaRepository,
-) : UserRepository {
-
-    override fun findById(id: UserId): User? =
-        jpa.findById(id.value).orElse(null)?.toDomain()
-
-    override fun existsByNickname(nickname: Nickname): Boolean =
-        jpa.existsByNickname(nickname.value)
-
-    override fun save(user: User): User =
-        jpa.save(user.toJpaEntity()).toDomain()
-}
-
-// user/infrastructure/persistence/UserQueryRepositoryAdapter.kt
-@Repository
-class UserQueryRepositoryAdapter(
-    private val jpa: UserJpaRepository,
-) : UserQueryRepository {
-
-    // JpaEntity → 도메인 → DTO 로 두 번 매핑하지 않고 바로 프로젝션한다
-    override fun findSummaryById(id: Long): UserSummary? = jpa.findSummaryById(id)
-}
-```
+프로필 이미지는 `profile_image_key` 만 저장한다(`null` = 기본 이미지).
+CDN 도메인은 인프라 설정이라 도메인 모델이 알면 안 되고, 버킷이나 환경이 바뀌어도 DB 를 건드리지 않는다.
 
 ---
 
@@ -339,9 +255,13 @@ class UserQueryRepositoryAdapter(
 
 ## 아직 하지 않은 것
 
-- `user` 컨텍스트 실제 구현
+- **인증/인가** — JWT 를 Authorization 헤더로, Redis 에 리프레시 토큰과 로그아웃 블랙리스트.
+  `SecurityConfig` 는 이미 무상태로 잡혀 있고 **인가 규칙만 임시로 전면 허용** 상태다.
+  이때 `PasswordHasher.matches()` 와 `UserRepository.findByUsername()` 이 추가된다
+  — BCrypt 는 해시에 솔트가 들어 있어 `==` 비교가 성립하지 않는다
 - 게임 선정 및 첫 게임 컨텍스트, 방/좌석 컨텍스트
-- 인증/인가 (Spring Security 설정은 의존성만 들어가 있다)
+- 프로필 이미지 업로드 (스토리지 연동, presigned URL). 지금은 키를 저장할 자리만 있다
+- 닉네임·비밀번호 변경, 회원 탈퇴
 - **Flyway 마이그레이션** — 지금은 `ddl-auto: update`. 운영 배포 전 반드시 전환한다
 - ArchUnit 의존성 규칙 테스트 — 규칙 1·2 를 문서가 아닌 빌드로 강제. 게임이 둘 이상 생기면 도입
-- Testcontainers 기반 통합 테스트
+- Micrometer Tracing — `traceId` 를 분산 추적으로 승격

@@ -1,0 +1,110 @@
+package com.jsm.boardgame.common.support
+
+import jakarta.servlet.http.HttpServletRequest
+import org.slf4j.LoggerFactory
+import org.slf4j.MDC
+import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpStatus
+import org.springframework.http.HttpStatusCode
+import org.springframework.http.ProblemDetail
+import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.ExceptionHandler
+import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.context.request.WebRequest
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
+import java.net.URI
+
+/**
+ * 모든 오류 응답은 RFC 9457 ProblemDetail 이며 `errorCode` 와 `traceId` 를 반드시 갖는다.
+ *
+ * - `detail` 은 채우지 않는다. 서버는 사용자 문구를 내려보내지 않는다.
+ * - `type`/`title` 은 스프링 기본값(about:blank / 상태 문구)을 그대로 쓴다.
+ * - 4xx 는 WARN 에 스택 없이, 5xx 는 ERROR 에 스택 포함.
+ */
+@RestControllerAdvice
+class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
+
+    @ExceptionHandler(BusinessException::class)
+    fun handleBusinessException(
+        e: BusinessException,
+        request: HttpServletRequest,
+    ): ResponseEntity<ProblemDetail> {
+        val status = e.errorCode.kind.toHttpStatus()
+        val problemDetail = problemDetail(status, e.errorCode.code, request.requestURI)
+
+        logByStatus(status, e.errorCode.code, e.logMessage, e)
+
+        return ResponseEntity.status(status).body(problemDetail)
+    }
+
+    @ExceptionHandler(Exception::class)
+    fun handleUnexpectedException(
+        e: Exception,
+        request: HttpServletRequest,
+    ): ResponseEntity<ProblemDetail> {
+        val status = HttpStatus.INTERNAL_SERVER_ERROR
+        val problemDetail = problemDetail(status, INTERNAL_ERROR, request.requestURI)
+
+        // 예외 메시지를 응답에 노출하지 않는다. 추적은 traceId 로 한다.
+        log.error("unexpected error: traceId={}", MDC.get(RequestIdFilter.TRACE_ID), e)
+
+        return ResponseEntity.status(status).body(problemDetail)
+    }
+
+    /**
+     * 스프링 MVC 가 직접 던지는 예외(잘못된 JSON, 미지원 메서드 등)도 같은 계약을 따르게 한다.
+     * 이걸 빼면 클라이언트가 분기하는 `errorCode` 가 일부 응답에만 존재하게 된다.
+     */
+    override fun handleExceptionInternal(
+        ex: Exception,
+        body: Any?,
+        headers: HttpHeaders,
+        statusCode: HttpStatusCode,
+        request: WebRequest,
+    ): ResponseEntity<Any>? {
+        val errorCode = if (statusCode.is5xxServerError) INTERNAL_ERROR else REQUEST_INVALID
+
+        if (body is ProblemDetail) {
+            // 스프링은 여기 도달하기 전에 "Failed to read request" 같은 영문 detail 을 채워 넣는다.
+            // 서버가 문구를 내려보내지 않는다는 계약이 이 경로에서만 깨지므로 지운다.
+            // 내용은 아래 로그에 traceId 와 함께 남는다.
+            body.detail = null
+            body.setProperty("errorCode", errorCode)
+            body.setProperty("traceId", MDC.get(RequestIdFilter.TRACE_ID))
+        }
+
+        logByStatus(statusCode, errorCode, ex.message ?: ex.javaClass.simpleName, ex)
+
+        return super.handleExceptionInternal(ex, body, headers, statusCode, request)
+    }
+
+    private fun problemDetail(status: HttpStatus, errorCode: String, requestUri: String): ProblemDetail =
+        ProblemDetail.forStatus(status).apply {
+            instance = URI.create(requestUri)
+            setProperty("errorCode", errorCode)
+            setProperty("traceId", MDC.get(RequestIdFilter.TRACE_ID))
+        }
+
+    private fun logByStatus(status: HttpStatusCode, errorCode: String, message: String, e: Exception) {
+        if (status.is5xxServerError) {
+            log.error("error: code={}, status={}, message={}", errorCode, status.value(), message, e)
+        } else {
+            // 사용자 잘못이다. 스택을 찍으면 로그가 쓸모없어진다.
+            log.warn("error: code={}, status={}, message={}", errorCode, status.value(), message)
+        }
+    }
+
+    private fun ErrorKind.toHttpStatus(): HttpStatus = when (this) {
+        ErrorKind.INVALID -> HttpStatus.BAD_REQUEST
+        ErrorKind.CONFLICT -> HttpStatus.CONFLICT
+        ErrorKind.NOT_FOUND -> HttpStatus.NOT_FOUND
+        ErrorKind.FORBIDDEN -> HttpStatus.FORBIDDEN
+    }
+
+    companion object {
+        private val log = LoggerFactory.getLogger(GlobalExceptionHandler::class.java)
+
+        private const val INTERNAL_ERROR = "INTERNAL_ERROR"
+        private const val REQUEST_INVALID = "REQUEST_INVALID"
+    }
+}
