@@ -7,6 +7,7 @@ import com.jsm.boardgame.user.application.port.IssuedTokens
 import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.domain.exception.InvalidRefreshTokenException
 import com.jsm.boardgame.user.domain.exception.UserErrorCode
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import kotlin.test.Test
@@ -130,7 +131,7 @@ class RefreshTokenServiceTest {
 
     private val tokenIssuer = RefreshFakeAuthTokenIssuer()
     private val sessions = RefreshInMemoryAuthSessionStore()
-    private val service = RefreshTokenService(tokenIssuer, sessions, Duration.ofMinutes(30))
+    private val service = RefreshTokenService(tokenIssuer, sessions, Duration.ofMinutes(30), Clock.systemUTC())
 
     private fun loginSession(userId: Long): IssuedTokens {
         val tokens = tokenIssuer.issue(userId)

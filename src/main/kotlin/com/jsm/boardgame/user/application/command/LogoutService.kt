@@ -3,6 +3,7 @@ package com.jsm.boardgame.user.application.command
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
@@ -12,12 +13,14 @@ class LogoutService(
     private val sessions: AuthSessionStore,
     // JwtProperties(infrastructure/security)는 인프라 계층 타입이라 application 이 참조할 수 없다.
     @Value("\${app.jwt.access-token-ttl}") private val accessTokenTtl: Duration,
+    // Instant.now() 를 직접 부르지 않고 주입받는다 — 테스트가 시간을 제어할 수 있어야 하기 때문이다.
+    private val clock: Clock,
 ) : LogoutUseCase {
 
     override fun logout(userId: Long) {
         // 세션이 없어도(이미 로그아웃됐어도) 조용히 성공해야 한다.
         sessions.currentAccessTokenId(userId)?.let { accessTokenId ->
-            sessions.blacklistAccessToken(accessTokenId, Instant.now().plus(accessTokenTtl))
+            sessions.blacklistAccessToken(accessTokenId, Instant.now(clock).plus(accessTokenTtl))
         }
         sessions.clear(userId)
     }

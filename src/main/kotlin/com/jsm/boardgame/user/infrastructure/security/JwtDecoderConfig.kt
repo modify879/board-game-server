@@ -15,7 +15,7 @@ import javax.crypto.spec.SecretKeySpec
  * 리소스 서버(Authorization 헤더의 액세스 토큰 검증)가 쓰는 [JwtDecoder] 를 별도 빈으로 뗀다.
  *
  * `JwtTokenIssuer` 도 내부에 자기 디코더를 갖고 있지만 그건 리프레시 토큰 검증 전용이고,
- * `JwtTokenIssuer(properties: JwtProperties)` 생성자 하나로 스프링 없이 직접 테스트된다
+ * `JwtTokenIssuer(properties: JwtProperties, clock: Clock)` 생성자 하나로 스프링 없이 직접 테스트된다
  * (`JwtTokenIssuerTest` 8개). 그 생성자에 이 디코더를 주입받게 바꾸면 그 테스트들이 깨지므로
  * 건드리지 않는다. 대신 같은 비밀키로 별도 인스턴스를 여기서 만들고, 여기에만
  * [JwtBlacklistValidator] 를 물린다 — 로그아웃/세션 교체로 무효화된 액세스 토큰은

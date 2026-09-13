@@ -13,6 +13,7 @@ import com.jsm.boardgame.user.domain.service.PasswordHasher
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
@@ -27,6 +28,8 @@ class LoginService(
     // JwtProperties(infrastructure/security)는 인프라 계층 타입이라 application 이 참조할 수 없다
     // (규칙: 의존성 방향에 예외 없음). 값만 필요하므로 @Value 로 직접 받는다.
     @Value("\${app.jwt.access-token-ttl}") private val accessTokenTtl: Duration,
+    // Instant.now() 를 직접 부르지 않고 주입받는다 — 테스트가 시간을 제어할 수 있어야 하기 때문이다.
+    private val clock: Clock,
 ) : LoginUseCase {
 
     override fun login(command: LoginCommand): IssuedTokens {
@@ -63,7 +66,7 @@ class LoginService(
 
         // 단일 기기 정책: 새 로그인은 이전 기기의 액세스 토큰을 즉시 무효화한다.
         sessions.currentAccessTokenId(userId)?.let { previousAccessTokenId ->
-            sessions.blacklistAccessToken(previousAccessTokenId, Instant.now().plus(accessTokenTtl))
+            sessions.blacklistAccessToken(previousAccessTokenId, Instant.now(clock).plus(accessTokenTtl))
         }
 
         val tokens = tokenIssuer.issue(userId)

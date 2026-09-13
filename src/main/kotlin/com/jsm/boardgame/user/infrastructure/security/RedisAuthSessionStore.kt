@@ -8,6 +8,7 @@ import org.springframework.data.redis.core.script.DefaultRedisScript
 import org.springframework.data.redis.core.script.RedisScript
 import org.springframework.stereotype.Component
 import java.security.MessageDigest
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
@@ -100,12 +101,14 @@ import java.time.Instant
 class RedisAuthSessionStore(
     private val redisTemplate: StringRedisTemplate,
     properties: JwtProperties,
+    // Instant.now() 를 직접 부르지 않고 주입받는다 — 테스트가 시간을 제어할 수 있어야 하기 때문이다.
+    private val clock: Clock,
 ) : AuthSessionStore {
 
     private val refreshReuseGrace: Duration = properties.refreshReuseGrace
 
     override fun start(userId: Long, session: AuthSession) {
-        val ttl = Duration.between(Instant.now(), session.refreshTokenExpiresAt)
+        val ttl = Duration.between(Instant.now(clock), session.refreshTokenExpiresAt)
         if (ttl.isNegative || ttl.isZero) return
 
         redisTemplate.opsForValue().set(sessionKey(userId), serialize(session), ttl)
@@ -120,7 +123,7 @@ class RedisAuthSessionStore(
         val previousRefreshTokenHash = parsed.previousRefreshTokenHash ?: return false
         if (!constantTimeEquals(previousRefreshTokenHash, candidateHash)) return false
 
-        return Instant.now().isBefore(parsed.graceExpiresAt)
+        return Instant.now(clock).isBefore(parsed.graceExpiresAt)
     }
 
     override fun currentAccessTokenId(userId: Long): String? =
@@ -131,7 +134,7 @@ class RedisAuthSessionStore(
     }
 
     override fun blacklistAccessToken(accessTokenId: String, expiresAt: Instant) {
-        val ttl = Duration.between(Instant.now(), expiresAt)
+        val ttl = Duration.between(Instant.now(clock), expiresAt)
         if (ttl.isNegative || ttl.isZero) return
 
         redisTemplate.opsForValue().set(blacklistKey(accessTokenId), BLACKLISTED_MARKER, ttl)
@@ -141,7 +144,7 @@ class RedisAuthSessionStore(
         redisTemplate.hasKey(blacklistKey(accessTokenId))
 
     override fun rotate(userId: Long, presentedRefreshToken: String, next: AuthSession): RotationResult {
-        val now = Instant.now()
+        val now = Instant.now(clock)
         val ttl = Duration.between(now, next.refreshTokenExpiresAt)
         // tokenIssuer 는 항상 미래 만료 시각의 토큰을 발급하므로 실제로는 항상 양수다 — SET 의 EX 에
         // 0 이하를 넘기면 Redis 가 에러를 내므로 방어적으로 최소 1초를 보장한다.

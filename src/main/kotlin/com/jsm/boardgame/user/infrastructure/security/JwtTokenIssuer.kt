@@ -13,6 +13,7 @@ import org.springframework.security.oauth2.jwt.JwsHeader
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder
 import org.springframework.stereotype.Component
+import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 import javax.crypto.spec.SecretKeySpec
@@ -36,6 +37,8 @@ private const val TYPE_REFRESH = "refresh"
 @Component
 class JwtTokenIssuer(
     properties: JwtProperties,
+    // Instant.now() 를 직접 부르지 않고 주입받는다 — 테스트가 시간을 제어할 수 있어야 하기 때문이다.
+    private val clock: Clock,
 ) : AuthTokenIssuer {
 
     private val secretKey = run {
@@ -57,7 +60,7 @@ class JwtTokenIssuer(
         .build()
 
     override fun issue(userId: Long): IssuedTokens {
-        val now = Instant.now()
+        val now = Instant.now(clock)
         val subject = userId.toString()
 
         val accessTokenId = UUID.randomUUID().toString()

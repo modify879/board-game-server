@@ -15,6 +15,7 @@ import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import com.jsm.boardgame.user.domain.service.PasswordHasher
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import kotlin.test.Test
@@ -140,7 +141,7 @@ class LoginServiceTest {
     private val passwordHasher = LoginFakePasswordHasher()
     private val tokenIssuer = LoginFakeAuthTokenIssuer()
     private val sessions = LoginInMemoryAuthSessionStore()
-    private val service = LoginService(users, passwordHasher, tokenIssuer, sessions, Duration.ofMinutes(30))
+    private val service = LoginService(users, passwordHasher, tokenIssuer, sessions, Duration.ofMinutes(30), Clock.systemUTC())
 
     @Test
     fun `존재하지 않는 사용자명이면 LoginFailedException 이 발생한다`() {

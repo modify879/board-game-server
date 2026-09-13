@@ -8,16 +8,51 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
 import org.springframework.data.redis.core.StringRedisTemplate
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.util.UUID
 import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+
+/**
+ * 테스트가 시간을 직접 앞당길 수 있는 [Clock]. `Thread.sleep` 으로 실제 시간이 흐르길
+ * 기다리는 대신, [advanceBy] 로 기준 시각을 원하는 만큼만 밀어 결정론적으로 검증한다.
+ *
+ * [instant] 를 `@Volatile` 로 둔다 — 동시성 테스트(같은 토큰으로 두 스레드가 동시에 rotate)가
+ * 이 시계를 두 스레드에서 동시에 읽으므로, 가시성 없이 두면 한쪽 스레드가 갱신 전 값을
+ * 볼 수 있다(이 테스트에서는 값을 advanceBy 하지 않지만, 다른 필드 접근과 마찬가지로 안전하게 둔다).
+ */
+// ClockTestConfig(아래, public @Bean 메서드의 반환 타입)에서 써야 하므로 private 로 좁히지 않는다 —
+// Kotlin 은 public 선언이 그보다 좁은 가시성의 타입을 노출하는 것을 컴파일 에러로 막는다.
+class MutableClock(
+    startingAt: Instant,
+    private val zone: ZoneId = ZoneOffset.UTC,
+) : Clock() {
+
+    @Volatile
+    private var instant: Instant = startingAt
+
+    override fun getZone(): ZoneId = zone
+
+    override fun withZone(zone: ZoneId): Clock = MutableClock(instant, zone)
+
+    override fun instant(): Instant = instant
+
+    fun advanceBy(duration: Duration) {
+        instant = instant.plus(duration)
+    }
+}
 
 /**
  * Redis 기반 [AuthSessionStore] 구현(`RedisAuthSessionStore`) 통합 테스트.
@@ -27,6 +62,13 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * 직전 토큰 유예 칸은 [start] 로는 만들 수 없다 — 로그인은 항상 그 칸을 비운다. 여러 세대를
  * 재현해야 하는 테스트는 [AuthSessionStore.rotate] 를 연달아 호출해 상태를 만든다.
+ *
+ * [ClockTestConfig] 가 애플리케이션의 `Clock.systemUTC()` 빈을 `@Primary` [MutableClock] 으로
+ * 덮어써서, `authSessionStore`(스프링이 주입한 실 구현체) 가 보는 시각을 테스트가 직접
+ * 조작할 수 있게 한다 — 유예 만료·즉시 경합 가드(100ms)를 기다리려고 실제로 잠들 필요가 없다.
+ * 단, 동시성 테스트는 실제 스레드 경합을 검증하는 것이므로 시계를 앞당기지 않는다 — 두 스레드가
+ * 이 시계에서 정확히 같은 시각을 읽더라도(오히려 경합을 더 확실히 재현한다) 경합 가드가
+ * 정확히 하나만 통과시키는 동작 자체는 그대로 검증된다.
  */
 @SpringBootTest
 @Import(TestcontainersConfiguration::class)
@@ -37,6 +79,19 @@ class RedisAuthSessionStoreIntegrationTest {
 
     @Autowired
     private lateinit var redisTemplate: StringRedisTemplate
+
+    @Autowired
+    private lateinit var clock: MutableClock
+
+    @TestConfiguration
+    class ClockTestConfig {
+        // 빈 이름을 "clock"으로 그대로 두면 ClockConfig 의 운영용 clock 빈과 이름이 겹쳐
+        // BeanDefinitionOverrideException 이 난다(스프링 부트는 기본적으로 빈 재정의를 막는다).
+        // 이름을 달리하고 @Primary 로 타입 기준 주입에서 이 빈이 이기게 한다.
+        @Bean
+        @Primary
+        fun testClock(): MutableClock = MutableClock(Instant.now())
+    }
 
     @Test
     fun `start 후 matchesRefreshToken 은 저장된 토큰에 true, 다른 토큰에 false 를 돌려준다`() {
@@ -153,6 +208,7 @@ class RedisAuthSessionStoreIntegrationTest {
 
     @Test
     fun `유예가 지나면 직전 토큰이 거부된다`() {
+        val shortGraceClock = MutableClock(Instant.now())
         val shortGraceStore = RedisAuthSessionStore(
             redisTemplate,
             JwtProperties(
@@ -161,6 +217,7 @@ class RedisAuthSessionStoreIntegrationTest {
                 refreshTokenTtl = Duration.ofDays(14),
                 refreshReuseGrace = Duration.ofMillis(200),
             ),
+            shortGraceClock,
         )
         val userId = newUserId()
         val first = newSession()
@@ -169,7 +226,7 @@ class RedisAuthSessionStoreIntegrationTest {
         val rotated = newSession()
         shortGraceStore.rotate(userId, first.refreshToken, rotated)
 
-        Thread.sleep(300)
+        shortGraceClock.advanceBy(Duration.ofMillis(300))
 
         assertThat(shortGraceStore.matchesRefreshToken(userId, first.refreshToken)).isFalse()
         assertThat(shortGraceStore.matchesRefreshToken(userId, rotated.refreshToken)).isTrue()
@@ -200,7 +257,7 @@ class RedisAuthSessionStoreIntegrationTest {
         // rotate() 는 유예 창이 열린 직후의 즉시 재사용을 "동시 경합"으로 보고 거부하는
         // 가드(RedisAuthSessionStore.MIN_GRACE_ELAPSED_MILLIS, 100ms)를 둔다. 이 테스트는
         // "응답 유실 후 나중에 재시도"를 재현하는 것이므로, 가드를 여유 있게 넘기고서 호출한다.
-        Thread.sleep(300)
+        clock.advanceBy(Duration.ofMillis(300))
 
         // gen0 은 gen1 의 유예 대상 직전 토큰이다.
         val gen2 = newSession()
@@ -248,14 +305,14 @@ class RedisAuthSessionStoreIntegrationTest {
         val gen1 = newSession()
         authSessionStore.rotate(userId, gen0.refreshToken, gen1)
 
-        Thread.sleep(300)
+        clock.advanceBy(Duration.ofMillis(300))
 
         // 첫 번째 유예 재시도: gen0 은 아직 직전 칸에 있다 — 통과해야 한다.
         val gen2 = newSession()
         val firstRetry = authSessionStore.rotate(userId, gen0.refreshToken, gen2)
         assertThat(firstRetry).isEqualTo(RotationResult.Rotated(gen1.accessTokenId))
 
-        Thread.sleep(300)
+        clock.advanceBy(Duration.ofMillis(300))
 
         // 같은 gen0 을 다시 제시한다 — 직전 칸에 "제시된 토큰"을 그대로 기록하는 버그가 있었다면
         // 직전 칸이 계속 gen0 으로 재기록되어 여기서도 통과했을 것이다(재사용의 무한 갱신).
@@ -274,14 +331,14 @@ class RedisAuthSessionStoreIntegrationTest {
         val gen1 = newSession()
         authSessionStore.rotate(userId, gen0.refreshToken, gen1)
 
-        Thread.sleep(300)
+        clock.advanceBy(Duration.ofMillis(300))
 
         // 유예 재시도: 직전 칸의 gen0 을 제시해 통과시킨다 — 이때 밀려나는 것은 "현재" 칸에 있던 gen1 이다.
         val gen2 = newSession()
         val retryResult = authSessionStore.rotate(userId, gen0.refreshToken, gen2)
         assertThat(retryResult).isEqualTo(RotationResult.Rotated(gen1.accessTokenId))
 
-        Thread.sleep(300)
+        clock.advanceBy(Duration.ofMillis(300))
 
         // 밀려난 gen1 이 새 직전 칸에 들어가 있어야 한다 — gen1 으로 rotate 하면 성공해야 한다.
         val gen3 = newSession()

@@ -8,6 +8,7 @@ import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.domain.exception.InvalidRefreshTokenException
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
@@ -18,6 +19,8 @@ class RefreshTokenService(
     private val sessions: AuthSessionStore,
     // JwtProperties(infrastructure/security)는 인프라 계층 타입이라 application 이 참조할 수 없다.
     @Value("\${app.jwt.access-token-ttl}") private val accessTokenTtl: Duration,
+    // Instant.now() 를 직접 부르지 않고 주입받는다 — 테스트가 시간을 제어할 수 있어야 하기 때문이다.
+    private val clock: Clock,
 ) : RefreshTokenUseCase {
 
     override fun refresh(command: RefreshTokenCommand): IssuedTokens {
@@ -47,7 +50,7 @@ class RefreshTokenService(
             is RotationResult.Rotated -> {
                 // 회전 시 아직 살아 있는 액세스 토큰도 함께 끊는다.
                 result.previousAccessTokenId?.let { previousAccessTokenId ->
-                    sessions.blacklistAccessToken(previousAccessTokenId, Instant.now().plus(accessTokenTtl))
+                    sessions.blacklistAccessToken(previousAccessTokenId, Instant.now(clock).plus(accessTokenTtl))
                 }
                 tokens
             }
@@ -63,7 +66,7 @@ class RefreshTokenService(
                 // 계속 통하게 된다. 이 순서를 뒤집으면 그 버그가 그대로 재현된다. LogoutService 와
                 // 동일한 순서다.
                 sessions.currentAccessTokenId(userId)?.let { currentAccessTokenId ->
-                    sessions.blacklistAccessToken(currentAccessTokenId, Instant.now().plus(accessTokenTtl))
+                    sessions.blacklistAccessToken(currentAccessTokenId, Instant.now(clock).plus(accessTokenTtl))
                 }
                 sessions.clear(userId)
                 throw InvalidRefreshTokenException("리프레시 토큰 재사용 탐지: userId=$userId — 세션 전체 폐기")

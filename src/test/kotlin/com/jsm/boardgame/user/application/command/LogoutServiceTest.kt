@@ -6,6 +6,7 @@ import com.jsm.boardgame.user.application.port.AuthTokenIssuer
 import com.jsm.boardgame.user.application.port.IssuedTokens
 import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.domain.exception.InvalidRefreshTokenException
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import kotlin.test.Test
@@ -71,7 +72,7 @@ class LogoutServiceTest {
 
     private val sessions = LogoutFakeAuthSessionStore()
     private val tokenIssuer = LogoutFakeAuthTokenIssuer()
-    private val service = LogoutService(sessions, Duration.ofMinutes(30))
+    private val service = LogoutService(sessions, Duration.ofMinutes(30), Clock.systemUTC())
 
     private fun loggedIn(userId: Long): IssuedTokens {
         val issued = tokenIssuer.issue(userId)
@@ -92,7 +93,7 @@ class LogoutServiceTest {
 
         service.logout(1L)
 
-        val refreshService = RefreshTokenService(tokenIssuer, sessions, Duration.ofMinutes(30))
+        val refreshService = RefreshTokenService(tokenIssuer, sessions, Duration.ofMinutes(30), Clock.systemUTC())
         assertFailsWith<InvalidRefreshTokenException> {
             refreshService.refresh(RefreshTokenCommand(issued.refreshToken))
         }

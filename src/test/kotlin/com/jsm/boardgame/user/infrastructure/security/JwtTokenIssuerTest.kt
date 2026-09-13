@@ -5,6 +5,7 @@ import com.nimbusds.jose.JWSHeader
 import com.nimbusds.jose.crypto.MACSigner
 import com.nimbusds.jwt.JWTClaimsSet
 import com.nimbusds.jwt.SignedJWT
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.Date
@@ -30,7 +31,7 @@ class JwtTokenIssuerTest {
 
     @Test
     fun `발급한 액세스 토큰의 sub 가 요청한 userId 다`() {
-        val issuer = JwtTokenIssuer(properties())
+        val issuer = JwtTokenIssuer(properties(), Clock.systemUTC())
 
         val tokens = issuer.issue(userId = 42L)
 
@@ -40,7 +41,7 @@ class JwtTokenIssuerTest {
 
     @Test
     fun `발급한 리프레시 토큰을 userIdFromRefreshToken 에 넣으면 같은 userId 가 나온다`() {
-        val issuer = JwtTokenIssuer(properties())
+        val issuer = JwtTokenIssuer(properties(), Clock.systemUTC())
 
         val tokens = issuer.issue(userId = 7L)
 
@@ -49,7 +50,7 @@ class JwtTokenIssuerTest {
 
     @Test
     fun `액세스 토큰을 userIdFromRefreshToken 에 넣으면 null 이다`() {
-        val issuer = JwtTokenIssuer(properties())
+        val issuer = JwtTokenIssuer(properties(), Clock.systemUTC())
 
         val tokens = issuer.issue(userId = 1L)
 
@@ -58,8 +59,8 @@ class JwtTokenIssuerTest {
 
     @Test
     fun `서명이 다른 키로 만든 토큰은 null 이다`() {
-        val issuerA = JwtTokenIssuer(properties(secret = "issuer-a-secret-key-at-least-32-bytes!!"))
-        val issuerB = JwtTokenIssuer(properties(secret = "issuer-b-secret-key-at-least-32-bytes!!"))
+        val issuerA = JwtTokenIssuer(properties(secret = "issuer-a-secret-key-at-least-32-bytes!!"), Clock.systemUTC())
+        val issuerB = JwtTokenIssuer(properties(secret = "issuer-b-secret-key-at-least-32-bytes!!"), Clock.systemUTC())
 
         val tokens = issuerA.issue(userId = 99L)
 
@@ -73,7 +74,7 @@ class JwtTokenIssuerTest {
         // 그래서 발급기를 거치지 않고 Nimbus 로 이미 만료된 토큰을 직접 서명해 만들고,
         // userIdFromRefreshToken 의 검증 경로만 확인한다 — 발급기 내부 구현에 덜 의존한다.
         val props = properties()
-        val issuer = JwtTokenIssuer(props)
+        val issuer = JwtTokenIssuer(props, Clock.systemUTC())
 
         val now = Instant.now()
         val claims = JWTClaimsSet.Builder()
@@ -92,14 +93,14 @@ class JwtTokenIssuerTest {
 
     @Test
     fun `쓰레기 문자열은 예외 없이 null 이다`() {
-        val issuer = JwtTokenIssuer(properties())
+        val issuer = JwtTokenIssuer(properties(), Clock.systemUTC())
 
         assertNull(issuer.userIdFromRefreshToken("이건-JWT-가-아니다"))
     }
 
     @Test
     fun `두 번 발급하면 accessTokenId 가 서로 다르다`() {
-        val issuer = JwtTokenIssuer(properties())
+        val issuer = JwtTokenIssuer(properties(), Clock.systemUTC())
 
         val first = issuer.issue(userId = 1L)
         val second = issuer.issue(userId = 1L)
@@ -110,7 +111,7 @@ class JwtTokenIssuerTest {
     @Test
     fun `32바이트 미만 키로 생성하면 명확한 예외가 난다`() {
         val exception = assertFailsWith<IllegalStateException> {
-            JwtTokenIssuer(properties(secret = "too-short"))
+            JwtTokenIssuer(properties(secret = "too-short"), Clock.systemUTC())
         }
 
         assertEquals(
