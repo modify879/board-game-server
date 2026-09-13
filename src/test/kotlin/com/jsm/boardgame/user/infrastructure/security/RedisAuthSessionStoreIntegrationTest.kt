@@ -24,6 +24,9 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * 테스트 간 격리는 각 테스트가 고유한 userId/jti 를 쓰는 방식으로 확보한다 —
  * 스프링 테스트 컨텍스트(와 그 안의 Redis 컨테이너)가 테스트 메서드 간에 재사용되기 때문이다.
+ *
+ * 직전 토큰 유예 칸은 [start] 로는 만들 수 없다 — 로그인은 항상 그 칸을 비운다. 여러 세대를
+ * 재현해야 하는 테스트는 [AuthSessionStore.rotate] 를 연달아 호출해 상태를 만든다.
  */
 @SpringBootTest
 @Import(TestcontainersConfiguration::class)
@@ -122,8 +125,8 @@ class RedisAuthSessionStoreIntegrationTest {
         val first = newSession()
         authSessionStore.start(userId, first)
 
-        val rotated = newSession(previousRefreshToken = first.refreshToken)
-        authSessionStore.start(userId, rotated)
+        val rotated = newSession()
+        authSessionStore.rotate(userId, first.refreshToken, rotated)
 
         // 새로 발급된 현재 토큰과, 응답 유실로 재시도될 수 있는 직전 토큰 모두 통과해야 한다.
         assertThat(authSessionStore.matchesRefreshToken(userId, rotated.refreshToken)).isTrue()
@@ -136,11 +139,11 @@ class RedisAuthSessionStoreIntegrationTest {
         val gen0 = newSession()
         authSessionStore.start(userId, gen0)
 
-        val gen1 = newSession(previousRefreshToken = gen0.refreshToken)
-        authSessionStore.start(userId, gen1)
+        val gen1 = newSession()
+        authSessionStore.rotate(userId, gen0.refreshToken, gen1)
 
-        val gen2 = newSession(previousRefreshToken = gen1.refreshToken)
-        authSessionStore.start(userId, gen2)
+        val gen2 = newSession()
+        authSessionStore.rotate(userId, gen1.refreshToken, gen2)
 
         // 저장소는 직전 한 세대(gen1)만 기억한다 — gen0 은 유예 여부와 무관하게 더 이상 통하지 않는다.
         assertThat(authSessionStore.matchesRefreshToken(userId, gen0.refreshToken)).isFalse()
@@ -163,8 +166,8 @@ class RedisAuthSessionStoreIntegrationTest {
         val first = newSession()
         shortGraceStore.start(userId, first)
 
-        val rotated = newSession(previousRefreshToken = first.refreshToken)
-        shortGraceStore.start(userId, rotated)
+        val rotated = newSession()
+        shortGraceStore.rotate(userId, first.refreshToken, rotated)
 
         Thread.sleep(300)
 
@@ -178,7 +181,7 @@ class RedisAuthSessionStoreIntegrationTest {
         val first = newSession()
         authSessionStore.start(userId, first)
 
-        val next = newSession(previousRefreshToken = first.refreshToken)
+        val next = newSession()
         val result = authSessionStore.rotate(userId, first.refreshToken, next)
 
         assertThat(result).isEqualTo(RotationResult.Rotated(first.accessTokenId))
@@ -191,8 +194,8 @@ class RedisAuthSessionStoreIntegrationTest {
         val gen0 = newSession()
         authSessionStore.start(userId, gen0)
 
-        val gen1 = newSession(previousRefreshToken = gen0.refreshToken)
-        authSessionStore.start(userId, gen1)
+        val gen1 = newSession()
+        authSessionStore.rotate(userId, gen0.refreshToken, gen1)
 
         // rotate() 는 유예 창이 열린 직후의 즉시 재사용을 "동시 경합"으로 보고 거부하는
         // 가드(RedisAuthSessionStore.MIN_GRACE_ELAPSED_MILLIS, 100ms)를 둔다. 이 테스트는
@@ -200,7 +203,7 @@ class RedisAuthSessionStoreIntegrationTest {
         Thread.sleep(300)
 
         // gen0 은 gen1 의 유예 대상 직전 토큰이다.
-        val gen2 = newSession(previousRefreshToken = gen0.refreshToken)
+        val gen2 = newSession()
         val result = authSessionStore.rotate(userId, gen0.refreshToken, gen2)
 
         assertThat(result).isEqualTo(RotationResult.Rotated(gen1.accessTokenId))
@@ -213,13 +216,13 @@ class RedisAuthSessionStoreIntegrationTest {
         val gen0 = newSession()
         authSessionStore.start(userId, gen0)
 
-        val gen1 = newSession(previousRefreshToken = gen0.refreshToken)
-        authSessionStore.start(userId, gen1)
+        val gen1 = newSession()
+        authSessionStore.rotate(userId, gen0.refreshToken, gen1)
 
-        val gen2 = newSession(previousRefreshToken = gen1.refreshToken)
-        authSessionStore.start(userId, gen2)
+        val gen2 = newSession()
+        authSessionStore.rotate(userId, gen1.refreshToken, gen2)
 
-        val attempted = newSession(previousRefreshToken = gen0.refreshToken)
+        val attempted = newSession()
         val result = authSessionStore.rotate(userId, gen0.refreshToken, attempted)
 
         assertThat(result).isEqualTo(RotationResult.Mismatch)
@@ -236,6 +239,56 @@ class RedisAuthSessionStoreIntegrationTest {
         assertThat(result).isEqualTo(RotationResult.Mismatch)
     }
 
+    @Test
+    fun `같은 직전 토큰을 100ms 이상 간격으로 두 번 제시하면 두 번째는 Mismatch 다`() {
+        val userId = newUserId()
+        val gen0 = newSession()
+        authSessionStore.start(userId, gen0)
+
+        val gen1 = newSession()
+        authSessionStore.rotate(userId, gen0.refreshToken, gen1)
+
+        Thread.sleep(300)
+
+        // 첫 번째 유예 재시도: gen0 은 아직 직전 칸에 있다 — 통과해야 한다.
+        val gen2 = newSession()
+        val firstRetry = authSessionStore.rotate(userId, gen0.refreshToken, gen2)
+        assertThat(firstRetry).isEqualTo(RotationResult.Rotated(gen1.accessTokenId))
+
+        Thread.sleep(300)
+
+        // 같은 gen0 을 다시 제시한다 — 직전 칸에 "제시된 토큰"을 그대로 기록하는 버그가 있었다면
+        // 직전 칸이 계속 gen0 으로 재기록되어 여기서도 통과했을 것이다(재사용의 무한 갱신).
+        // 고친 뒤에는 직전 칸에 "밀려난 현재 토큰"(gen1)이 들어가므로 gen0 은 어디에도 없어 거부된다.
+        val gen3 = newSession()
+        val secondRetry = authSessionStore.rotate(userId, gen0.refreshToken, gen3)
+        assertThat(secondRetry).isEqualTo(RotationResult.Mismatch)
+    }
+
+    @Test
+    fun `유예 재시도 후에는 밀려난 현재 토큰이 새 직전 칸에 들어간다`() {
+        val userId = newUserId()
+        val gen0 = newSession()
+        authSessionStore.start(userId, gen0)
+
+        val gen1 = newSession()
+        authSessionStore.rotate(userId, gen0.refreshToken, gen1)
+
+        Thread.sleep(300)
+
+        // 유예 재시도: 직전 칸의 gen0 을 제시해 통과시킨다 — 이때 밀려나는 것은 "현재" 칸에 있던 gen1 이다.
+        val gen2 = newSession()
+        val retryResult = authSessionStore.rotate(userId, gen0.refreshToken, gen2)
+        assertThat(retryResult).isEqualTo(RotationResult.Rotated(gen1.accessTokenId))
+
+        Thread.sleep(300)
+
+        // 밀려난 gen1 이 새 직전 칸에 들어가 있어야 한다 — gen1 으로 rotate 하면 성공해야 한다.
+        val gen3 = newSession()
+        val rotateWithBumped = authSessionStore.rotate(userId, gen1.refreshToken, gen3)
+        assertThat(rotateWithBumped).isEqualTo(RotationResult.Rotated(gen2.accessTokenId))
+    }
+
     // 정확히 하나만 성공하는 이유: 두 스레드 모두 아직 회전되지 않은 first.refreshToken 을
     // 제시하므로, Redis 가 직렬화하는 두 Lua 실행 중 먼저 도는 쪽만 "현재 토큰과 일치"로
     // 통과한다. 나중 쪽은 그 직후 열린 유예 창의 "직전 토큰과 일치" 조건 자체는 만족하지만,
@@ -247,7 +300,7 @@ class RedisAuthSessionStoreIntegrationTest {
         val first = newSession()
         authSessionStore.start(userId, first)
 
-        val nextSessions = List(2) { newSession(previousRefreshToken = first.refreshToken) }
+        val nextSessions = List(2) { newSession() }
         val readyLatch = CountDownLatch(2)
         val startLatch = CountDownLatch(1)
         val executor = Executors.newFixedThreadPool(2)
@@ -282,7 +335,7 @@ class RedisAuthSessionStoreIntegrationTest {
         val first = newSession()
         authSessionStore.start(userId, first)
 
-        val next = newSession(previousRefreshToken = first.refreshToken)
+        val next = newSession()
         authSessionStore.rotate(userId, first.refreshToken, next)
 
         val ttl = redisTemplate.getExpire("auth:session:$userId")
@@ -294,8 +347,7 @@ class RedisAuthSessionStoreIntegrationTest {
         accessTokenId: String = "access-${UUID.randomUUID()}",
         refreshToken: String = "refresh-${UUID.randomUUID()}",
         refreshTokenExpiresAt: Instant = Instant.now().plusSeconds(60 * 60 * 24 * 7),
-        previousRefreshToken: String? = null,
-    ) = AuthSession(accessTokenId, refreshToken, refreshTokenExpiresAt, previousRefreshToken)
+    ) = AuthSession(accessTokenId, refreshToken, refreshTokenExpiresAt)
 
     private fun newUserId(): Long = userIdSequence.getAndIncrement()
 

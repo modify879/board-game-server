@@ -31,6 +31,8 @@ class RefreshTokenService(
         // "확인 후 실행"의 비원자성 문제가 그대로 재현된다.
         val tokens = tokenIssuer.issue(userId)
 
+        // 직전 토큰 유예 칸에 무엇이 들어가는지는 여기서 정하지 않는다 — sessions.rotate() 구현이
+        // 이번 회전으로 밀려난 현재 토큰을 스스로 그 칸에 채운다. AuthSessionStore.rotate 문서 참고.
         val result = sessions.rotate(
             userId,
             command.refreshToken,
@@ -38,9 +40,6 @@ class RefreshTokenService(
                 accessTokenId = tokens.accessTokenId,
                 refreshToken = tokens.refreshToken,
                 refreshTokenExpiresAt = tokens.refreshTokenExpiresAt,
-                // 정상 회전이든 유예 안의 재시도든, 이번에 제시된 토큰을 직전 토큰으로 기록한다 —
-                // 다음 한 번의 재시도까지만 유예를 허용하기 위함이다(두 세대 전은 유예 대상이 아니다).
-                previousRefreshToken = command.refreshToken,
             ),
         )
 

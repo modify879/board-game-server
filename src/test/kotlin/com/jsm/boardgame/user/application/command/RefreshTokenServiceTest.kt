@@ -50,36 +50,42 @@ private class RefreshFakeAuthTokenIssuer : AuthTokenIssuer {
 
 /**
  * 실제 [com.jsm.boardgame.user.infrastructure.security.RedisAuthSessionStore] 와 같은 유예 규칙을
- * 흉내 낸다 — previousRefreshToken 은 한 세대만 기억하고, 그 세대에 한해서만 [refreshReuseGrace]
- * 동안 재사용을 허용한다. 두 세대 전 토큰은 애초에 기억하지 않으므로 유예와 무관하게 거부된다.
+ * 흉내 낸다 — 직전 토큰은 한 세대만 기억하고, 그 세대에 한해서만 [refreshReuseGrace] 동안
+ * 재사용을 허용한다. 두 세대 전 토큰은 애초에 기억하지 않으므로 유예와 무관하게 거부된다.
+ *
+ * [AuthSession] 에는 previousRefreshToken 이 없다 — 직전 칸에 무엇을 넣을지는 저장소가 정한다.
+ * [rotate] 가 성공적으로 교체할 때 다음 직전 칸에는 언제나 "이번 회전으로 밀려난 현재 토큰"이
+ * 들어간다(제시된 토큰이 아니다). 실제 저장소(RedisAuthSessionStore)와 같은 규칙이어야
+ * 이 페이크로 [RefreshTokenService] 의 재사용 탐지 시나리오를 신뢰성 있게 검증할 수 있다.
  */
 private class RefreshInMemoryAuthSessionStore(
     private val refreshReuseGrace: Duration = Duration.ofSeconds(30),
 ) : AuthSessionStore {
-    private val sessions = mutableMapOf<Long, AuthSession>()
-    private val graceExpiresAt = mutableMapOf<Long, Instant>()
+    private data class StoredSession(
+        val session: AuthSession,
+        val previousRefreshToken: String?,
+        val graceExpiresAt: Instant,
+    )
+
+    private val sessions = mutableMapOf<Long, StoredSession>()
     private val blacklist = mutableMapOf<String, Instant>()
 
     override fun start(userId: Long, session: AuthSession) {
-        sessions[userId] = session
-        graceExpiresAt[userId] = if (session.previousRefreshToken != null) {
-            Instant.now().plus(refreshReuseGrace)
-        } else {
-            Instant.EPOCH
-        }
+        // 로그인은 항상 새 세션이다 — 직전 칸은 비운다.
+        sessions[userId] = StoredSession(session, previousRefreshToken = null, graceExpiresAt = Instant.EPOCH)
     }
 
     override fun matchesRefreshToken(userId: Long, refreshToken: String): Boolean {
-        val session = sessions[userId] ?: return false
-        if (session.refreshToken == refreshToken) return true
+        val stored = sessions[userId] ?: return false
+        if (stored.session.refreshToken == refreshToken) return true
 
-        val previous = session.previousRefreshToken ?: return false
+        val previous = stored.previousRefreshToken ?: return false
         if (previous != refreshToken) return false
 
-        return Instant.now().isBefore(graceExpiresAt[userId])
+        return Instant.now().isBefore(stored.graceExpiresAt)
     }
 
-    override fun currentAccessTokenId(userId: Long): String? = sessions[userId]?.accessTokenId
+    override fun currentAccessTokenId(userId: Long): String? = sessions[userId]?.session?.accessTokenId
 
     override fun clear(userId: Long) {
         sessions.remove(userId)
@@ -94,22 +100,28 @@ private class RefreshInMemoryAuthSessionStore(
     /**
      * 실제 [com.jsm.boardgame.user.infrastructure.security.RedisAuthSessionStore.rotate] 와 같은 규칙으로
      * 대조와 교체를 한 번에 수행한다 — 현재 토큰이거나 유예 안의 직전 토큰이면 교체하고, 아니면 세션을
-     * 건드리지 않은 채 Mismatch 를 돌려준다.
+     * 건드리지 않은 채 Mismatch 를 돌려준다. 통과하면 다음 직전 칸에는 이번에 밀려난 현재 토큰
+     * (stored.session.refreshToken)이 들어간다 — 제시된 토큰이 현재 칸과 일치했든 유예 중인 직전
+     * 칸과 일치했든 상관없다. 호출자가 넘기는 [next] 에는 애초에 직전 칸을 정할 수단이 없다.
      */
     override fun rotate(userId: Long, presentedRefreshToken: String, next: AuthSession): RotationResult {
-        val session = sessions[userId] ?: return RotationResult.Mismatch
+        val stored = sessions[userId] ?: return RotationResult.Mismatch
 
-        val matches = if (session.refreshToken == presentedRefreshToken) {
+        val matches = if (stored.session.refreshToken == presentedRefreshToken) {
             true
         } else {
-            val previous = session.previousRefreshToken
-            previous != null && previous == presentedRefreshToken && Instant.now().isBefore(graceExpiresAt[userId])
+            val previous = stored.previousRefreshToken
+            previous != null && previous == presentedRefreshToken && Instant.now().isBefore(stored.graceExpiresAt)
         }
 
         if (!matches) return RotationResult.Mismatch
 
-        val previousAccessTokenId = session.accessTokenId
-        start(userId, next)
+        val previousAccessTokenId = stored.session.accessTokenId
+        sessions[userId] = StoredSession(
+            session = next,
+            previousRefreshToken = stored.session.refreshToken,
+            graceExpiresAt = Instant.now().plus(refreshReuseGrace),
+        )
         return RotationResult.Rotated(previousAccessTokenId)
     }
 }
@@ -155,6 +167,46 @@ class RefreshTokenServiceTest {
         // 세션이 폐기되지 않았으므로 최신 토큰으로 계속 갱신할 수 있다.
         val next = service.refresh(RefreshTokenCommand(retried.refreshToken))
         assertNotEquals(retried.refreshToken, next.refreshToken)
+    }
+
+    @Test
+    fun `유예 재시도 후에는 밀려난 직전 회전 토큰으로 정상 클라이언트가 계속 갱신할 수 있다`() {
+        val userId = 9L
+        val first = loginSession(userId)
+        // 정상 회전: 클라이언트 A 가 rotated 를 받아 든다.
+        val rotated = service.refresh(RefreshTokenCommand(first.refreshToken))
+
+        // 이미 소모된 first 가 다시 제시된다(응답 유실 재시도, 혹은 first 를 가로챈 다른 주체) —
+        // 유예 통과.
+        val retriedByOther = service.refresh(RefreshTokenCommand(first.refreshToken))
+        assertNotEquals(rotated.refreshToken, retriedByOther.refreshToken)
+
+        // 클라이언트 A 는 여전히 rotated 를 들고 있다 — 이번 회전으로 "밀려난 현재 토큰"은
+        // rotated 이므로 직전 칸에 들어가 있어야 하고, 유예 안에서 정상적으로 갱신에 성공해야 한다.
+        // 직전 칸에 "제시된 토큰"(first)을 그대로 기록하는 버그가 있었다면 rotated 는 두 칸
+        // 어디에도 없어 여기서 재사용으로 오인되어 세션째 폐기됐을 것이다.
+        val nextForA = service.refresh(RefreshTokenCommand(rotated.refreshToken))
+        assertNotEquals(rotated.refreshToken, nextForA.refreshToken)
+        assertNotNull(sessions.currentAccessTokenId(userId))
+    }
+
+    @Test
+    fun `유예 중인 같은 직전 토큰을 반복 제시하면 두 번째부터는 거부된다`() {
+        val userId = 10L
+        val first = loginSession(userId)
+        service.refresh(RefreshTokenCommand(first.refreshToken))
+
+        // 첫 번째 유예 재시도는 통과한다(응답 유실 후 정상 재시도, 혹은 탈취자의 최초 시도).
+        service.refresh(RefreshTokenCommand(first.refreshToken))
+
+        // 같은 first 를 다시 제시한다 — 직전 칸에 "제시된 토큰"을 그대로 기록하는 버그가 있었다면
+        // 직전 칸이 계속 first 로 재기록되어 여기서도 통과했을 것이다(재사용의 무한 갱신).
+        // 고친 뒤에는 first 가 어느 칸에도 없으므로 거부되고 세션이 폐기된다.
+        val e = assertFailsWith<InvalidRefreshTokenException> {
+            service.refresh(RefreshTokenCommand(first.refreshToken))
+        }
+        assertEquals(UserErrorCode.REFRESH_TOKEN_INVALID, e.errorCode)
+        assertNull(sessions.currentAccessTokenId(userId))
     }
 
     @Test
