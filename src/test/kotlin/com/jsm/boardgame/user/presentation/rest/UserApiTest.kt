@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
@@ -168,6 +169,33 @@ class UserApiTest {
             .andExpect(jsonPath("$.traceId").isNotEmpty)
             // 스프링은 "Failed to read request" 같은 영문 detail 을 채워 넣는다.
             // 핸들러가 그걸 지우지 않으면 "서버는 문구를 내려보내지 않는다"는 계약이 이 경로에서만 깨진다.
+            .andExpect(jsonPath("$.detail").doesNotExist())
+    }
+
+    @Test
+    fun `지원하지 않는 HTTP 메서드로 요청하면 405와 REQUEST_INVALID 를 응답하고 detail 을 노출하지 않는다`() {
+        mockMvc.perform(delete("/api/users"))
+            .andExpect(status().isMethodNotAllowed)
+            .andExpect(jsonPath("$.errorCode").value("REQUEST_INVALID"))
+            .andExpect(jsonPath("$.traceId").isNotEmpty())
+            .andExpect(jsonPath("$.detail").doesNotExist())
+    }
+
+    @Test
+    fun `존재하지 않는 경로로 요청하면 404와 REQUEST_INVALID 를 응답하고 detail 을 노출하지 않는다`() {
+        mockMvc.perform(get("/api/nonexistent"))
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.errorCode").value("REQUEST_INVALID"))
+            .andExpect(jsonPath("$.traceId").isNotEmpty())
+            .andExpect(jsonPath("$.detail").doesNotExist())
+    }
+
+    @Test
+    fun `경로 변수 타입이 일치하지 않으면 400과 REQUEST_INVALID 를 응답하고 detail 을 노출하지 않는다`() {
+        mockMvc.perform(get("/api/users/abc"))
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("REQUEST_INVALID"))
+            .andExpect(jsonPath("$.traceId").isNotEmpty())
             .andExpect(jsonPath("$.detail").doesNotExist())
     }
 }

@@ -9,7 +9,7 @@ value class RawPassword private constructor(val value: String) {
     override fun toString(): String = "RawPassword(****)"
 
     companion object {
-        private const val MIN_LENGTH = 8 // 문자 수
+        private const val MIN_LENGTH = 8 // 코드포인트 수
 
         // BCrypt 해시 알고리즘의 입력 상한과 맞춘 값이다. BCryptPasswordEncoder.encode() 는
         // UTF-8 로 72바이트를 넘는 입력을 받으면 IllegalArgumentException 을 던진다.
@@ -18,7 +18,7 @@ value class RawPassword private constructor(val value: String) {
         private const val MAX_BYTES = 72 // UTF-8 바이트 수
 
         fun of(raw: String): RawPassword {
-            if (raw.length < MIN_LENGTH) {
+            if (raw.codePointCount(0, raw.length) < MIN_LENGTH) {
                 throw InvalidPasswordException(
                     UserErrorCode.PASSWORD_TOO_SHORT,
                     "비밀번호가 너무 짧습니다 (length=${raw.length})",

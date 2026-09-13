@@ -55,4 +55,11 @@ class RawPasswordTest {
         val e = assertFailsWith<InvalidPasswordException> { RawPassword.of("가".repeat(25)) }
         assertEquals(UserErrorCode.PASSWORD_TOO_LONG, e.errorCode)
     }
+
+    @Test
+    fun `이모지 4개는 length 로는 8이지만 코드포인트로는 4개라 PASSWORD_TOO_SHORT 로 거부된다`() {
+        val password = "🎲".repeat(4) // 🎲 서로게이트 페어 4개, String.length == 8, codePointCount == 4
+        val e = assertFailsWith<InvalidPasswordException> { RawPassword.of(password) }
+        assertEquals(UserErrorCode.PASSWORD_TOO_SHORT, e.errorCode)
+    }
 }

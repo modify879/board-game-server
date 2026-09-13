@@ -62,20 +62,29 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
         statusCode: HttpStatusCode,
         request: WebRequest,
     ): ResponseEntity<Any>? {
+        // 스프링은 handleHttpRequestMethodNotSupported, handleNoHandlerFoundException,
+        // handleMethodArgumentNotValid 등 상당수 경로에서 이 메서드를 body=null 로 호출한다.
+        // 그 경우 super 가 ErrorResponse.updateAndGetBody(...) 로 ProblemDetail 을 새로 만들어 반환하므로,
+        // super 호출 전에 body 를 패치해봤자 그 결과가 버려진다.
+        // 그래서 반드시 super 를 먼저 호출하고, 반환된 response 의 body(ProblemDetail 은 mutable 이므로
+        // 생성 후에도 필드 수정이 반영된다)를 그 다음에 패치한다.
+        // 이 순서를 뒤집지 말 것 — 뒤집으면 위 경로들에서 errorCode/traceId 가 응답에서 사라지는
+        // 버그가 재현된다.
+        val response = super.handleExceptionInternal(ex, body, headers, statusCode, request)
         val errorCode = if (statusCode.is5xxServerError) INTERNAL_ERROR else REQUEST_INVALID
 
-        if (body is ProblemDetail) {
+        (response?.body as? ProblemDetail)?.let {
             // 스프링은 여기 도달하기 전에 "Failed to read request" 같은 영문 detail 을 채워 넣는다.
             // 서버가 문구를 내려보내지 않는다는 계약이 이 경로에서만 깨지므로 지운다.
             // 내용은 아래 로그에 traceId 와 함께 남는다.
-            body.detail = null
-            body.setProperty("errorCode", errorCode)
-            body.setProperty("traceId", MDC.get(RequestIdFilter.TRACE_ID))
+            it.detail = null
+            it.setProperty("errorCode", errorCode)
+            it.setProperty("traceId", MDC.get(RequestIdFilter.TRACE_ID))
         }
 
         logByStatus(statusCode, errorCode, ex.message ?: ex.javaClass.simpleName, ex)
 
-        return super.handleExceptionInternal(ex, body, headers, statusCode, request)
+        return response
     }
 
     private fun problemDetail(status: HttpStatus, errorCode: String, requestUri: String): ProblemDetail =
