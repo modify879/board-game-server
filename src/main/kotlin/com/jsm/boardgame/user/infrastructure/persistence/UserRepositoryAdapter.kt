@@ -4,7 +4,6 @@ import com.jsm.boardgame.user.domain.exception.DuplicateNicknameException
 import com.jsm.boardgame.user.domain.exception.DuplicateUsernameException
 import com.jsm.boardgame.user.domain.model.Nickname
 import com.jsm.boardgame.user.domain.model.User
-import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.hibernate.exception.ConstraintViolationException
@@ -18,9 +17,6 @@ private const val CONSTRAINT_NICKNAME = "uk_users_nickname"
 class UserRepositoryAdapter(
     private val jpa: UserJpaRepository,
 ) : UserRepository {
-
-    override fun findById(id: UserId): User? =
-        jpa.findById(id.value).orElse(null)?.toDomain()
 
     override fun findByUsername(username: Username): User? =
         jpa.findByUsername(username.value)?.toDomain()

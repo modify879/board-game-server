@@ -23,8 +23,6 @@ private class FakeUserRepository : UserRepository {
     val stored = mutableListOf<User>()
     private var sequence = 0L
 
-    override fun findById(id: UserId): User? = stored.find { it.id == id }
-
     override fun findByUsername(username: Username): User? = stored.find { it.username == username }
 
     override fun existsByUsername(username: Username): Boolean =

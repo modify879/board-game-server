@@ -29,8 +29,6 @@ import kotlin.test.assertTrue
 private class LoginFakeUserRepository : UserRepository {
     val stored = mutableListOf<User>()
 
-    override fun findById(id: UserId): User? = stored.find { it.id == id }
-
     override fun findByUsername(username: Username): User? = stored.find { it.username == username }
 
     override fun existsByUsername(username: Username): Boolean = stored.any { it.username == username }
@@ -99,7 +97,8 @@ private class LoginInMemoryAuthSessionStore : AuthSessionStore {
         sessions[userId] = session
     }
 
-    override fun matchesRefreshToken(userId: Long, refreshToken: String): Boolean =
+    // AuthSessionStore 포트 계약이 아니다 — 세션이 실제로 시작됐는지 들여다보는 페이크 전용 검사용 헬퍼다.
+    fun matchesRefreshToken(userId: Long, refreshToken: String): Boolean =
         sessions[userId]?.refreshToken == refreshToken
 
     override fun currentAccessTokenId(userId: Long): String? = sessions[userId]?.accessTokenId

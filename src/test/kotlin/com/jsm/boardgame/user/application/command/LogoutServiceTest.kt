@@ -41,9 +41,6 @@ private class LogoutFakeAuthSessionStore : AuthSessionStore {
         sessions[userId] = session
     }
 
-    override fun matchesRefreshToken(userId: Long, refreshToken: String): Boolean =
-        sessions[userId]?.refreshToken == refreshToken
-
     override fun currentAccessTokenId(userId: Long): String? = sessions[userId]?.accessTokenId
 
     override fun clear(userId: Long) {

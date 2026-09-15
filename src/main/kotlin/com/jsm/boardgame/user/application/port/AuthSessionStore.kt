@@ -6,14 +6,12 @@ import java.time.Instant
  * 단일 기기 정책이므로 사용자당 세션은 하나다. [start] 는 기존 세션을 덮어쓴다.
  *
  * 리프레시 토큰을 어떻게 보관할지(원문 vs 해시)는 구현이 정한다.
- * 그래서 이 포트는 값을 돌려주지 않고 [matchesRefreshToken] 으로 대조만 한다.
+ * 그래서 이 포트는 리프레시 토큰 원문을 돌려주지 않는다 — 대조는 [rotate] 안에서만 이루어지고,
+ * 호출자는 그 결과([RotationResult])로만 통과 여부를 알 수 있다.
  */
 interface AuthSessionStore {
     /** 새 세션을 연다. 같은 사용자의 기존 세션은 덮어써진다. 직전 토큰 유예 칸은 비어서 시작한다. */
     fun start(userId: Long, session: AuthSession)
-
-    /** 저장된 리프레시 토큰과 일치하는지. 세션이 없으면 false. */
-    fun matchesRefreshToken(userId: Long, refreshToken: String): Boolean
 
     /** 현재 세션의 액세스 토큰 jti. 세션이 없으면 null. */
     fun currentAccessTokenId(userId: Long): String?
