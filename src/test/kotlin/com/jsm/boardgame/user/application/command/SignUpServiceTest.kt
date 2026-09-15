@@ -25,6 +25,8 @@ private class FakeUserRepository : UserRepository {
 
     override fun findById(id: UserId): User? = stored.find { it.id == id }
 
+    override fun findByUsername(username: Username): User? = stored.find { it.username == username }
+
     override fun existsByUsername(username: Username): Boolean =
         stored.any { it.username == username }
 
@@ -47,6 +49,7 @@ private class FakeUserRepository : UserRepository {
 
 private class FixedPasswordHasher : PasswordHasher {
     override fun hash(raw: RawPassword): PasswordHash = PasswordHash("hashed:${raw.value}")
+    override fun matches(raw: RawPassword, hash: PasswordHash): Boolean = hash.value == "hashed:${raw.value}"
 }
 
 class SignUpServiceTest {

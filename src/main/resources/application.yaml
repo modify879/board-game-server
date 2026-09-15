@@ -28,3 +28,11 @@ app:
     # 실제 CDN 이 붙기 전까지의 로컬 기본값
     base-url: "http://localhost:8080/images/profiles/"
     default-url: "http://localhost:8080/images/profiles/default.png"
+  jwt:
+    # 개발 전용 키다. 운영에서는 반드시 APP_JWT_SECRET 환경변수로 덮어쓸 것.
+    # 이 값은 저장소에 커밋되므로 코드를 볼 수 있는 사람은 누구나 토큰을 위조할 수 있다.
+    secret: "${APP_JWT_SECRET:local-development-only-not-for-production-use-1234}"
+    access-token-ttl: 30m
+    refresh-token-ttl: 14d
+    # 응답 유실로 인한 재시도를 탈취와 구분하기 위한 유예. 직전 토큰 한 세대에만 적용된다.
+    refresh-reuse-grace: 5s

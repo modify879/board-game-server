@@ -10,6 +10,8 @@ interface UserJpaRepository :
     JpaRepository<UserJpaEntity, Long>,
     KotlinJdslJpqlExecutor {
 
+    fun findByUsername(username: String): UserJpaEntity?
+
     fun existsByUsername(username: String): Boolean
 
     fun existsByNickname(nickname: String): Boolean

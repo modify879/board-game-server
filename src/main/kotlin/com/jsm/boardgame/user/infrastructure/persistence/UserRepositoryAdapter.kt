@@ -22,6 +22,9 @@ class UserRepositoryAdapter(
     override fun findById(id: UserId): User? =
         jpa.findById(id.value).orElse(null)?.toDomain()
 
+    override fun findByUsername(username: Username): User? =
+        jpa.findByUsername(username.value)?.toDomain()
+
     override fun existsByUsername(username: Username): Boolean =
         jpa.existsByUsername(username.value)
 

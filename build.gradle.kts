@@ -29,6 +29,8 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
 
+    implementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")
+
     implementation("com.linecorp.kotlin-jdsl:jpql-dsl:3.9.0")
     implementation("com.linecorp.kotlin-jdsl:jpql-render:3.9.0")
     implementation("com.linecorp.kotlin-jdsl:spring-data-jpa-boot4-support:3.9.0")
@@ -39,12 +41,14 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
     testImplementation("org.springframework.boot:spring-boot-starter-data-redis-test")
     testImplementation("org.springframework.boot:spring-boot-starter-security-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-starter-websocket-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
+    testImplementation("com.redis:testcontainers-redis:2.2.4")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

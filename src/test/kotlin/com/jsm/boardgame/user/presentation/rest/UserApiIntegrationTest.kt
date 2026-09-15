@@ -65,20 +65,45 @@ class UserApiIntegrationTest {
     private fun idFromLocation(location: String): Long =
         location.substringAfterLast("/").toLong()
 
+    private fun login(username: String, password: String): String {
+        val body = """{"username":"$username","password":"$password"}"""
+        val result = mockMvc.perform(
+            post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body),
+        ).andExpect(status().isOk).andReturn()
+        return JsonPath.read(result.response.contentAsString, "$.accessToken")
+    }
+
+    private fun signUpAndLogin(
+        username: String = uniqueUsername(),
+        password: String = "password123",
+        nickname: String = uniqueNickname(),
+    ): String {
+        signUp(signUpBody(username = username, password = password, nickname = nickname))
+            .andExpect(status().isCreated)
+        return login(username, password)
+    }
+
     @Test
     fun `유효한 정보로 회원가입하면 201과 Location 헤더를 응답하고, 그 위치를 조회하면 가입한 정보와 기본 프로필 이미지를 응답한다`() {
         val username = uniqueUsername()
+        val password = "password123"
         val nickname = uniqueNickname()
 
-        val signUpResult = signUp(signUpBody(username = username, nickname = nickname))
+        val signUpResult = signUp(signUpBody(username = username, password = password, nickname = nickname))
             .andExpect(status().isCreated)
 
         val location = locationOf(signUpResult)
         assertThat(location).matches("/api/users/\\d+")
 
         val id = idFromLocation(location)
+        val accessToken = login(username, password)
 
-        mockMvc.perform(get("/api/users/$id"))
+        mockMvc.perform(
+            get("/api/users/$id")
+                .header("Authorization", "Bearer $accessToken"),
+        )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.username").value(username))
             .andExpect(jsonPath("$.nickname").value(nickname))
@@ -152,7 +177,12 @@ class UserApiIntegrationTest {
 
     @Test
     fun `존재하지 않는 사용자를 조회하면 404와 USER_NOT_FOUND 를 응답한다`() {
-        mockMvc.perform(get("/api/users/999999"))
+        val accessToken = signUpAndLogin()
+
+        mockMvc.perform(
+            get("/api/users/999999")
+                .header("Authorization", "Bearer $accessToken"),
+        )
             .andExpect(status().isNotFound)
             .andExpect(jsonPath("$.errorCode").value("USER_NOT_FOUND"))
     }
@@ -174,7 +204,12 @@ class UserApiIntegrationTest {
 
     @Test
     fun `지원하지 않는 HTTP 메서드로 요청하면 405와 REQUEST_INVALID 를 응답하고 detail 을 노출하지 않는다`() {
-        mockMvc.perform(delete("/api/users"))
+        val accessToken = signUpAndLogin()
+
+        mockMvc.perform(
+            delete("/api/users")
+                .header("Authorization", "Bearer $accessToken"),
+        )
             .andExpect(status().isMethodNotAllowed)
             .andExpect(jsonPath("$.errorCode").value("REQUEST_INVALID"))
             .andExpect(jsonPath("$.traceId").isNotEmpty())
@@ -183,7 +218,12 @@ class UserApiIntegrationTest {
 
     @Test
     fun `존재하지 않는 경로로 요청하면 404와 REQUEST_INVALID 를 응답하고 detail 을 노출하지 않는다`() {
-        mockMvc.perform(get("/api/nonexistent"))
+        val accessToken = signUpAndLogin()
+
+        mockMvc.perform(
+            get("/api/nonexistent")
+                .header("Authorization", "Bearer $accessToken"),
+        )
             .andExpect(status().isNotFound)
             .andExpect(jsonPath("$.errorCode").value("REQUEST_INVALID"))
             .andExpect(jsonPath("$.traceId").isNotEmpty())
@@ -192,7 +232,12 @@ class UserApiIntegrationTest {
 
     @Test
     fun `경로 변수 타입이 일치하지 않으면 400과 REQUEST_INVALID 를 응답하고 detail 을 노출하지 않는다`() {
-        mockMvc.perform(get("/api/users/abc"))
+        val accessToken = signUpAndLogin()
+
+        mockMvc.perform(
+            get("/api/users/abc")
+                .header("Authorization", "Bearer $accessToken"),
+        )
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.errorCode").value("REQUEST_INVALID"))
             .andExpect(jsonPath("$.traceId").isNotEmpty())
