@@ -33,7 +33,7 @@ import java.time.Instant
  *
  * 리프레시 토큰은 원문이 아니라 SHA-256 해시로 저장한다 — Redis 덤프가 유출돼도
  * 그 값을 그대로 리프레시 토큰으로 재사용할 수 없어야 한다. 대조는 해시를 같은 방식으로
- * 계산해 [MessageDigest.isEqual] 로 비교한다 — 이 메서드는 상수 시간 비교를 보장한다.
+ * 계산해 회전 스크립트 안에서 한다.
  *
  * TTL 은 만료 시각과 현재 시각의 차이로 계산한다. 이미 지난 시각이면 저장하지 않는다
  * (Redis 의 EXPIRE 는 음수 TTL 을 즉시 삭제로 처리하지만, 애초에 쓰지 않는 편이 의도가 분명하다).
@@ -46,7 +46,7 @@ import java.time.Instant
  *
  * 유예는 오직 "바로 직전" 세대에만 적용된다 — 세션에는 직전 토큰 해시가 하나만 저장되고
  * 회전할 때마다 덮어써지므로, 두 세대 이상 전 토큰은 애초에 저장소에 남아 있지 않다.
- * 그런 토큰이 오면 유예 시각과 무관하게 `matchesRefreshToken` 이 false 를 돌려주고,
+ * 그런 토큰이 오면 유예 시각과 무관하게 [rotate] 가 [RotationResult.Mismatch] 를 돌려주고,
  * 호출자([RefreshTokenService])가 재사용 탐지로 세션 전체를 폐기한다.
  *
  * **직전 칸에 무엇이 들어가는가는 이 저장소가 정한다 — 호출자가 정하지 않는다.** [rotate] 가
@@ -61,7 +61,7 @@ import java.time.Instant
  *
  * ### 동시 갱신 경합과 원자적 회전
  *
- * [matchesRefreshToken] 으로 확인한 뒤 별도로 [start] 를 호출하는 "확인 후 실행"은 원자적이지
+ * 리프레시 토큰이 일치하는지 확인한 뒤 별도로 [start] 를 호출하는 "확인 후 실행"은 원자적이지
  * 않다. 같은 리프레시 토큰으로 두 요청이 동시에 오면 둘 다 확인을 통과하고, 각자 새 토큰을
  * 발급한 뒤 나중에 SET 하는 쪽이 이겨 먼저 응답받은 클라이언트는 저장소에 없는 토큰을 들고
  * 남는다. [rotate] 는 확인과 교체를 Lua 스크립트로 묶어 Redis 서버에서 한 번에 원자적으로
@@ -112,18 +112,6 @@ class RedisAuthSessionStore(
         if (ttl.isNegative || ttl.isZero) return
 
         redisTemplate.opsForValue().set(sessionKey(userId), serialize(session), ttl)
-    }
-
-    override fun matchesRefreshToken(userId: Long, refreshToken: String): Boolean {
-        val parsed = parseSession(userId) ?: return false
-        val candidateHash = hash(refreshToken)
-
-        if (constantTimeEquals(parsed.refreshTokenHash, candidateHash)) return true
-
-        val previousRefreshTokenHash = parsed.previousRefreshTokenHash ?: return false
-        if (!constantTimeEquals(previousRefreshTokenHash, candidateHash)) return false
-
-        return Instant.now(clock).isBefore(parsed.graceExpiresAt)
     }
 
     override fun currentAccessTokenId(userId: Long): String? =
@@ -216,9 +204,6 @@ class RedisAuthSessionStore(
         val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
         return digest.joinToString(separator = "") { "%02x".format(it) }
     }
-
-    private fun constantTimeEquals(a: String, b: String): Boolean =
-        MessageDigest.isEqual(a.toByteArray(Charsets.UTF_8), b.toByteArray(Charsets.UTF_8))
 
     companion object {
         private const val SESSION_KEY_PREFIX = "auth:session:"

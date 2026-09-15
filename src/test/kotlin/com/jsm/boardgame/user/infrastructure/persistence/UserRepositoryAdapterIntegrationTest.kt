@@ -7,7 +7,6 @@ import com.jsm.boardgame.user.domain.exception.UserErrorCode
 import com.jsm.boardgame.user.domain.model.Nickname
 import com.jsm.boardgame.user.domain.model.PasswordHash
 import com.jsm.boardgame.user.domain.model.User
-import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Autowired
@@ -76,21 +75,22 @@ class UserRepositoryAdapterIntegrationTest {
     }
 
     @Test
-    fun `현재 닉네임 규칙을 위반하는 값도 findById 로 예외 없이 복원된다`() {
+    fun `현재 닉네임 규칙을 위반하는 값도 findByUsername 으로 예외 없이 복원된다`() {
         // Nickname.of() 는 2~12자만 허용하지만, 상한이 더 넓던 과거에 가입해 저장된 닉네임은
         // 이 규칙을 위반할 수 있다. UserJpaRepository 를 직접 써서 도메인 검증(Nickname.of)을
         // 우회하고 그런 상황을 흉내낸다.
         val invalidNickname = "가".repeat(13)
-        val entity = jpaUsers.save(
+        val username = uniqueUsername()
+        jpaUsers.save(
             UserJpaEntity(
-                username = uniqueUsername(),
+                username = username,
                 passwordHash = "hashed-password-value",
                 nickname = invalidNickname,
                 profileImageKey = null,
             ),
         )
 
-        val found = users.findById(UserId(entity.id))
+        val found = users.findByUsername(Username.of(username))
 
         assertEquals(invalidNickname, found?.nickname?.value)
     }

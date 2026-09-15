@@ -76,7 +76,8 @@ private class RefreshInMemoryAuthSessionStore(
         sessions[userId] = StoredSession(session, previousRefreshToken = null, graceExpiresAt = Instant.EPOCH)
     }
 
-    override fun matchesRefreshToken(userId: Long, refreshToken: String): Boolean {
+    // AuthSessionStore 포트 계약이 아니다 — 유예 규칙까지 반영해 세션 상태를 들여다보는 페이크 전용 검사용 헬퍼다.
+    fun matchesRefreshToken(userId: Long, refreshToken: String): Boolean {
         val stored = sessions[userId] ?: return false
         if (stored.session.refreshToken == refreshToken) return true
 
@@ -203,22 +204,6 @@ class RefreshTokenServiceTest {
         // 같은 first 를 다시 제시한다 — 직전 칸에 "제시된 토큰"을 그대로 기록하는 버그가 있었다면
         // 직전 칸이 계속 first 로 재기록되어 여기서도 통과했을 것이다(재사용의 무한 갱신).
         // 고친 뒤에는 first 가 어느 칸에도 없으므로 거부되고 세션이 폐기된다.
-        val e = assertFailsWith<InvalidRefreshTokenException> {
-            service.refresh(RefreshTokenCommand(first.refreshToken))
-        }
-        assertEquals(UserErrorCode.REFRESH_TOKEN_INVALID, e.errorCode)
-        assertNull(sessions.currentAccessTokenId(userId))
-    }
-
-    @Test
-    fun `두 세대 전 리프레시 토큰을 쓰면 유예와 무관하게 세션이 폐기된다`() {
-        val userId = 7L
-        val first = loginSession(userId)
-        val rotated = service.refresh(RefreshTokenCommand(first.refreshToken))
-        service.refresh(RefreshTokenCommand(rotated.refreshToken))
-
-        // first 는 이제 두 세대 전 토큰이다 — 유예는 바로 직전 한 세대에만 적용되므로
-        // 유예 여부와 무관하게 재사용 탐지가 그대로 동작해야 한다.
         val e = assertFailsWith<InvalidRefreshTokenException> {
             service.refresh(RefreshTokenCommand(first.refreshToken))
         }
