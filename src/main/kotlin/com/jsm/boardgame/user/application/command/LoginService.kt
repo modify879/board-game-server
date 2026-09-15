@@ -43,20 +43,7 @@ class LoginService(
         }
 
         val user = users.findByUsername(username)
-        if (user == null) {
-            // 사용자가 없어도 더미 해시와 비교를 실제로 수행해 "비밀번호 틀림" 케이스와 응답
-            // 시간을 맞춘다(PasswordHasher.matches KDoc 참고). 호출 결과는 버려도 되지만 호출
-            // 자체는 반드시 일어나야 하므로, 컴파일러/JIT 가 "안 쓰는 호출"로 보고 제거하지
-            // 못하도록 결과를 실제 조건문에 써서 로그 메시지를 분기한다.
-            val dummyMatched = passwordHasher.matches(rawPassword, null)
-            throw LoginFailedException(
-                if (dummyMatched) {
-                    "존재하지 않는 사용자명입니다: username=${command.username} (더미 해시 우연 일치 — 발생할 수 없음)"
-                } else {
-                    "존재하지 않는 사용자명입니다: username=${command.username}"
-                },
-            )
-        }
+            ?: throw LoginFailedException("존재하지 않는 사용자명입니다: username=${command.username}")
 
         if (!passwordHasher.matches(rawPassword, user.passwordHash)) {
             throw LoginFailedException("비밀번호가 일치하지 않습니다: username=${command.username}")

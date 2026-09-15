@@ -57,21 +57,12 @@ private class LoginFakeUserRepository : UserRepository {
 
 /**
  * hash = "hashed:" + raw 규약으로 실제 문자열 비교를 한다.
- * hash 가 null 로 호출되면(= 계정 열거 방지용 더미 비교) [calledWithNullHash] 에 기록하고 false 를 돌려준다.
  */
 private class LoginFakePasswordHasher : PasswordHasher {
-    var calledWithNullHash = false
-        private set
-
     override fun hash(raw: RawPassword): PasswordHash = PasswordHash("hashed:${raw.value}")
 
-    override fun matches(raw: RawPassword, hash: PasswordHash?): Boolean {
-        if (hash == null) {
-            calledWithNullHash = true
-            return false
-        }
-        return hash.value == "hashed:${raw.value}"
-    }
+    override fun matches(raw: RawPassword, hash: PasswordHash): Boolean =
+        hash.value == "hashed:${raw.value}"
 }
 
 /**
@@ -149,17 +140,6 @@ class LoginServiceTest {
             service.login(LoginCommand(username = "user_01", password = "password1"))
         }
         assertEquals(UserErrorCode.LOGIN_FAILED, e.errorCode)
-    }
-
-    @Test
-    fun `존재하지 않는 사용자명이어도 비밀번호 비교가 수행된다`() {
-        // 계정 열거 방지의 핵심: 아이디가 없을 때도 PasswordHasher.matches 를 호출해
-        // "비밀번호 틀림" 케이스와 같은 시간이 걸리게 해야 한다. 시간 자체는 재지 않고
-        // (환경마다 흔들려 신뢰할 수 없다), 호출이 실제로 일어났는지만 확인한다.
-        assertFailsWith<LoginFailedException> {
-            service.login(LoginCommand(username = "user_01", password = "password1"))
-        }
-        assertTrue(passwordHasher.calledWithNullHash)
     }
 
     @Test

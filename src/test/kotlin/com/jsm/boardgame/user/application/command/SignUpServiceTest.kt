@@ -49,7 +49,7 @@ private class FakeUserRepository : UserRepository {
 
 private class FixedPasswordHasher : PasswordHasher {
     override fun hash(raw: RawPassword): PasswordHash = PasswordHash("hashed:${raw.value}")
-    override fun matches(raw: RawPassword, hash: PasswordHash?): Boolean = hash?.value == "hashed:${raw.value}"
+    override fun matches(raw: RawPassword, hash: PasswordHash): Boolean = hash.value == "hashed:${raw.value}"
 }
 
 class SignUpServiceTest {
