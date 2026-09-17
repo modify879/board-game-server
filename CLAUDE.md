@@ -86,7 +86,7 @@ com.jsm.boardgame
 
 계층 이름은 `domain` / `application` / `infrastructure` / `presentation` 으로 통일한다.
 `interfaces` 는 쓰지 않는다 — Kotlin 의 `interface` 키워드와 시각적으로 충돌하는데,
-이 프로젝트는 포트 인터페이스를 `domain/repository` 와 `application` 에 두므로 혼동이 크다.
+이 프로젝트는 포트 인터페이스를 `domain` 과 `application` 에 두므로 혼동이 크다.
 
 헥사고날 대응: `presentation` = driving adapter, `infrastructure` = driven adapter,
 `domain` 과 `application` 의 포트 = output port, `application/command` 의 UseCase = input port.
