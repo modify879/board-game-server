@@ -25,17 +25,13 @@ class LoginService(
     private val passwordHasher: PasswordHasher,
     private val tokenIssuer: AuthTokenIssuer,
     private val sessions: AuthSessionStore,
-    // JwtProperties(infrastructure/security)는 인프라 계층 타입이라 application 이 참조할 수 없다
-    // (규칙: 의존성 방향에 예외 없음). 값만 필요하므로 @Value 로 직접 받는다.
+    // JwtProperties 는 infrastructure 타입이라 application 이 참조할 수 없다. 값만 @Value 로 받는다.
     @Value("\${app.jwt.access-token-ttl}") private val accessTokenTtl: Duration,
-    // Instant.now() 를 직접 부르지 않고 주입받는다 — 테스트가 시간을 제어할 수 있어야 하기 때문이다.
     private val clock: Clock,
 ) : LoginUseCase {
 
     override fun login(command: LoginCommand): IssuedTokens {
-        // username/password 의 형식 오류(InvalidUsernameException/InvalidPasswordException)를
-        // 그대로 새어나가게 두면 400(INVALID)으로 응답돼 "이 아이디는 형식이 맞다/틀리다"가
-        // 노출된다 — 계정 열거로 이어진다. 형식 오류도 로그인 실패와 동일하게 401 로 감춘다.
+        // 형식 오류도 401 로 감춘다 — 400 으로 새면 아이디 형식 적합 여부가 노출된다.
         val (username, rawPassword) = try {
             Username.of(command.username) to RawPassword.of(command.password)
         } catch (e: BusinessException) {

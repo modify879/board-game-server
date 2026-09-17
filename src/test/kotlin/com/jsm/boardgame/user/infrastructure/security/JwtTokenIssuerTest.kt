@@ -16,10 +16,6 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 
-/**
- * 스프링 컨텍스트 없이 `JwtProperties` 를 직접 생성해 검증하는 순수 단위 테스트다.
- * 컨테이너가 필요 없으므로 `IntegrationTest` 접미사를 붙이지 않는다.
- */
 class JwtTokenIssuerTest {
 
     private fun properties(

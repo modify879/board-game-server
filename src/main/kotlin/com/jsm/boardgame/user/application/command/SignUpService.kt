@@ -23,8 +23,7 @@ class SignUpService(
         val nickname = Nickname.of(command.nickname)
         val rawPassword = RawPassword.of(command.password)
 
-        // 여기서의 사전 체크는 친절한 오류 응답을 위한 것일 뿐이다.
-        // 동시 요청에 대한 실제 유일성 보장은 DB unique 제약이 한다 (인프라 계층 책임).
+        // 사전 체크는 친절한 오류 응답용이다. 동시 요청의 유일성은 DB unique 제약이 보장한다.
         if (users.existsByUsername(username)) {
             throw DuplicateUsernameException("이미 사용 중인 사용자명입니다: username=${command.username}")
         }

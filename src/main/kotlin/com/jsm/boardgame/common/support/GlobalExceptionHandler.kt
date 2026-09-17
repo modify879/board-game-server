@@ -14,13 +14,7 @@ import org.springframework.web.context.request.WebRequest
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
 import java.net.URI
 
-/**
- * 모든 오류 응답은 RFC 9457 ProblemDetail 이며 `errorCode` 와 `traceId` 를 반드시 갖는다.
- *
- * - `detail` 은 채우지 않는다. 서버는 사용자 문구를 내려보내지 않는다.
- * - `type`/`title` 은 스프링 기본값(about:blank / 상태 문구)을 그대로 쓴다.
- * - 4xx 는 WARN 에 스택 없이, 5xx 는 ERROR 에 스택 포함.
- */
+/** 모든 오류 응답은 RFC 9457 ProblemDetail 이며 `errorCode` 와 `traceId` 를 갖는다. 계약은 규칙 8. */
 @RestControllerAdvice
 class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
 
@@ -74,9 +68,7 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
         val errorCode = if (statusCode.is5xxServerError) INTERNAL_ERROR else REQUEST_INVALID
 
         (response?.body as? ProblemDetail)?.let {
-            // 스프링은 여기 도달하기 전에 "Failed to read request" 같은 영문 detail 을 채워 넣는다.
-            // 서버가 문구를 내려보내지 않는다는 계약이 이 경로에서만 깨지므로 지운다.
-            // 내용은 아래 로그에 traceId 와 함께 남는다.
+            // 스프링이 채운 영문 detail 을 지운다. 내용은 아래 로그에 traceId 와 함께 남는다.
             it.detail = null
             it.setProperty("errorCode", errorCode)
             it.setProperty("traceId", MDC.get(RequestIdFilter.TRACE_ID))
@@ -98,7 +90,6 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
         if (status.is5xxServerError) {
             log.error("error: code={}, status={}, message={}", errorCode, status.value(), message, e)
         } else {
-            // 사용자 잘못이다. 스택을 찍으면 로그가 쓸모없어진다.
             log.warn("error: code={}, status={}, message={}", errorCode, status.value(), message)
         }
     }

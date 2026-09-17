@@ -2,8 +2,7 @@ spring:
   application:
     name: board-game
 
-  # 로컬에서는 compose.yaml 의 postgres, redis 가 자동 기동되고
-  # 데이터소스와 Redis 접속이 자동으로 연결된다. host/url/username/password 를 적지 않는다.
+  # 접속 정보를 적지 않는다 — Docker Compose 지원이 자동으로 연결한다.
   docker:
     compose:
       lifecycle-management: start_and_stop
@@ -30,9 +29,7 @@ app:
     default-url: "http://localhost:8080/images/profiles/default.png"
   jwt:
     # 개발 전용 키다. 운영에서는 반드시 APP_JWT_SECRET 환경변수로 덮어쓸 것.
-    # 이 값은 저장소에 커밋되므로 코드를 볼 수 있는 사람은 누구나 토큰을 위조할 수 있다.
     secret: "${APP_JWT_SECRET:local-development-only-not-for-production-use-1234}"
     access-token-ttl: 30m
     refresh-token-ttl: 14d
-    # 응답 유실로 인한 재시도를 탈취와 구분하기 위한 유예. 직전 토큰 한 세대에만 적용된다.
     refresh-reuse-grace: 5s

@@ -25,16 +25,10 @@ import org.springframework.security.web.access.AccessDeniedHandler
  *
  * 액세스 토큰 검증은 [JwtDecoder] 빈(`user.infrastructure.security.JwtDecoderConfig`)에
  * 위임한다. 그 디코더가 로그아웃/세션 교체로 무효화된 토큰을 블랙리스트 검증기로 걸러낸다.
- * 401/403 은 스프링 시큐리티가 필터 단계에서 직접 응답을 끝내 `GlobalExceptionHandler`
- * 를 거치지 않으므로, 같은 오류 계약을 내도록 커스텀 `AuthenticationEntryPoint`/
- * `AccessDeniedHandler`(`common.support`)로 교체한다.
- *
- * 이 교체는 `oauth2ResourceServer { }` DSL 안에서도 명시해야 한다 — `exceptionHandling` 에만
- * 등록하면, Authorization: Bearer 헤더가 실려 온(있지만 검증에 실패한) 요청은 스프링 시큐리티가
- * `defaultAuthenticationEntryPointFor` 로 등록한 기본 `BearerTokenAuthenticationEntryPoint` 를
- * 우선 매칭시켜 커스텀 엔트리포인트를 건너뛴다(본문 없는 401 + WWW-Authenticate 헤더만 응답).
- * 헤더 자체가 없는 요청만 `exceptionHandling` 쪽 기본값을 타므로 둘 다 등록해야 모든 401 이
- * 같은 오류 계약을 낸다.
+ * 401/403 은 필터 단계에서 응답이 끝나 `GlobalExceptionHandler` 를 거치지 않으므로 커스텀
+ * `AuthenticationEntryPoint`/`AccessDeniedHandler`(`common.support`)로 교체한다 (규칙 8).
+ * `oauth2ResourceServer { }` 안에도 등록해야 한다 — `exceptionHandling` 에만 두면 Bearer 헤더가
+ * 실려 온 요청이 기본 `BearerTokenAuthenticationEntryPoint` 에 먼저 매칭돼 건너뛴다.
  */
 @Configuration
 @EnableWebSecurity
@@ -71,10 +65,6 @@ class SecurityConfig {
             }
             .build()
 
-    /**
-     * 도메인의 `PasswordHasher` 포트 구현체가 주입받는다.
-     * 스프링 시큐리티 타입이 `infrastructure` 밖으로 나가지 않게 하는 경계다.
-     */
     @Bean
     fun passwordEncoder(): PasswordEncoder = BCryptPasswordEncoder()
 }

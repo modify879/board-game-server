@@ -28,9 +28,7 @@ class UserRepositoryAdapter(
         jpa.existsByNickname(nickname.value)
 
     /**
-     * 스프링/Hibernate 의 unique 제약 위반 예외가 application 계층까지 올라가면
-     * 의존성 방향이 깨진다(application·domain 은 infrastructure 를 참조하지 않는다).
-     * 그래서 여기서 바로 도메인 예외로 변환한다. 어떤 제약이 깨졌는지 모르면
+     * unique 제약 위반을 도메인 예외로 변환한다. 어떤 제약이 깨졌는지 모르면
      * (알 수 없는 제약, 혹은 다른 종류의 무결성 위반) 원래 예외를 그대로 던져 숨기지 않는다.
      */
     override fun save(user: User): User =

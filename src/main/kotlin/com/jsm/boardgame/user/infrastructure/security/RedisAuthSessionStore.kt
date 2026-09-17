@@ -101,7 +101,6 @@ import java.time.Instant
 class RedisAuthSessionStore(
     private val redisTemplate: StringRedisTemplate,
     properties: JwtProperties,
-    // Instant.now() 를 직접 부르지 않고 주입받는다 — 테스트가 시간을 제어할 수 있어야 하기 때문이다.
     private val clock: Clock,
 ) : AuthSessionStore {
 

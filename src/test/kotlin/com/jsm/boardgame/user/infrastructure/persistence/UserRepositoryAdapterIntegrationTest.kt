@@ -21,9 +21,8 @@ import kotlin.test.assertFailsWith
  * `UserRepositoryAdapter.save()` 가 DB unique 제약 위반(DataIntegrityViolationException)을
  * 도메인 예외로 변환하는 경로를 검증한다.
  *
- * `SignUpService` 를 거치지 않고 `UserRepository`(도메인 포트) 를 직접 호출해 애플리케이션
- * 계층의 `existsBy...` 사전 체크를 우회한다 — 그래야 실제 DB 제약 위반이 발생해 변환 코드가
- * 실행된다. 사전 체크만 거치는 경로는 이 변환 코드를 절대 실행하지 않는다.
+ * `SignUpService` 를 거치지 않고 `UserRepository` 를 직접 호출해 사전 체크를 우회한다 —
+ * 그래야 실제 DB 제약 위반이 발생해 변환 코드가 실행된다.
  *
  * `@Transactional` 을 일부러 두지 않는다: 트랜잭션 안에 있으면 제약 위반이 flush/커밋
  * 시점까지 미뤄질 수 있어 "save 호출 시점에 예외가 던져진다"는 가정이 깨질 수 있다.

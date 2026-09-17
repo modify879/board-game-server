@@ -16,8 +16,7 @@ enum class UserErrorCode(override val kind: ErrorKind) : ErrorCode {
     DUPLICATE_NICKNAME(ErrorKind.CONFLICT),
     USER_NOT_FOUND(ErrorKind.NOT_FOUND),
 
-    // 인증. 아이디가 없는 것과 비밀번호가 틀린 것을 구분하지 않는다 —
-    // 구분하면 어떤 아이디가 존재하는지 알아낼 수 있다(계정 열거).
+    // 인증. 아이디 없음과 비밀번호 틀림을 구분하지 않는다 (계정 열거 방지).
     LOGIN_FAILED(ErrorKind.UNAUTHORIZED),
     REFRESH_TOKEN_INVALID(ErrorKind.UNAUTHORIZED),
     ;

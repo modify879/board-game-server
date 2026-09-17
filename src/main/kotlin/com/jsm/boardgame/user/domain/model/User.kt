@@ -19,7 +19,7 @@ class User private constructor(
         fun register(username: Username, passwordHash: PasswordHash, nickname: Nickname): User =
             User(id = null, username = username, passwordHash = passwordHash, nickname = nickname, profileImageKey = null)
 
-        /** 영속 계층에서 복원할 때만 쓴다. DDD 문헌의 reconstitution 에 해당한다. */
+        /** 영속 복원 전용 — 검증하지 않는다. */
         fun reconstitute(
             id: UserId,
             username: Username,

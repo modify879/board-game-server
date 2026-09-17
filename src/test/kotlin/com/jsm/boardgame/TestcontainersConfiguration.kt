@@ -7,8 +7,7 @@ import org.springframework.context.annotation.Bean
 import org.testcontainers.postgresql.PostgreSQLContainer
 
 /**
- * 테스트에서는 `spring-boot-docker-compose` 가 동작하지 않는다 (developmentOnly).
- * Testcontainers 로 compose.yaml 과 같은 버전의 PostgreSQL·Redis 를 직접 띄워 연결한다.
+ * `spring-boot-docker-compose` 는 developmentOnly 라 테스트에서는 동작하지 않는다.
  *
  * 컨테이너를 테스트 클래스마다 새로 띄우지 않기 위해 별도의 리스너/싱글턴 트릭을 쓰지 않는다.
  * `@ServiceConnection` 을 쓰는 테스트 클래스들이 동일한 설정 조합(annotations, @Import 등)을

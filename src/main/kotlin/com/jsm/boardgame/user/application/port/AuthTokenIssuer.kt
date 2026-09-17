@@ -2,10 +2,6 @@ package com.jsm.boardgame.user.application.port
 
 import java.time.Instant
 
-/**
- * 애플리케이션 계층의 출력 포트. 토큰은 도메인 개념이 아니라 전달 방식이므로
- * `domain/service` 가 아니라 여기에 둔다 — 도메인은 토큰의 존재를 모른다.
- */
 interface AuthTokenIssuer {
     fun issue(userId: Long): IssuedTokens
 

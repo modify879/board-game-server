@@ -8,10 +8,7 @@ import org.springframework.http.MediaType
 import tools.jackson.databind.ObjectMapper
 
 /**
- * 스프링 시큐리티의 `AuthenticationEntryPoint`/`AccessDeniedHandler` 는 필터 단계에서
- * 응답을 직접 끝내므로 `@RestControllerAdvice`(`GlobalExceptionHandler`)를 거치지 않는다.
- * 그대로 두면 `errorCode`/`traceId` 없는 응답이 나가 규칙 8 의 오류 계약이 깨진다.
- * 이 두 곳이 같은 모양의 응답을 내도록 응답 작성을 여기 하나로 모은다.
+ * 필터 단계의 401/403 응답 작성을 한곳에 모은다 (규칙 8).
  *
  * `ProblemDetail` 을 재사용하지 않고 필드를 직접 맵으로 만들어 직렬화한다. `ProblemDetail`
  * 의 `errorCode`/`traceId` 같은 확장 프로퍼티는 `ProblemDetailJacksonMixin` 이 등록된

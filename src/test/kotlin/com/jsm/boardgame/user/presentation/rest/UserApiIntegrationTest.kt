@@ -197,8 +197,7 @@ class UserApiIntegrationTest {
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.errorCode").value("REQUEST_INVALID"))
             .andExpect(jsonPath("$.traceId").isNotEmpty)
-            // 스프링은 "Failed to read request" 같은 영문 detail 을 채워 넣는다.
-            // 핸들러가 그걸 지우지 않으면 "서버는 문구를 내려보내지 않는다"는 계약이 이 경로에서만 깨진다.
+            // 스프링이 채운 영문 detail 을 핸들러가 지웠는지 확인한다 (규칙 8).
             .andExpect(jsonPath("$.detail").doesNotExist())
     }
 
