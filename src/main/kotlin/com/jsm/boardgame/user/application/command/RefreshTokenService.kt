@@ -22,8 +22,8 @@ class RefreshTokenService(
 ) : RefreshTokenUseCase {
 
     override fun refresh(command: RefreshTokenCommand): IssuedTokens {
-        val userId = tokenIssuer.userIdFromRefreshToken(command.refreshToken)
-            ?: throw InvalidRefreshTokenException("리프레시 토큰 서명 검증 실패 또는 만료")
+        val userId = sessions.userIdForRefreshToken(command.refreshToken)
+            ?: throw InvalidRefreshTokenException("알 수 없거나 만료된 리프레시 토큰")
 
         // rotate() 로 확인과 교체를 한 번에 묶기 위해, 검사보다 먼저 새 토큰을 발급해야 한다.
         // rotate() 가 Mismatch 를 돌려주면 이 토큰은 어디에도 쓰이지 않고 그냥 버려진다 —
@@ -54,7 +54,7 @@ class RefreshTokenService(
             }
 
             RotationResult.Mismatch -> {
-                // 서명은 유효하지만(회전 이전 토큰) 현재 세션과 다르다 = 탈취된 옛 토큰의 재사용 시도.
+                // 발급된 적은 있으나 현재 세션과 다르다 = 탈취된 옛 토큰의 재사용 시도.
                 // 세션 전체를 폐기해 정상 사용자도 재로그인하게 만든다 — 공격자에게는 응답을 구분해 주지 않는다.
                 //
                 // 반드시 clear() 보다 먼저 현재 액세스 토큰을 블랙리스트에 넣어야 한다. clear() 가
@@ -63,11 +63,14 @@ class RefreshTokenService(
                 // 그러면 정상 사용자만 로그아웃되고 공격자의 액세스 토큰은 accessTokenTtl 만료까지
                 // 계속 통하게 된다. 이 순서를 뒤집으면 그 버그가 그대로 재현된다. LogoutService 와
                 // 동일한 순서다.
-                sessions.currentAccessTokenId(userId)?.let { currentAccessTokenId ->
+                val currentAccessTokenId = sessions.currentAccessTokenId(userId)
+                if (currentAccessTokenId != null) {
                     sessions.blacklistAccessToken(currentAccessTokenId, Instant.now(clock).plus(accessTokenTtl))
+                    sessions.clear(userId)
+                    throw InvalidRefreshTokenException("리프레시 토큰 재사용 탐지: userId=$userId — 세션 전체 폐기")
+                } else {
+                    throw InvalidRefreshTokenException("리프레시 토큰에 해당하는 세션 없음: userId=$userId")
                 }
-                sessions.clear(userId)
-                throw InvalidRefreshTokenException("리프레시 토큰 재사용 탐지: userId=$userId — 세션 전체 폐기")
             }
         }
     }

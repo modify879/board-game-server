@@ -41,6 +41,9 @@ interface AuthSessionStore {
      * 어디에도 남지 않아 그 토큰을 들고 있던 정상 클라이언트가 재사용 탐지로 쫓겨난다).
      */
     fun rotate(userId: Long, presentedRefreshToken: String, next: AuthSession): RotationResult
+
+    /** 적중해도 유효하다는 뜻이 아니다 — 재사용 판정은 [rotate] 가 한다. */
+    fun userIdForRefreshToken(refreshToken: String): Long?
 }
 
 data class AuthSession(

@@ -265,6 +265,28 @@ class AuthApiIntegrationTest {
     }
 
     @Test
+    fun `남의 리프레시 토큰을 추측한 요청은 그 사용자의 세션을 끊지 못한다`() {
+        val username = uniqueUsername()
+        val password = "password123"
+        val signUpResult = signUp(signUpBody(username = username, password = password))
+            .andExpect(status().isCreated)
+        val id = idFromLocation(locationOf(signUpResult))
+
+        val loginResult = login(username, password).andExpect(status().isOk)
+        val accessToken = accessTokenOf(loginResult)
+        val refreshToken = refreshTokenOf(loginResult)
+
+        listOf("not-a-real-token", "1.abc").forEach { guessedToken ->
+            refresh(guessedToken)
+                .andExpect(status().isUnauthorized)
+                .andExpect(jsonPath("$.errorCode").value("REFRESH_TOKEN_INVALID"))
+        }
+
+        getProfile(id, accessToken).andExpect(status().isOk)
+        refresh(refreshToken).andExpect(status().isOk)
+    }
+
+    @Test
     fun `재로그인하면 이전 로그인에서 발급된 액세스 토큰은 더 이상 통하지 않는다`() {
         val username = uniqueUsername()
         val password = "password123"

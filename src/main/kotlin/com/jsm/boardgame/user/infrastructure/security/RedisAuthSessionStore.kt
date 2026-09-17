@@ -111,6 +111,7 @@ class RedisAuthSessionStore(
         if (ttl.isNegative || ttl.isZero) return
 
         redisTemplate.opsForValue().set(sessionKey(userId), serialize(session), ttl)
+        redisTemplate.opsForValue().set(refreshIndexKey(hash(session.refreshToken)), userId.toString(), ttl)
     }
 
     override fun currentAccessTokenId(userId: Long): String? =
@@ -137,6 +138,7 @@ class RedisAuthSessionStore(
         // 0 이하를 넘기면 Redis 가 에러를 내므로 방어적으로 최소 1초를 보장한다.
         val ttlSeconds = ttl.seconds.coerceAtLeast(1)
         val graceExpiresAtEpochMilli = now.plus(refreshReuseGrace).toEpochMilli()
+        val nextRefreshTokenHash = hash(next.refreshToken)
 
         val previousAccessTokenId = redisTemplate.execute(
             ROTATE_SCRIPT,
@@ -144,18 +146,26 @@ class RedisAuthSessionStore(
             hash(presentedRefreshToken),
             now.toEpochMilli().toString(),
             next.accessTokenId,
-            hash(next.refreshToken),
+            nextRefreshTokenHash,
             ttlSeconds.toString(),
             refreshReuseGrace.toMillis().toString(),
             graceExpiresAtEpochMilli.toString(),
         )
 
         return if (previousAccessTokenId != null) {
+            redisTemplate.opsForValue().set(
+                refreshIndexKey(nextRefreshTokenHash),
+                userId.toString(),
+                Duration.ofSeconds(ttlSeconds),
+            )
             RotationResult.Rotated(previousAccessTokenId)
         } else {
             RotationResult.Mismatch
         }
     }
+
+    override fun userIdForRefreshToken(refreshToken: String): Long? =
+        redisTemplate.opsForValue().get(refreshIndexKey(hash(refreshToken)))?.toLongOrNull()
 
     /**
      * 세션을 저장 문자열 포맷(`accessTokenId:hash:prevHash:graceMillis`)으로 직렬화한다.
@@ -199,6 +209,8 @@ class RedisAuthSessionStore(
 
     private fun blacklistKey(accessTokenId: String): String = "$BLACKLIST_KEY_PREFIX$accessTokenId"
 
+    private fun refreshIndexKey(tokenHash: String): String = "$REFRESH_INDEX_KEY_PREFIX$tokenHash"
+
     private fun hash(value: String): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
         return digest.joinToString(separator = "") { "%02x".format(it) }
@@ -207,6 +219,7 @@ class RedisAuthSessionStore(
     companion object {
         private const val SESSION_KEY_PREFIX = "auth:session:"
         private const val BLACKLIST_KEY_PREFIX = "auth:blacklist:"
+        private const val REFRESH_INDEX_KEY_PREFIX = "auth:refresh:"
         private const val FIELD_DELIMITER = ":"
         private const val BLACKLISTED_MARKER = "1"
 

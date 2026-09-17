@@ -26,20 +26,19 @@ private class LogoutFakeAuthTokenIssuer : AuthTokenIssuer {
             refreshTokenExpiresAt = Instant.now().plusSeconds(2_592_000),
         )
     }
-
-    override fun userIdFromRefreshToken(refreshToken: String): Long? {
-        if (!refreshToken.startsWith("refresh:")) return null
-        return refreshToken.split(":").getOrNull(1)?.toLongOrNull()
-    }
 }
 
 private class LogoutFakeAuthSessionStore : AuthSessionStore {
     private val sessions = mutableMapOf<Long, AuthSession>()
     private val blacklisted = mutableSetOf<String>()
+    private val refreshTokenIndex = mutableMapOf<String, Long>()
 
     override fun start(userId: Long, session: AuthSession) {
         sessions[userId] = session
+        refreshTokenIndex[session.refreshToken] = userId
     }
+
+    override fun userIdForRefreshToken(refreshToken: String): Long? = refreshTokenIndex[refreshToken]
 
     override fun currentAccessTokenId(userId: Long): String? = sessions[userId]?.accessTokenId
 
