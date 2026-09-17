@@ -2,7 +2,7 @@
 
 여러 종류의 게임을 올릴 실시간 멀티플레이 서버.
 
-Kotlin 2.3 / Spring Boot 4.1 / Java 25 / PostgreSQL / 단일 Gradle 모듈.
+Kotlin 2.3 / Spring Boot 4.1 / Java 25 / PostgreSQL + Redis(세션·토큰 블랙리스트) / 단일 Gradle 모듈.
 
 이 문서는 일반적인 DDD 설명이 아니라 **이 프로젝트에서 실제로 깨지기 쉬운 규칙**만 담는다.
 
@@ -61,18 +61,20 @@ DB 제약 위반 변환이 한 번도 실행되지 않았고, 오류 계약은 �
 ```
 com.jsm.boardgame
 ├── common/                       # 기술 설정·횡단 관심사만. 도메인 개념 금지
-│   ├── config/                   # 스프링 설정 (Security, WebSocket, Jackson)
+│   ├── config/                   # 스프링 설정 (Security, Clock, Kotlin JDSL)
 │   └── support/                  # 오류 계약(ErrorCode/ErrorKind), 전역 예외 핸들러, traceId 필터
 │
 └── user/                         # ← 모든 바운디드 컨텍스트가 이 형태를 따른다
     ├── domain/
     │   ├── model/                # 애그리거트, 엔티티, VO — 순수 Kotlin
     │   ├── repository/           # 출력 포트 (애그리거트를 다룸)
-    │   ├── service/              # 도메인이 필요로 하지만 스스로 구현 못 하는 출력 포트
-    │   │                         #   (해싱, 셔플, 주사위, 시계)
+    │   ├── service/              # 도메인 규칙이 필요로 하지만 스스로 구현 못 하는 출력 포트
+    │   │                         #   (해싱, 셔플, 주사위)
     │   └── exception/            # 이 컨텍스트의 에러 코드와 도메인 예외
     ├── application/
     │   ├── command/              # UseCase 인터페이스 + 구현 + Command
+    │   ├── port/                 # 규칙이 아니라 유스케이스가 필요로 하는 출력 포트
+    │   │                         #   (세션 저장소, 토큰 발급기)
     │   └── query/                # 조회 서비스 + 조회 출력 포트 + 응답 DTO
     ├── infrastructure/
     │   ├── persistence/          # JpaEntity, Spring Data, 매퍼, 어댑터
@@ -87,7 +89,7 @@ com.jsm.boardgame
 이 프로젝트는 포트 인터페이스를 `domain/repository` 와 `application` 에 두므로 혼동이 크다.
 
 헥사고날 대응: `presentation` = driving adapter, `infrastructure` = driven adapter,
-`domain/repository` 와 `application/query` 의 포트 = output port, `application/command` 의 UseCase = input port.
+`domain` 과 `application` 의 포트 = output port, `application/command` 의 UseCase = input port.
 
 ### 의존성 방향
 
@@ -192,6 +194,9 @@ fun interface DiceRoller { fun roll(count: Int): List<Int> }
 
 테스트에서 고정된 패·눈을 주입해 규칙을 스프링 없이 검증한다.
 이것이 도메인을 분리해서 얻는 실질적 이득이다.
+
+시계도 같은 이유로 주입받지만 게임마다 뜻이 달라지지 않아 컨텍스트별 포트를 만들지 않는다 —
+`common/config` 의 `Clock` 빈 하나를 공유한다. `Instant.now()` 가 한 곳만 남아도 TTL·유예 창 테스트가 흔들린다.
 
 ### 6. 히든 정보는 뷰어별로 마스킹한다
 
@@ -323,6 +328,9 @@ CDN 도메인은 인프라 설정이라 도메인 모델이 알면 안 되고, �
   브라우저라면 탭 사이도 Web Locks 나 BroadcastChannel 로 묶어야 한다.
   서버 쪽은 이미 두 겹을 갖췄다 — 유예 창(응답 유실 재시도 허용)과 즉시 경합 가드(동시 중복은 거절).
   업계 권고가 이 둘을 함께 쓰는 것이다: 클라이언트 쪽은 정직한 중복을 막고, 서버 쪽은 탈취를 막는다
+- **로그인 응답 시간이 아이디 존재 여부를 노출한다** — 계정 열거 방지는 `errorCode` 로만 한다.
+  없는 아이디는 BCrypt 를 타지 않아 응답이 짧다(평균 77ms vs 3.6ms). 시간을 맞추던 더미 해시 방어는
+  `3e4d64e` 에서 **의도적으로** 제거했다 — 모르고 빠진 게 아니다. 되살리려면 위협 모델부터 정해라
 - 게임 선정 및 첫 게임 컨텍스트, 방/좌석 컨텍스트
 - 프로필 이미지 업로드 (스토리지 연동, presigned URL). 지금은 키를 저장할 자리만 있다
 - 닉네임·비밀번호 변경, 회원 탈퇴
