@@ -403,6 +403,53 @@ class RedisAuthSessionStoreIntegrationTest {
         assertThat(ttl).isPositive()
     }
 
+    @Test
+    fun `발급된 적 없는 토큰은 userIdForRefreshToken 이 null 이다`() {
+        assertThat(authSessionStore.userIdForRefreshToken("아무도-발급한-적-없는-토큰")).isNull()
+    }
+
+    @Test
+    fun `start 한 리프레시 토큰은 userIdForRefreshToken 으로 사용자를 찾을 수 있다`() {
+        val userId = newUserId()
+        val session = newSession()
+
+        authSessionStore.start(userId, session)
+
+        assertThat(authSessionStore.userIdForRefreshToken(session.refreshToken)).isEqualTo(userId)
+    }
+
+    @Test
+    fun `회전 뒤에도 옛 토큰의 인덱스가 남아 재사용 탐지가 동작한다`() {
+        val userId = newUserId()
+        val first = newSession()
+        authSessionStore.start(userId, first)
+
+        val rotated = newSession()
+        authSessionStore.rotate(userId, first.refreshToken, rotated)
+
+        assertThat(authSessionStore.userIdForRefreshToken(first.refreshToken)).isEqualTo(userId)
+
+        // first 는 rotated 의 유예 대상 직전 토큰이지만, 유예(5초)를 넘겨 제시하면 거부된다.
+        clock.advanceBy(Duration.ofSeconds(6))
+
+        val reused = newSession()
+        val result = authSessionStore.rotate(userId, first.refreshToken, reused)
+
+        assertThat(result).isEqualTo(RotationResult.Mismatch)
+    }
+
+    @Test
+    fun `rotate 로 발급된 새 토큰도 인덱스에서 찾을 수 있다`() {
+        val userId = newUserId()
+        val first = newSession()
+        authSessionStore.start(userId, first)
+
+        val rotated = newSession()
+        authSessionStore.rotate(userId, first.refreshToken, rotated)
+
+        assertThat(authSessionStore.userIdForRefreshToken(rotated.refreshToken)).isEqualTo(userId)
+    }
+
     private fun newSession(
         accessTokenId: String = "access-${UUID.randomUUID()}",
         refreshToken: String = "refresh-${UUID.randomUUID()}",

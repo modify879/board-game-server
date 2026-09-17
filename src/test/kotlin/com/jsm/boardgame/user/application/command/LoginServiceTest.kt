@@ -63,20 +63,13 @@ private class LoginFakePasswordHasher : PasswordHasher {
         hash.value == "hashed:${raw.value}"
 }
 
-/**
- * 발급한 모든 리프레시 토큰을 userId 로 영구히 기억한다 — 회전 이후에도 "옛 토큰"이라는
- * 사실만 잊지 않는다(실제 JWT 서명은 회전 후에도 유효하다). 세션 스토어의 "이게 최신인가"
- * 판단과는 별개다.
- */
 private class LoginFakeAuthTokenIssuer : AuthTokenIssuer {
     private var counter = 0
-    private val issuedRefreshTokens = mutableMapOf<String, Long>()
 
     override fun issue(userId: Long): IssuedTokens {
         counter += 1
         val refreshToken = "rt-$counter"
         val accessToken = "at-$counter"
-        issuedRefreshTokens[refreshToken] = userId
         return IssuedTokens(
             accessToken = accessToken,
             accessTokenId = "jti-$counter",
@@ -85,17 +78,19 @@ private class LoginFakeAuthTokenIssuer : AuthTokenIssuer {
             refreshTokenExpiresAt = Instant.now().plusSeconds(1_209_600),
         )
     }
-
-    override fun userIdFromRefreshToken(refreshToken: String): Long? = issuedRefreshTokens[refreshToken]
 }
 
 private class LoginInMemoryAuthSessionStore : AuthSessionStore {
     private val sessions = mutableMapOf<Long, AuthSession>()
     private val blacklist = mutableMapOf<String, Instant>()
+    private val refreshTokenIndex = mutableMapOf<String, Long>()
 
     override fun start(userId: Long, session: AuthSession) {
         sessions[userId] = session
+        refreshTokenIndex[session.refreshToken] = userId
     }
+
+    override fun userIdForRefreshToken(refreshToken: String): Long? = refreshTokenIndex[refreshToken]
 
     // AuthSessionStore 포트 계약이 아니다 — 세션이 실제로 시작됐는지 들여다보는 페이크 전용 검사용 헬퍼다.
     fun matchesRefreshToken(userId: Long, refreshToken: String): Boolean =

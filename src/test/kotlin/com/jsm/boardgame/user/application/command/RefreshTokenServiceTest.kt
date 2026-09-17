@@ -20,23 +20,17 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * 발급한 모든 리프레시 토큰을 userId 로 영구히 기억한다 — 회전 이후에도 "옛 토큰"이라는
- * 사실만 잊지 않는다(실제 JWT 서명은 회전 후에도 유효하다). 세션 스토어의 "이게 최신인가"
- * 판단과는 별개다. 이래야 재사용 탐지 테스트가 의미를 갖는다.
- *
  * 파일 최상위 클래스는 private 이어도 JVM 클래스명이 그대로 노출되므로,
  * 같은 패키지의 다른 테스트 파일과 이름이 겹치면 실제로 충돌한다(Redeclaration).
  * 그래서 Refresh 접두어로 파일 간 이름 충돌을 피한다.
  */
 private class RefreshFakeAuthTokenIssuer : AuthTokenIssuer {
     private var counter = 0
-    private val issuedRefreshTokens = mutableMapOf<String, Long>()
 
     override fun issue(userId: Long): IssuedTokens {
         counter += 1
         val refreshToken = "rt-$counter"
         val accessToken = "at-$counter"
-        issuedRefreshTokens[refreshToken] = userId
         return IssuedTokens(
             accessToken = accessToken,
             accessTokenId = "jti-$counter",
@@ -45,8 +39,6 @@ private class RefreshFakeAuthTokenIssuer : AuthTokenIssuer {
             refreshTokenExpiresAt = Instant.now().plusSeconds(1_209_600),
         )
     }
-
-    override fun userIdFromRefreshToken(refreshToken: String): Long? = issuedRefreshTokens[refreshToken]
 }
 
 /**
@@ -70,11 +62,16 @@ private class RefreshInMemoryAuthSessionStore(
 
     private val sessions = mutableMapOf<Long, StoredSession>()
     private val blacklist = mutableMapOf<String, Instant>()
+    // 인덱스는 회전해도 지우지 않는다 — 지우면 아래 재사용 탐지 테스트가 무의미해진다.
+    private val refreshTokenIndex = mutableMapOf<String, Long>()
 
     override fun start(userId: Long, session: AuthSession) {
         // 로그인은 항상 새 세션이다 — 직전 칸은 비운다.
         sessions[userId] = StoredSession(session, previousRefreshToken = null, graceExpiresAt = Instant.EPOCH)
+        refreshTokenIndex[session.refreshToken] = userId
     }
+
+    override fun userIdForRefreshToken(refreshToken: String): Long? = refreshTokenIndex[refreshToken]
 
     // AuthSessionStore 포트 계약이 아니다 — 유예 규칙까지 반영해 세션 상태를 들여다보는 페이크 전용 검사용 헬퍼다.
     fun matchesRefreshToken(userId: Long, refreshToken: String): Boolean {
@@ -124,6 +121,7 @@ private class RefreshInMemoryAuthSessionStore(
             previousRefreshToken = stored.session.refreshToken,
             graceExpiresAt = Instant.now().plus(refreshReuseGrace),
         )
+        refreshTokenIndex[next.refreshToken] = userId
         return RotationResult.Rotated(previousAccessTokenId)
     }
 }
@@ -263,8 +261,6 @@ class RefreshTokenServiceTest {
         val userId = 3L
         val issued = loginSession(userId)
 
-        // 페이크 발급기는 발급한 refreshToken 문자열만 등록하므로, accessToken 문자열을
-        // userIdFromRefreshToken 에 넣으면 등록되지 않은 값이라 null 이 나온다 — 타입 혼동 거부를 재현한다.
         val e = assertFailsWith<InvalidRefreshTokenException> {
             service.refresh(RefreshTokenCommand(issued.accessToken))
         }
