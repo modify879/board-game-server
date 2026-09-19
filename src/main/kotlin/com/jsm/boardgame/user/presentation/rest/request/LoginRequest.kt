@@ -1,4 +1,4 @@
-package com.jsm.boardgame.user.presentation.rest
+package com.jsm.boardgame.user.presentation.rest.request
 
 import com.jsm.boardgame.user.application.command.LoginCommand
 

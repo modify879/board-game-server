@@ -2,6 +2,9 @@ package com.jsm.boardgame.user.presentation.rest
 
 import com.jsm.boardgame.user.application.command.SignUpUseCase
 import com.jsm.boardgame.user.application.query.UserQueryService
+import com.jsm.boardgame.user.presentation.config.ProfileImageUrlResolver
+import com.jsm.boardgame.user.presentation.rest.request.SignUpRequest
+import com.jsm.boardgame.user.presentation.rest.response.UserProfileResponse
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -16,7 +19,7 @@ import java.net.URI
 class UserController(
     private val signUpUseCase: SignUpUseCase,
     private val userQueryService: UserQueryService,
-    private val profileImageProperties: ProfileImageProperties,
+    private val profileImageUrlResolver: ProfileImageUrlResolver,
 ) {
 
     @PostMapping
@@ -28,6 +31,6 @@ class UserController(
     @GetMapping("/{id}")
     fun getProfile(@PathVariable id: Long): UserProfileResponse {
         val profile = userQueryService.findProfile(id)
-        return UserProfileResponse.from(profile, profileImageProperties)
+        return UserProfileResponse.from(profile, profileImageUrlResolver.resolve(profile.profileImageKey))
     }
 }

@@ -1,4 +1,4 @@
-package com.jsm.boardgame.user.presentation.rest
+package com.jsm.boardgame.user.presentation.exception
 
 import com.jsm.boardgame.common.support.BusinessException
 import com.jsm.boardgame.user.domain.exception.UserErrorCode

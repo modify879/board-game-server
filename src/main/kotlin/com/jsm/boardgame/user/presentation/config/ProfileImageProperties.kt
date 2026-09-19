@@ -1,4 +1,4 @@
-package com.jsm.boardgame.user.presentation.rest
+package com.jsm.boardgame.user.presentation.config
 
 import org.springframework.boot.context.properties.ConfigurationProperties
 
