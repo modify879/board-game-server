@@ -155,6 +155,11 @@ presentation → application → domain ← infrastructure
 | 출력 포트 | `domain/repository` | `application/query` |
 | 쿼리 작성 | Spring Data 파생 쿼리로 충분 | **Kotlin JDSL** |
 
+명령의 결과가 식별자로 끝나지 않는 경우도 있다 — 로그인·갱신은 토큰을 돌려줘야 한다.
+그럴 때도 **출력 포트의 타입을 그대로 돌려주지 않는다.** 입력 포트 전용 타입을 따로 둔다
+(`AuthTokens` vs 출력 포트의 `IssuedTokens`) — 안 그러면 어댑터 사정으로 늘어난 필드가
+곧바로 presentation 의 계약이 되고, jti 처럼 내보내면 안 되는 값이 주석으로만 막힌다.
+
 조회가 `JpaEntity → 도메인 → 응답 DTO` 로 두 번 매핑되면 안 된다.
 생성자 프로젝션으로 응답 DTO 를 바로 만든다.
 

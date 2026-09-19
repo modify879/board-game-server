@@ -158,11 +158,12 @@ class LoginServiceTest {
     fun `재로그인하면 이전 액세스 토큰이 블랙리스트에 오른다`() {
         users.seed(id = 1, username = "user_01", rawPassword = "password1", nickname = "길동이")
 
-        val first = service.login(LoginCommand(username = "user_01", password = "password1"))
-        assertTrue(!sessions.isAccessTokenBlacklisted(first.accessTokenId))
+        service.login(LoginCommand(username = "user_01", password = "password1"))
+        val firstAccessTokenId = sessions.currentAccessTokenId(1)!!
+        assertTrue(!sessions.isAccessTokenBlacklisted(firstAccessTokenId))
 
         service.login(LoginCommand(username = "user_01", password = "password1"))
-        assertTrue(sessions.isAccessTokenBlacklisted(first.accessTokenId))
+        assertTrue(sessions.isAccessTokenBlacklisted(firstAccessTokenId))
     }
 
     @Test

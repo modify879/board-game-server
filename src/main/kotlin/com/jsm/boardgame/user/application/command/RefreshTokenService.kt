@@ -3,7 +3,6 @@ package com.jsm.boardgame.user.application.command
 import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
-import com.jsm.boardgame.user.application.port.IssuedTokens
 import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.domain.exception.InvalidRefreshTokenException
 import org.springframework.beans.factory.annotation.Value
@@ -21,7 +20,7 @@ class RefreshTokenService(
     private val clock: Clock,
 ) : RefreshTokenUseCase {
 
-    override fun refresh(command: RefreshTokenCommand): IssuedTokens {
+    override fun refresh(command: RefreshTokenCommand): AuthTokens {
         val userId = sessions.userIdForRefreshToken(command.refreshToken)
             ?: throw InvalidRefreshTokenException("알 수 없거나 만료된 리프레시 토큰")
 
@@ -50,7 +49,11 @@ class RefreshTokenService(
                 result.previousAccessTokenId?.let { previousAccessTokenId ->
                     sessions.blacklistAccessToken(previousAccessTokenId, Instant.now(clock).plus(accessTokenTtl))
                 }
-                tokens
+                AuthTokens(
+                    accessToken = tokens.accessToken,
+                    refreshToken = tokens.refreshToken,
+                    accessTokenExpiresAt = tokens.accessTokenExpiresAt,
+                )
             }
 
             RotationResult.Mismatch -> {
