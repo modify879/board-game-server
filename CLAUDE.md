@@ -24,10 +24,7 @@ Docker 가 실행 중이어야 한다.
 
 ## 테스트
 
-```bash
-./gradlew test                          # 전체
-./gradlew test --tests '*NicknameTest'  # 하나만
-```
+하나만 돌릴 때는 `./gradlew test --tests '*NicknameTest'`.
 
 테스트는 Testcontainers 로 자기 컨테이너를 띄운다. `compose.yaml` 과 무관하며 역시 Docker 가 필요하다.
 도메인 테스트는 스프링도 컨테이너도 없이 돈다 — 그게 도메인을 분리해서 얻는 것이다.
@@ -161,9 +158,7 @@ presentation → application → domain ← infrastructure
 조회가 `JpaEntity → 도메인 → 응답 DTO` 로 두 번 매핑되면 안 된다.
 생성자 프로젝션으로 응답 DTO 를 바로 만든다.
 
-**`application/query` 경로의 읽기는 Kotlin JDSL 로 작성한다.**
-"모든 DB 접근"이 아니라 조회 경로만이다 — 명령 경로에서 애그리거트를 불러오거나
-`existsBy...` 로 사전 확인하는 것은 Spring Data 파생 쿼리로 충분하다.
+JDSL 은 "모든 DB 접근"이 아니라 조회 경로에만 쓴다.
 경계는 이미 있는 명령/조회 분리선과 같으므로 새로 판단할 것이 없다.
 
 JPQL 문자열을 쓰지 않는 이유: 조건이 선택적인 쿼리(검색·필터·랭킹)가 생기면
@@ -217,9 +212,10 @@ fun interface DiceRoller { fun roll(count: Int): List<Int> }
 여기에는 코드만 봐서는 되돌리기 쉬운 결정의 이유만 적는다.
 
 - 예외는 규칙을 소유한 컨텍스트가 소유한다. `common` 에 범용 예외를 두지 않는다
-  — 타입이 아니라 메시지 문자열이 의미를 나르게 되어 아이디 중복인지 닉네임 중복인지 구분할 수 없다
+  — 타입이 아니라 메시지 문자열이 의미를 나르게 되어 아이디 중복인지 닉네임 중복인지 구분할 수 없다.
+  `common` 에 두는 것은 기반 타입(`BusinessException`)과 필터 단계의 기술 분류(`CommonErrorCode`)까지다
 - `ErrorCode` 는 `HttpStatus` 를 모른다. 도메인이 참조하는 타입이라 스프링이 들어오면 규칙 2가 깨진다.
-  도메인은 `ErrorKind`(INVALID/CONFLICT/NOT_FOUND/FORBIDDEN)까지만 알고, 상태 매핑은 핸들러가 한다
+  도메인은 `ErrorKind`(INVALID/UNAUTHORIZED/FORBIDDEN/NOT_FOUND/CONFLICT)까지만 알고, 상태 매핑은 핸들러가 한다
 - 응답에는 `errorCode`, 로그에는 `logMessage`. 둘은 `traceId` 로 잇는다
   — 분리만 하고 잇지 않으면 사용자 신고를 받아도 어느 로그인지 찾을 수 없다
 - 서버는 사용자 문구를 내려보내지 않는다. `detail` 은 **비어 있는 게 정상**이다.
@@ -273,7 +269,6 @@ value class Nickname private constructor(val value: String) {
 
 판단할 것이 없는 기계적인 규칙이다 — **매퍼는 `reconstitute()`, 그 외 전부 `of()`.**
 애그리거트도 같은 이름을 쓴다(`User.reconstitute()`).
-이 메서드 이름은 DDD 문헌의 "reconstitution" 에서 나온 것이다.
 규칙을 조인 뒤 기존 데이터를 정리해야 한다면 그건 별도의 마이그레이션 작업이지 읽기 경로가 할 일이 아니다.
 
 ### 애그리거트의 식별자는 nullable 이다
