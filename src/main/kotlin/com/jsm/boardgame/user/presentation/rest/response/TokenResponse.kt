@@ -1,4 +1,4 @@
-package com.jsm.boardgame.user.presentation.rest
+package com.jsm.boardgame.user.presentation.rest.response
 
 import com.jsm.boardgame.user.application.command.AuthTokens
 import java.time.Instant

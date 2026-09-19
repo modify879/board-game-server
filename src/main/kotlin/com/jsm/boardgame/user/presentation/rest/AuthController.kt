@@ -4,6 +4,9 @@ import com.jsm.boardgame.common.support.AuthenticationRequiredException
 import com.jsm.boardgame.user.application.command.LoginUseCase
 import com.jsm.boardgame.user.application.command.LogoutUseCase
 import com.jsm.boardgame.user.application.command.RefreshTokenUseCase
+import com.jsm.boardgame.user.presentation.rest.request.LoginRequest
+import com.jsm.boardgame.user.presentation.rest.request.RefreshTokenRequest
+import com.jsm.boardgame.user.presentation.rest.response.TokenResponse
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt

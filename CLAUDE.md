@@ -77,7 +77,11 @@ com.jsm.boardgame
     │   ├── persistence/          # JpaEntity, Spring Data, 매퍼, 어댑터
     │   └── security/             # 해싱 등 보안 관련 어댑터
     └── presentation/
-        ├── rest/                 # Controller + Request/Response
+        ├── config/               # 이 계층의 @ConfigurationProperties 와 그걸 읽는 조립기
+        ├── exception/            # presentation 이 소유하는 예외 (비밀번호 확인 불일치)
+        ├── rest/                 # Controller
+        │   ├── request/          # 요청 DTO + toCommand()
+        │   └── response/         # 응답 DTO + from()
         └── ws/                   # WebSocket 핸들러
 ```
 
