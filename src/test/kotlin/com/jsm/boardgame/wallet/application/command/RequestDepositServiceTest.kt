@@ -63,8 +63,8 @@ class RequestDepositServiceTest {
     fun `요청이 저장되고 id 가 반환된다`() {
         val id = service.request(RequestDepositCommand(userId = 1, amount = 10_000))
 
-        assertTrue(id != 0L)
-        assertEquals(10_000L, depositRequests.stored[id]?.requestedAmount?.amount)
+        assertTrue(id.value != 0L)
+        assertEquals(10_000L, depositRequests.stored[id.value]?.requestedAmount?.amount)
     }
 
     @Test

@@ -2,6 +2,6 @@ package com.jsm.boardgame.wallet.domain.exception
 
 import com.jsm.boardgame.common.support.BusinessException
 
-class WalletNotFoundException(
+class InvalidBankAccountException(
     logMessage: String,
-) : BusinessException(WalletErrorCode.WALLET_NOT_FOUND, logMessage)
+) : BusinessException(WalletErrorCode.BANK_ACCOUNT_INVALID, logMessage)

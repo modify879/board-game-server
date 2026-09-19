@@ -1,6 +1,7 @@
 package com.jsm.boardgame.wallet.application.command
 
 import com.jsm.boardgame.wallet.domain.model.DepositRequest
+import com.jsm.boardgame.wallet.domain.model.DepositRequestId
 import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import org.springframework.stereotype.Service
@@ -16,7 +17,7 @@ class RequestDepositService(
     private val clock: Clock,
 ) : RequestDepositUseCase {
 
-    override fun request(command: RequestDepositCommand): Long {
+    override fun request(command: RequestDepositCommand): DepositRequestId {
         val request = DepositRequest.request(
             userId = command.userId,
             amount = Money.of(command.amount),
@@ -24,7 +25,6 @@ class RequestDepositService(
         )
         val saved = depositRequests.save(request)
 
-        val id = checkNotNull(saved.id) { "save 이후에는 DepositRequest.id 가 채워져 있어야 한다" }
-        return id.value
+        return checkNotNull(saved.id) { "save 이후에는 DepositRequest.id 가 채워져 있어야 한다" }
     }
 }
