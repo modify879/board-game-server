@@ -3,6 +3,9 @@ package com.jsm.boardgame.wallet.domain.model
 import com.jsm.boardgame.wallet.domain.exception.InvalidAmountException
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
 
+/** 칩의 최소 단위가 100 이므로 지갑 금액도 100원 단위로만 움직인다. */
+const val MONEY_UNIT = 100L
+
 @JvmInline
 value class Money private constructor(val amount: Long) {
 
@@ -21,6 +24,8 @@ value class Money private constructor(val amount: Long) {
     fun isLessThan(other: Money): Boolean = amount < other.amount
 
     fun isZero(): Boolean = amount == 0L
+
+    fun isMultipleOf(unit: Long): Boolean = amount % unit == 0L
 
     companion object {
         val ZERO = Money(0)
