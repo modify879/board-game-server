@@ -25,6 +25,8 @@ private class FakeUserRepository : UserRepository {
 
     override fun findByUsername(username: Username): User? = stored.find { it.username == username }
 
+    override fun findById(id: UserId): User? = stored.find { it.id == id }
+
     override fun existsByUsername(username: Username): Boolean =
         stored.any { it.username == username }
 
@@ -39,6 +41,7 @@ private class FakeUserRepository : UserRepository {
             passwordHash = user.passwordHash,
             nickname = user.nickname,
             profileImageKey = user.profileImageKey,
+            role = user.role,
         )
         stored += saved
         return saved

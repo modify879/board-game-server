@@ -7,6 +7,13 @@ import com.jsm.boardgame.user.application.port.IssuedTokens
 import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.domain.exception.InvalidRefreshTokenException
 import com.jsm.boardgame.user.domain.exception.UserErrorCode
+import com.jsm.boardgame.user.domain.model.Nickname
+import com.jsm.boardgame.user.domain.model.PasswordHash
+import com.jsm.boardgame.user.domain.model.User
+import com.jsm.boardgame.user.domain.model.UserId
+import com.jsm.boardgame.user.domain.model.UserRole
+import com.jsm.boardgame.user.domain.model.Username
+import com.jsm.boardgame.user.domain.repository.UserRepository
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -26,8 +33,11 @@ import kotlin.test.assertTrue
  */
 private class RefreshFakeAuthTokenIssuer : AuthTokenIssuer {
     private var counter = 0
+    var lastRole: UserRole? = null
+        private set
 
-    override fun issue(userId: Long): IssuedTokens {
+    override fun issue(userId: Long, role: UserRole): IssuedTokens {
+        lastRole = role
         counter += 1
         val refreshToken = "rt-$counter"
         val accessToken = "at-$counter"
@@ -126,14 +136,37 @@ private class RefreshInMemoryAuthSessionStore(
     }
 }
 
+private class RefreshFakeUserRepository : UserRepository {
+    private val stored = mutableMapOf<Long, User>()
+
+    fun put(userId: Long, role: UserRole) {
+        stored[userId] = User.reconstitute(
+            id = UserId(userId),
+            username = Username.reconstitute("user_$userId"),
+            passwordHash = PasswordHash("hashed"),
+            nickname = Nickname.reconstitute("닉네임$userId"),
+            profileImageKey = null,
+            role = role,
+        )
+    }
+
+    override fun findByUsername(username: Username): User? = stored.values.find { it.username == username }
+    override fun findById(id: UserId): User? = stored[id.value]
+    override fun existsByUsername(username: Username): Boolean = stored.values.any { it.username == username }
+    override fun existsByNickname(nickname: Nickname): Boolean = stored.values.any { it.nickname == nickname }
+    override fun save(user: User): User = user
+}
+
 class RefreshTokenServiceTest {
 
     private val tokenIssuer = RefreshFakeAuthTokenIssuer()
     private val sessions = RefreshInMemoryAuthSessionStore()
-    private val service = RefreshTokenService(tokenIssuer, sessions, Duration.ofMinutes(30), Clock.systemUTC())
+    private val users = RefreshFakeUserRepository()
+    private val service = RefreshTokenService(tokenIssuer, sessions, users, Duration.ofMinutes(30), Clock.systemUTC())
 
-    private fun loginSession(userId: Long): IssuedTokens {
-        val tokens = tokenIssuer.issue(userId)
+    private fun loginSession(userId: Long, role: UserRole = UserRole.USER): IssuedTokens {
+        users.put(userId, role)
+        val tokens = tokenIssuer.issue(userId, role)
         sessions.start(userId, AuthSession(tokens.accessTokenId, tokens.refreshToken, tokens.refreshTokenExpiresAt))
         return tokens
     }
@@ -264,6 +297,29 @@ class RefreshTokenServiceTest {
 
         val e = assertFailsWith<InvalidRefreshTokenException> {
             service.refresh(RefreshTokenCommand(issued.accessToken))
+        }
+        assertEquals(UserErrorCode.REFRESH_TOKEN_INVALID, e.errorCode)
+    }
+
+    @Test
+    fun `저장소의 역할이 ADMIN 이면 새 토큰이 ADMIN 으로 발급된다`() {
+        val userId = 11L
+        val first = loginSession(userId, role = UserRole.ADMIN)
+
+        service.refresh(RefreshTokenCommand(first.refreshToken))
+
+        assertEquals(UserRole.ADMIN, tokenIssuer.lastRole)
+    }
+
+    @Test
+    fun `리프레시 토큰은 유효하지만 사용자가 존재하지 않으면 REFRESH_TOKEN_INVALID 가 발생한다`() {
+        val userId = 12L
+        // loginSession 을 거치지 않고 세션만 직접 만들어, users 저장소에는 없는 사용자를 재현한다(탈퇴 등).
+        val tokens = tokenIssuer.issue(userId, UserRole.USER)
+        sessions.start(userId, AuthSession(tokens.accessTokenId, tokens.refreshToken, tokens.refreshTokenExpiresAt))
+
+        val e = assertFailsWith<InvalidRefreshTokenException> {
+            service.refresh(RefreshTokenCommand(tokens.refreshToken))
         }
         assertEquals(UserErrorCode.REFRESH_TOKEN_INVALID, e.errorCode)
     }

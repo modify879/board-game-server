@@ -51,7 +51,7 @@ class LoginService(
             sessions.blacklistAccessToken(previousAccessTokenId, Instant.now(clock).plus(accessTokenTtl))
         }
 
-        val tokens = tokenIssuer.issue(userId)
+        val tokens = tokenIssuer.issue(userId, user.role)
         sessions.start(userId, AuthSession(tokens.accessTokenId, tokens.refreshToken, tokens.refreshTokenExpiresAt))
         return AuthTokens(
             accessToken = tokens.accessToken,

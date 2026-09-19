@@ -6,6 +6,13 @@ import com.jsm.boardgame.user.application.port.AuthTokenIssuer
 import com.jsm.boardgame.user.application.port.IssuedTokens
 import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.domain.exception.InvalidRefreshTokenException
+import com.jsm.boardgame.user.domain.model.Nickname
+import com.jsm.boardgame.user.domain.model.PasswordHash
+import com.jsm.boardgame.user.domain.model.User
+import com.jsm.boardgame.user.domain.model.UserId
+import com.jsm.boardgame.user.domain.model.UserRole
+import com.jsm.boardgame.user.domain.model.Username
+import com.jsm.boardgame.user.domain.repository.UserRepository
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -16,7 +23,7 @@ import kotlin.test.assertTrue
 private class LogoutFakeAuthTokenIssuer : AuthTokenIssuer {
     private var sequence = 0
 
-    override fun issue(userId: Long): IssuedTokens {
+    override fun issue(userId: Long, role: UserRole): IssuedTokens {
         sequence += 1
         return IssuedTokens(
             accessToken = "access:$userId:$sequence",
@@ -64,14 +71,37 @@ private class LogoutFakeAuthSessionStore : AuthSessionStore {
     }
 }
 
+private class LogoutFakeUserRepository : UserRepository {
+    private val stored = mutableMapOf<Long, User>()
+
+    fun put(userId: Long) {
+        stored[userId] = User.reconstitute(
+            id = UserId(userId),
+            username = Username.reconstitute("user_$userId"),
+            passwordHash = PasswordHash("hashed"),
+            nickname = Nickname.reconstitute("닉네임$userId"),
+            profileImageKey = null,
+            role = UserRole.USER,
+        )
+    }
+
+    override fun findByUsername(username: Username): User? = stored.values.find { it.username == username }
+    override fun findById(id: UserId): User? = stored[id.value]
+    override fun existsByUsername(username: Username): Boolean = stored.values.any { it.username == username }
+    override fun existsByNickname(nickname: Nickname): Boolean = stored.values.any { it.nickname == nickname }
+    override fun save(user: User): User = user
+}
+
 class LogoutServiceTest {
 
     private val sessions = LogoutFakeAuthSessionStore()
     private val tokenIssuer = LogoutFakeAuthTokenIssuer()
+    private val users = LogoutFakeUserRepository()
     private val service = LogoutService(sessions, Duration.ofMinutes(30), Clock.systemUTC())
 
     private fun loggedIn(userId: Long): IssuedTokens {
-        val issued = tokenIssuer.issue(userId)
+        users.put(userId)
+        val issued = tokenIssuer.issue(userId, UserRole.USER)
         sessions.start(
             userId,
             AuthSession(
@@ -89,7 +119,7 @@ class LogoutServiceTest {
 
         service.logout(1L)
 
-        val refreshService = RefreshTokenService(tokenIssuer, sessions, Duration.ofMinutes(30), Clock.systemUTC())
+        val refreshService = RefreshTokenService(tokenIssuer, sessions, users, Duration.ofMinutes(30), Clock.systemUTC())
         assertFailsWith<InvalidRefreshTokenException> {
             refreshService.refresh(RefreshTokenCommand(issued.refreshToken))
         }

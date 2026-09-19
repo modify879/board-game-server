@@ -31,4 +31,8 @@ class UserJpaEntity(
 
     @Column(name = "profile_image_key", columnDefinition = "text")
     var profileImageKey: String?,
+
+    // ddl-auto: update 로 기존 행이 있는 개발 DB 에 NOT NULL 컬럼을 추가할 때 실패하지 않도록 default 를 둔다.
+    @Column(name = "role", columnDefinition = "text default 'USER'", nullable = false)
+    var role: String,
 )

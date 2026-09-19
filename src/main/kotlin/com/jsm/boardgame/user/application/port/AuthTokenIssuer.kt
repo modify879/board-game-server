@@ -1,9 +1,10 @@
 package com.jsm.boardgame.user.application.port
 
+import com.jsm.boardgame.user.domain.model.UserRole
 import java.time.Instant
 
 interface AuthTokenIssuer {
-    fun issue(userId: Long): IssuedTokens
+    fun issue(userId: Long, role: UserRole): IssuedTokens
 }
 
 data class IssuedTokens(

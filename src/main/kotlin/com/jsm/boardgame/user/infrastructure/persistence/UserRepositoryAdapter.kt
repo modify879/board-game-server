@@ -4,6 +4,7 @@ import com.jsm.boardgame.user.domain.exception.DuplicateNicknameException
 import com.jsm.boardgame.user.domain.exception.DuplicateUsernameException
 import com.jsm.boardgame.user.domain.model.Nickname
 import com.jsm.boardgame.user.domain.model.User
+import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.hibernate.exception.ConstraintViolationException
@@ -20,6 +21,9 @@ class UserRepositoryAdapter(
 
     override fun findByUsername(username: Username): User? =
         jpa.findByUsername(username.value)?.toDomain()
+
+    override fun findById(id: UserId): User? =
+        jpa.findById(id.value).orElse(null)?.toDomain()
 
     override fun existsByUsername(username: Username): Boolean =
         jpa.existsByUsername(username.value)
