@@ -236,8 +236,9 @@ class RefreshTokenServiceTest {
         // 유예는 바로 직전 한 세대에만 적용된다. first 가 두 세대 전이 되도록 한 번 더 회전시켜야
         // 재사용 탐지 경로(clear 이전 블랙리스트 등록)를 탄다.
         val rotatedAgain = service.refresh(RefreshTokenCommand(rotated.refreshToken))
+        val rotatedAgainAccessTokenId = sessions.currentAccessTokenId(userId)!!
 
-        assertFalse(sessions.isAccessTokenBlacklisted(rotatedAgain.accessTokenId))
+        assertFalse(sessions.isAccessTokenBlacklisted(rotatedAgainAccessTokenId))
 
         assertFailsWith<InvalidRefreshTokenException> {
             service.refresh(RefreshTokenCommand(first.refreshToken))
@@ -245,7 +246,7 @@ class RefreshTokenServiceTest {
 
         // clear() 가 세션을 지우기 전에 그 시점의 액세스 토큰을 블랙리스트에 넣어야 한다 —
         // 순서가 뒤바뀌면 currentAccessTokenId 가 이미 null 이라 블랙리스트에 넣을 방법이 없어진다.
-        assertTrue(sessions.isAccessTokenBlacklisted(rotatedAgain.accessTokenId))
+        assertTrue(sessions.isAccessTokenBlacklisted(rotatedAgainAccessTokenId))
     }
 
     @Test

@@ -4,7 +4,6 @@ import com.jsm.boardgame.common.support.BusinessException
 import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
-import com.jsm.boardgame.user.application.port.IssuedTokens
 import com.jsm.boardgame.user.domain.exception.LoginFailedException
 import com.jsm.boardgame.user.domain.model.RawPassword
 import com.jsm.boardgame.user.domain.model.Username
@@ -30,7 +29,7 @@ class LoginService(
     private val clock: Clock,
 ) : LoginUseCase {
 
-    override fun login(command: LoginCommand): IssuedTokens {
+    override fun login(command: LoginCommand): AuthTokens {
         // 형식 오류도 401 로 감춘다 — 400 으로 새면 아이디 형식 적합 여부가 노출된다.
         val (username, rawPassword) = try {
             Username.of(command.username) to RawPassword.of(command.password)
@@ -54,6 +53,10 @@ class LoginService(
 
         val tokens = tokenIssuer.issue(userId)
         sessions.start(userId, AuthSession(tokens.accessTokenId, tokens.refreshToken, tokens.refreshTokenExpiresAt))
-        return tokens
+        return AuthTokens(
+            accessToken = tokens.accessToken,
+            refreshToken = tokens.refreshToken,
+            accessTokenExpiresAt = tokens.accessTokenExpiresAt,
+        )
     }
 }
