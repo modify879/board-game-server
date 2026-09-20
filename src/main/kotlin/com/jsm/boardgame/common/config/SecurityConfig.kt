@@ -30,7 +30,7 @@ import org.springframework.security.web.access.AccessDeniedHandler
  * 액세스 토큰 검증은 [JwtDecoder] 빈(`user.infrastructure.security.config.JwtDecoderConfig`)에
  * 위임한다. 그 디코더가 로그아웃/세션 교체로 무효화된 토큰을 블랙리스트 검증기로 걸러낸다.
  * 401/403 은 필터 단계에서 응답이 끝나 `GlobalExceptionHandler` 를 거치지 않으므로 커스텀
- * `AuthenticationEntryPoint`/`AccessDeniedHandler`(`common.support`)로 교체한다 (규칙 8).
+ * `AuthenticationEntryPoint`/`AccessDeniedHandler`(`common.web`)로 교체한다 (규칙 8).
  * `oauth2ResourceServer { }` 안에도 등록해야 한다 — `exceptionHandling` 에만 두면 Bearer 헤더가
  * 실려 온 요청이 기본 `BearerTokenAuthenticationEntryPoint` 에 먼저 매칭돼 건너뛴다.
  */
