@@ -234,4 +234,15 @@ class AdminWalletApiIntegrationTest {
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.errorCode").value("ADJUSTMENT_REASON_BLANK"))
     }
+
+    @Test
+    fun `존재하지 않는 대상 사용자로 조정하면 400과 ADJUSTMENT_TARGET_NOT_FOUND 를 응답하고 detail 이 없다`() {
+        val (_, adminToken) = signUpAdminAndLogin()
+        val nonExistentUserId = 987_654_321L
+
+        authPost("/api/admin/wallets/$nonExistentUserId/adjustments", adminToken, """{"amount":1000,"reason":"사유"}""")
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("ADJUSTMENT_TARGET_NOT_FOUND"))
+            .andExpect(jsonPath("$.detail").doesNotExist())
+    }
 }

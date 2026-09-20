@@ -21,4 +21,11 @@ class UserQueryRepositoryAdapter(
             ).from(entity(UserJpaEntity::class))
                 .where(path(UserJpaEntity::id).eq(id))
         }.firstOrNull()
+
+    override fun existsById(id: Long): Boolean =
+        jpa.findAll {
+            select(path(UserJpaEntity::id))
+                .from(entity(UserJpaEntity::class))
+                .where(path(UserJpaEntity::id).eq(id))
+        }.firstOrNull() != null
 }

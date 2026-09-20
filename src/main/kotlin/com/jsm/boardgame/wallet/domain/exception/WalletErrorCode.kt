@@ -19,6 +19,8 @@ enum class WalletErrorCode(override val kind: ErrorKind) : ErrorCode {
     ADJUSTMENT_REASON_BLANK(ErrorKind.INVALID),
     WITHDRAWAL_REQUEST_NOT_FOUND(ErrorKind.NOT_FOUND),
     WITHDRAWAL_REQUEST_ALREADY_PROCESSED(ErrorKind.CONFLICT),
+    // 없는 리소스에 접근한 게 아니라 관리자가 보낸 요청의 대상이 틀린 것이므로 NOT_FOUND 가 아니라 INVALID(400)다.
+    ADJUSTMENT_TARGET_NOT_FOUND(ErrorKind.INVALID),
     ;
 
     override val code: String get() = name

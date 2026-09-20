@@ -1,5 +1,6 @@
 package com.jsm.boardgame.wallet.application.command
 
+import com.jsm.boardgame.wallet.application.port.UserExistence
 import com.jsm.boardgame.wallet.domain.exception.InvalidAdjustmentException
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
@@ -21,6 +22,7 @@ import java.time.Instant
 class AdjustWalletBalanceService(
     private val wallets: WalletRepository,
     private val ledger: LedgerEntryRepository,
+    private val userExistence: UserExistence,
     private val clock: Clock,
 ) : AdjustWalletBalanceUseCase {
 
@@ -45,6 +47,17 @@ class AdjustWalletBalanceService(
         // 위 단위 검사가 Long.MIN_VALUE 를 이미 걸러내므로 여기까지 오지 않지만,
         // MONEY_UNIT 이 바뀌어도 조용히 음수가 흘러들지 않게 하는 보험이다.
         val absoluteAmount = Money.of(Math.absExact(command.amount))
+
+        // 이 확인은 친절한 오류용이고 보장이 아니다 — 확인과 저장 사이에 회원 탈퇴가 들어오면
+        // 그대로 뚫린다. 실제 보장은 wallets.user_id 외래키인데 Hibernate 가 JPA 연관관계 없이는
+        // FK 를 만들지 못해 ddl-auto: update 인 지금은 걸 수 없다. Flyway 전환 때
+        // fk_wallets_user 를 추가한다("유일성은 DB 가 보장한다" 와 같은 두 겹 구조다).
+        if (!userExistence.exists(command.targetUserId)) {
+            throw InvalidAdjustmentException(
+                WalletErrorCode.ADJUSTMENT_TARGET_NOT_FOUND,
+                "조정 대상 사용자가 없음: targetUserId=${command.targetUserId}",
+            )
+        }
 
         val now = Instant.now(clock)
         val type = if (command.amount > 0) LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT else LedgerEntryType.ADMIN_ADJUSTMENT_DEBIT
