@@ -74,7 +74,7 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 |---|---|---|
 | `user` | 구현됨 | 사용자, 인증, 세션, 역할 |
 | `wallet` | 구현됨 | 잔액·원장, 충전/환전 요청, 관리자 승인·반려·조정 |
-| `holdem` | 미정 | 홀덤 규칙 전부. 방/좌석을 자기 안에 둔다 |
+| `holdem` | 착수 | 홀덤 규칙 전부. 방/좌석을 자기 안에 둔다 |
 
 `user` 가 참조 구현이다. 새 컨텍스트는 그 파일 배치를 그대로 따른다.
 
@@ -170,11 +170,8 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
   추가만 하고 아무것도 지우지 않으므로 컬럼 삭제·이름/타입 변경은 손으로 SQL 을 친다.
   Hibernate 가 못 만드는 제약(FK)은 `src/main/resources/data.sql` 의 멱등 DDL 로 건다.
   **`data.sql` 의 문장 구분자는 `;` 가 아니라 `@@@`** — 기본 분할기가 `do $$ ... $$` 안의 `;` 에서 자른다
-- 홀덤 2~5단계 — 1단계(`wallet` + `ROLE_ADMIN`)까지 끝났다.
-  2 `feature/holdem-domain`(카드·핸드 평가·베팅·사이드팟) / 3 `feature/holdem-table`(방·좌석·바이인) /
-  4 `feature/holdem-ws`(STOMP) / 5 `feature/holdem-recovery`(스냅샷 복구).
-  4단계에서 **브로드캐스트 페이로드 타입에 홀카드 필드를 두지 않는다** — 규칙 6을 컴파일러로 보장한다
-- 핸드 히스토리를 남기지 않는다 — 이벤트 소싱이 아니라 진행 중 핸드의 상태 스냅샷 1행
+- 홀덤 2~5단계 — 1단계(`wallet` + `ROLE_ADMIN`)까지 끝났다. 단계와 홀덤 전용 규칙은
+  `.claude/rules/holdem.md` 에 있고 `holdem` 파일을 건드릴 때만 로드된다
 - ArchUnit 의존성 테스트 — 게임이 둘 이상 생기면 도입. 목표는 BuckPal 과 같은 3줄:
   `application.doesNotDependOn(adapters)` / `domainDoesNotDependOnAdapters()` / `adapters.dontDependOnEachOther()`
 - 클라이언트 single-flight(토큰 갱신 경합), 프로필 이미지 업로드, 닉네임·비밀번호 변경, 회원 탈퇴,
