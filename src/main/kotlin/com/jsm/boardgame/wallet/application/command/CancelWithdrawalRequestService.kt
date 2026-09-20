@@ -29,8 +29,12 @@ class CancelWithdrawalRequestService(
 
     override fun cancel(command: CancelWithdrawalRequestCommand) {
         val now = Instant.now(clock)
+        // 남의 요청도 "없음" 으로 응답한다 — CancelDepositRequestService 와 같은 이유(id 열거 방지).
         val request = withdrawalRequests.findById(WithdrawalRequestId(command.requestId))
-            ?: throw WithdrawalRequestNotFoundException("취소하려는 환전 요청을 찾을 수 없음: requestId=${command.requestId}")
+            ?.takeIf { it.userId == command.requesterUserId }
+            ?: throw WithdrawalRequestNotFoundException(
+                "취소하려는 환전 요청이 없거나 본인 것이 아님: requestId=${command.requestId}, requesterUserId=${command.requesterUserId}",
+            )
 
         // 소유자 검사가 상태 검사보다 먼저다(WithdrawalRequest.cancel 내부) = 이중 환급 방어
         request.cancel(command.requesterUserId, now)

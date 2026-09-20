@@ -1,6 +1,6 @@
 package com.jsm.boardgame.wallet.application.command
 
-import com.jsm.boardgame.wallet.domain.exception.NotRequestOwnerException
+import com.jsm.boardgame.wallet.domain.exception.WithdrawalRequestNotFoundException
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
 import com.jsm.boardgame.wallet.domain.model.BankAccount
 import com.jsm.boardgame.wallet.domain.model.LedgerEntry
@@ -103,14 +103,15 @@ class CancelWithdrawalRequestServiceTest {
     }
 
     @Test
-    fun `남의 요청이면 NOT_REQUEST_OWNER 이고 잔액이 변하지 않는다`() {
+    // 남의 요청은 "없음" 으로 응답한다 — id 열거를 막기 위해서다(CancelDepositRequestServiceTest 참조).
+    fun `남의 요청이면 WITHDRAWAL_REQUEST_NOT_FOUND 이고 잔액이 변하지 않는다`() {
         val request = heldRequest(userId = 1, amount = 10_000)
 
-        val e = assertFailsWith<NotRequestOwnerException> {
+        val e = assertFailsWith<WithdrawalRequestNotFoundException> {
             service.cancel(CancelWithdrawalRequestCommand(requestId = request.id!!.value, requesterUserId = 2))
         }
 
-        assertEquals(WalletErrorCode.NOT_REQUEST_OWNER, e.errorCode)
+        assertEquals(WalletErrorCode.WITHDRAWAL_REQUEST_NOT_FOUND, e.errorCode)
         assertEquals(Money.ZERO, wallets.findByUserId(1)!!.balance)
     }
 }

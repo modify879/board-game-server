@@ -153,7 +153,9 @@ class WalletApiIntegrationTest {
     }
 
     @Test
-    fun `남의 충전 요청을 취소하면 403과 NOT_REQUEST_OWNER 를 응답한다`() {
+    // 남의 요청과 없는 요청이 **같은 응답**이어야 한다. 갈리는 순간 인증된 사용자가 아무 id 나
+    // 넣어보는 것만으로 남의 충전 요청이 존재하는지 열거할 수 있다.
+    fun `남의 충전 요청 취소는 없는 요청과 똑같이 404 DEPOSIT_REQUEST_NOT_FOUND 다`() {
         val (_, accessTokenA) = signUpAndLogin()
         val (_, accessTokenB) = signUpAndLogin()
 
@@ -163,8 +165,14 @@ class WalletApiIntegrationTest {
         val requestId = JsonPath.read<Int>(created.response.contentAsString, "$.requestId")
 
         authDelete("/api/wallet/deposit-requests/$requestId", accessTokenB)
-            .andExpect(status().isForbidden)
-            .andExpect(jsonPath("$.errorCode").value("NOT_REQUEST_OWNER"))
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.errorCode").value("DEPOSIT_REQUEST_NOT_FOUND"))
+            .andExpect(jsonPath("$.detail").doesNotExist())
+
+        authDelete("/api/wallet/deposit-requests/999999", accessTokenB)
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.errorCode").value("DEPOSIT_REQUEST_NOT_FOUND"))
+            .andExpect(jsonPath("$.detail").doesNotExist())
     }
 
     @Test

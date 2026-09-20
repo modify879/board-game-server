@@ -1,6 +1,6 @@
 package com.jsm.boardgame.wallet.application.command
 
-import com.jsm.boardgame.wallet.domain.exception.NotRequestOwnerException
+import com.jsm.boardgame.wallet.domain.exception.DepositRequestNotFoundException
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
 import com.jsm.boardgame.wallet.domain.model.DepositRequest
 import com.jsm.boardgame.wallet.domain.model.DepositRequestId
@@ -59,12 +59,14 @@ class CancelDepositRequestServiceTest {
     }
 
     @Test
-    fun `남의 요청이면 NOT_REQUEST_OWNER`() {
+    // 남의 요청은 "없음" 으로 응답한다 — 소유자 아님(403)과 존재하지 않음(404)이 갈리면
+    // 아무 id 나 넣어보는 것만으로 남의 요청 존재 여부를 열거할 수 있다.
+    fun `남의 요청이면 DEPOSIT_REQUEST_NOT_FOUND`() {
         pendingRequest(userId = 1)
 
-        val e = assertFailsWith<NotRequestOwnerException> {
+        val e = assertFailsWith<DepositRequestNotFoundException> {
             service.cancel(CancelDepositRequestCommand(requestId = 1, requesterUserId = 2))
         }
-        assertEquals(WalletErrorCode.NOT_REQUEST_OWNER, e.errorCode)
+        assertEquals(WalletErrorCode.DEPOSIT_REQUEST_NOT_FOUND, e.errorCode)
     }
 }
