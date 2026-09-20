@@ -86,9 +86,9 @@ class WalletQueryRepositoryAdapterIntegrationTest {
     @Test
     fun `findByStatus(null) 은 전체를, findByStatus(PENDING) 은 PENDING 만 돌려준다`() {
         val userId = uniqueUserId()
-        val pending = depositRequests.save(DepositRequest.request(userId, Money.of(10_000), now))
-        val approved = depositRequests.save(DepositRequest.request(userId, Money.of(20_000), now))
-        approved.approve(adminUserId = 1, creditedAmount = Money.of(20_000), at = now)
+        val pending = depositRequests.save(DepositRequest.request(userId, 10_000, now))
+        val approved = depositRequests.save(DepositRequest.request(userId, 20_000, now))
+        approved.approve(adminUserId = 1, creditedAmount = 20_000, at = now)
         depositRequests.save(approved)
 
         val all = depositRequestQueryRepository.findByStatus(null, PageRequest.of(0, 10))

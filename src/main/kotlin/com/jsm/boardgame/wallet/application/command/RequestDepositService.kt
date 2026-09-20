@@ -2,7 +2,6 @@ package com.jsm.boardgame.wallet.application.command
 
 import com.jsm.boardgame.wallet.domain.model.DepositRequest
 import com.jsm.boardgame.wallet.domain.model.DepositRequestId
-import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -20,7 +19,7 @@ class RequestDepositService(
     override fun request(command: RequestDepositCommand): DepositRequestId {
         val request = DepositRequest.request(
             userId = command.userId,
-            amount = Money.of(command.amount),
+            amount = command.amount,
             at = Instant.now(clock),
         )
         val saved = depositRequests.save(request)

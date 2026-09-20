@@ -73,14 +73,14 @@ class WithdrawalRequest private constructor(
     companion object {
         private const val MIN_AMOUNT = 1_000L
 
-        fun request(userId: Long, amount: Money, bankAccount: BankAccount, at: Instant): WithdrawalRequest {
-            if (amount.isLessThan(Money.of(MIN_AMOUNT)) || !amount.isMultipleOf(MONEY_UNIT)) {
+        fun request(userId: Long, amount: Long, bankAccount: BankAccount, at: Instant): WithdrawalRequest {
+            if (amount < MIN_AMOUNT || amount % MONEY_UNIT != 0L) {
                 throw InvalidWithdrawalAmountException("환전 요청 금액이 유효하지 않음: amount=$amount")
             }
             return WithdrawalRequest(
                 id = null,
                 userId = userId,
-                amount = amount,
+                amount = Money.of(amount),
                 bankAccount = bankAccount,
                 requestedAt = at,
                 status = WithdrawalRequestStatus.PENDING,

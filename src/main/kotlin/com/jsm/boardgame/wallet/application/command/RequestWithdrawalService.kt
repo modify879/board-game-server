@@ -4,7 +4,6 @@ import com.jsm.boardgame.wallet.domain.model.BankAccount
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
-import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequest
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestId
@@ -35,7 +34,7 @@ class RequestWithdrawalService(
     override fun request(command: RequestWithdrawalCommand): WithdrawalRequestId {
         val now = Instant.now(clock)
         val bankAccount = BankAccount.of(command.bankName, command.accountNumber, command.accountHolder)
-        val request = WithdrawalRequest.request(command.userId, Money.of(command.amount), bankAccount, now)
+        val request = WithdrawalRequest.request(command.userId, command.amount, bankAccount, now)
 
         // 원장 엔트리가 요청을 가리켜야 하므로 요청을 먼저 저장해 id 를 받는다.
         val saved = withdrawalRequests.save(request)

@@ -105,6 +105,16 @@ class AdjustWalletBalanceServiceTest {
     }
 
     @Test
+    fun `amount 가 Long_MIN_VALUE 면 ADJUSTMENT_AMOUNT_INVALID (abs 오버플로 회귀 방지)`() {
+        // abs(Long.MIN_VALUE) 는 오버플로해 음수 그대로를 돌려주는 유일한 값이다.
+        // 단위 검사가 abs 보다 먼저 실행되지 않으면 Money.of 가 AMOUNT_NEGATIVE 를 던진다.
+        val e = assertFailsWith<InvalidAdjustmentException> {
+            service.adjust(AdjustWalletBalanceCommand(targetUserId = 1, amount = Long.MIN_VALUE, reason = "사유", adminUserId = 99))
+        }
+        assertEquals(WalletErrorCode.ADJUSTMENT_AMOUNT_INVALID, e.errorCode)
+    }
+
+    @Test
     fun `사유가 blank 면 ADJUSTMENT_REASON_BLANK`() {
         val e = assertFailsWith<InvalidAdjustmentException> {
             service.adjust(AdjustWalletBalanceCommand(targetUserId = 1, amount = 1_000, reason = "   ", adminUserId = 99))

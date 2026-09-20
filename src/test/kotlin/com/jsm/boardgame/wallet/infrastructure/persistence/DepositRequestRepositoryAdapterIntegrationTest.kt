@@ -5,7 +5,6 @@ import com.jsm.boardgame.wallet.domain.exception.DepositRequestAlreadyProcessedE
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
 import com.jsm.boardgame.wallet.domain.model.DepositRequest
 import com.jsm.boardgame.wallet.domain.model.DepositRequestStatus
-import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -32,13 +31,13 @@ class DepositRequestRepositoryAdapterIntegrationTest {
 
     @Test
     fun `같은 version 으로 두 번 저장하면 두 번째가 DepositRequestAlreadyProcessedException`() {
-        val saved = depositRequests.save(DepositRequest.request(userId = System.nanoTime(), amount = Money.of(10_000), at = now))
+        val saved = depositRequests.save(DepositRequest.request(userId = System.nanoTime(), amount = 10_000, at = now))
 
         // 두 관리자가 동시에 같은 요청을 읽었다고 가정한다 — 둘 다 version 0 을 들고 있다.
         val firstView = requireNotNull(depositRequests.findById(saved.id!!))
         val secondView = requireNotNull(depositRequests.findById(saved.id))
 
-        firstView.approve(1, Money.of(10_000), now)
+        firstView.approve(1, 10_000, now)
         depositRequests.save(firstView)
 
         secondView.reject(2, "사유", now)
@@ -53,7 +52,7 @@ class DepositRequestRepositoryAdapterIntegrationTest {
 
     @Test
     fun `저장 후 findById 가 상태 금액 처리자 사유를 그대로 돌려준다`() {
-        val request = DepositRequest.request(userId = System.nanoTime(), amount = Money.of(10_000), at = now)
+        val request = DepositRequest.request(userId = System.nanoTime(), amount = 10_000, at = now)
         val saved = depositRequests.save(request)
 
         val reloaded = requireNotNull(depositRequests.findById(saved.id!!))

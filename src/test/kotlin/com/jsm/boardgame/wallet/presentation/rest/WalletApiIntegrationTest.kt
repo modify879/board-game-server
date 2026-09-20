@@ -128,6 +128,15 @@ class WalletApiIntegrationTest {
     }
 
     @Test
+    fun `음수 금액의 충전 요청은 400과 DEPOSIT_AMOUNT_INVALID 를 응답한다 (AMOUNT_NEGATIVE 가 아니다)`() {
+        val (_, accessToken) = signUpAndLogin()
+
+        authPost("/api/wallet/deposit-requests", accessToken, """{"amount":-5000}""")
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("DEPOSIT_AMOUNT_INVALID"))
+    }
+
+    @Test
     fun `충전 요청 목록 조회는 본인 것만 돌려준다`() {
         val (_, accessTokenA) = signUpAndLogin()
         val (_, accessTokenB) = signUpAndLogin()
@@ -196,5 +205,15 @@ class WalletApiIntegrationTest {
         val headerTraceId = result.response.getHeader("X-Trace-Id")
         val bodyTraceId = JsonPath.read<String>(result.response.contentAsString, "$.traceId")
         assertThat(headerTraceId).isEqualTo(bodyTraceId)
+    }
+
+    @Test
+    fun `음수 금액의 환전 요청은 400과 WITHDRAWAL_AMOUNT_INVALID 를 응답한다 (AMOUNT_NEGATIVE 가 아니다)`() {
+        val (_, accessToken) = signUpAndLogin()
+
+        val body = """{"amount":-5000,"bankName":"국민은행","accountNumber":"11122233344","accountHolder":"홍길동"}"""
+        authPost("/api/wallet/withdrawal-requests", accessToken, body)
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("WITHDRAWAL_AMOUNT_INVALID"))
     }
 }

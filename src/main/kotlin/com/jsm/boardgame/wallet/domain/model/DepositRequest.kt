@@ -34,17 +34,17 @@ class DepositRequest private constructor(
     var rejectionReason: String? = rejectionReason
         private set
 
-    fun approve(adminUserId: Long, creditedAmount: Money, at: Instant) {
+    fun approve(adminUserId: Long, creditedAmount: Long, at: Instant) {
         requirePending()
 
         // 최소 금액(MIN_AMOUNT)을 여기서는 적용하지 않는다 — 관리자는 실제 입금된 금액
         // (예: 900원)을 그대로 채워줄 수 있어야 한다. 단위(MONEY_UNIT)는 그대로 지킨다.
-        if (creditedAmount.isZero() || !creditedAmount.isMultipleOf(MONEY_UNIT)) {
+        if (creditedAmount <= 0L || creditedAmount % MONEY_UNIT != 0L) {
             throw InvalidDepositAmountException("승인 금액이 유효하지 않음: creditedAmount=$creditedAmount")
         }
 
         status = DepositRequestStatus.APPROVED
-        this.creditedAmount = creditedAmount
+        this.creditedAmount = Money.of(creditedAmount)
         this.processedBy = adminUserId
         this.processedAt = at
     }
@@ -80,14 +80,14 @@ class DepositRequest private constructor(
     companion object {
         private const val MIN_AMOUNT = 1_000L
 
-        fun request(userId: Long, amount: Money, at: Instant): DepositRequest {
-            if (amount.isLessThan(Money.of(MIN_AMOUNT)) || !amount.isMultipleOf(MONEY_UNIT)) {
+        fun request(userId: Long, amount: Long, at: Instant): DepositRequest {
+            if (amount < MIN_AMOUNT || amount % MONEY_UNIT != 0L) {
                 throw InvalidDepositAmountException("충전 요청 금액이 유효하지 않음: amount=$amount")
             }
             return DepositRequest(
                 id = null,
                 userId = userId,
-                requestedAmount = amount,
+                requestedAmount = Money.of(amount),
                 requestedAt = at,
                 status = DepositRequestStatus.PENDING,
                 creditedAmount = null,

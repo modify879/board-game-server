@@ -156,7 +156,7 @@ class ApproveDepositRequestServiceTest {
     @Test
     fun `이미 처리된 요청을 승인하면 DEPOSIT_REQUEST_ALREADY_PROCESSED 이고 지갑 잔액이 변하지 않는다`() {
         val request = pendingRequest()
-        request.approve(1, Money.of(10_000), Instant.now())
+        request.approve(1, 10_000, Instant.now())
         depositRequests.save(request)
 
         val e = assertFailsWith<DepositRequestAlreadyProcessedException> {

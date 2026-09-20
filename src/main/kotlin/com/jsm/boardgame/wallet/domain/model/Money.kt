@@ -25,7 +25,6 @@ value class Money private constructor(val amount: Long) {
 
     fun isZero(): Boolean = amount == 0L
 
-    fun isMultipleOf(unit: Long): Boolean = amount % unit == 0L
 
     companion object {
         val ZERO = Money(0)

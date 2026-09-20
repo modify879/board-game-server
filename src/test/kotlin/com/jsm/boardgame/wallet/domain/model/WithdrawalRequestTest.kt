@@ -32,7 +32,7 @@ class WithdrawalRequestTest {
     @Test
     fun `1000원 미만이면 WITHDRAWAL_AMOUNT_INVALID`() {
         val e = assertFailsWith<InvalidWithdrawalAmountException> {
-            WithdrawalRequest.request(userId = 1, amount = Money.of(900), bankAccount = bankAccount, at = now)
+            WithdrawalRequest.request(userId = 1, amount = 900, bankAccount = bankAccount, at = now)
         }
         assertEquals(WalletErrorCode.WITHDRAWAL_AMOUNT_INVALID, e.errorCode)
     }
@@ -40,14 +40,22 @@ class WithdrawalRequestTest {
     @Test
     fun `100원 배수가 아니면 WITHDRAWAL_AMOUNT_INVALID`() {
         val e = assertFailsWith<InvalidWithdrawalAmountException> {
-            WithdrawalRequest.request(userId = 1, amount = Money.of(1_050), bankAccount = bankAccount, at = now)
+            WithdrawalRequest.request(userId = 1, amount = 1_050, bankAccount = bankAccount, at = now)
+        }
+        assertEquals(WalletErrorCode.WITHDRAWAL_AMOUNT_INVALID, e.errorCode)
+    }
+
+    @Test
+    fun `음수 금액 요청은 AMOUNT_NEGATIVE 가 아니라 WITHDRAWAL_AMOUNT_INVALID`() {
+        val e = assertFailsWith<InvalidWithdrawalAmountException> {
+            WithdrawalRequest.request(userId = 1, amount = -5_000, bankAccount = bankAccount, at = now)
         }
         assertEquals(WalletErrorCode.WITHDRAWAL_AMOUNT_INVALID, e.errorCode)
     }
 
     @Test
     fun `상한은 없다 - 10억도 요청된다`() {
-        val request = WithdrawalRequest.request(userId = 1, amount = Money.of(1_000_000_000), bankAccount = bankAccount, at = now)
+        val request = WithdrawalRequest.request(userId = 1, amount = 1_000_000_000, bankAccount = bankAccount, at = now)
 
         assertEquals(Money.of(1_000_000_000), request.amount)
     }

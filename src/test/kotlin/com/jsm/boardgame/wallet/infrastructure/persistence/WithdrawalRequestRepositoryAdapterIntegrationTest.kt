@@ -4,7 +4,6 @@ import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
 import com.jsm.boardgame.wallet.domain.exception.WithdrawalRequestAlreadyProcessedException
 import com.jsm.boardgame.wallet.domain.model.BankAccount
-import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequest
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestStatus
 import com.jsm.boardgame.wallet.domain.repository.WithdrawalRequestRepository
@@ -34,7 +33,7 @@ class WithdrawalRequestRepositoryAdapterIntegrationTest {
     @Test
     fun `같은 version 으로 두 번 저장하면 두 번째가 WithdrawalRequestAlreadyProcessedException`() {
         val saved = withdrawalRequests.save(
-            WithdrawalRequest.request(userId = System.nanoTime(), amount = Money.of(10_000), bankAccount = bankAccount, at = now),
+            WithdrawalRequest.request(userId = System.nanoTime(), amount = 10_000, bankAccount = bankAccount, at = now),
         )
 
         // 두 관리자가 동시에 같은 요청을 읽었다고 가정한다 — 둘 다 version 0 을 들고 있다.
@@ -56,7 +55,7 @@ class WithdrawalRequestRepositoryAdapterIntegrationTest {
 
     @Test
     fun `저장 후 findById 가 상태 금액 계좌 세 필드를 그대로 돌려준다`() {
-        val request = WithdrawalRequest.request(userId = System.nanoTime(), amount = Money.of(10_000), bankAccount = bankAccount, at = now)
+        val request = WithdrawalRequest.request(userId = System.nanoTime(), amount = 10_000, bankAccount = bankAccount, at = now)
         val saved = withdrawalRequests.save(request)
 
         val reloaded = requireNotNull(withdrawalRequests.findById(saved.id!!))
