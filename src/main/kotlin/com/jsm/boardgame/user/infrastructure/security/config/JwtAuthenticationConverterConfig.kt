@@ -1,4 +1,4 @@
-package com.jsm.boardgame.user.infrastructure.security
+package com.jsm.boardgame.user.infrastructure.security.config
 
 import com.jsm.boardgame.user.domain.model.UserRole
 import org.springframework.context.annotation.Bean

@@ -1,5 +1,6 @@
-package com.jsm.boardgame.user.infrastructure.security
+package com.jsm.boardgame.user.infrastructure.security.config
 
+import com.jsm.boardgame.user.infrastructure.security.adapter.JwtBlacklistValidator
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration

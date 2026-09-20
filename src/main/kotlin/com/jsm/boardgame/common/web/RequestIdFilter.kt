@@ -1,4 +1,4 @@
-package com.jsm.boardgame.common.support
+package com.jsm.boardgame.common.web
 
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest

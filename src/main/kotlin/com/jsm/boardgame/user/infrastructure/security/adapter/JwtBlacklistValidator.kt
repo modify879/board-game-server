@@ -1,4 +1,4 @@
-package com.jsm.boardgame.user.infrastructure.security
+package com.jsm.boardgame.user.infrastructure.security.adapter
 
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import org.springframework.security.oauth2.core.OAuth2Error

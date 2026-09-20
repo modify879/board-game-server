@@ -1,5 +1,6 @@
-package com.jsm.boardgame.user.infrastructure.security
+package com.jsm.boardgame.user.infrastructure.security.adapter
 
+import com.jsm.boardgame.user.infrastructure.security.config.JwtProperties
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
 import com.jsm.boardgame.user.application.port.IssuedTokens
 import com.jsm.boardgame.user.domain.model.UserRole

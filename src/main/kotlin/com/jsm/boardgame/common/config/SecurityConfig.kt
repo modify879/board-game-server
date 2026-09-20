@@ -27,7 +27,7 @@ import org.springframework.security.web.access.AccessDeniedHandler
  * (`GET /api/users/{id}`, `POST /api/auth/logout` 포함 — 확정된 결정).
  * `/api/admin` 이하 전부는 ADMIN 역할을 추가로 요구한다.
  *
- * 액세스 토큰 검증은 [JwtDecoder] 빈(`user.infrastructure.security.JwtDecoderConfig`)에
+ * 액세스 토큰 검증은 [JwtDecoder] 빈(`user.infrastructure.security.config.JwtDecoderConfig`)에
  * 위임한다. 그 디코더가 로그아웃/세션 교체로 무효화된 토큰을 블랙리스트 검증기로 걸러낸다.
  * 401/403 은 필터 단계에서 응답이 끝나 `GlobalExceptionHandler` 를 거치지 않으므로 커스텀
  * `AuthenticationEntryPoint`/`AccessDeniedHandler`(`common.support`)로 교체한다 (규칙 8).

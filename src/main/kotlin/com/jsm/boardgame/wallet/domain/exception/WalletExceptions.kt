@@ -1,6 +1,6 @@
 package com.jsm.boardgame.wallet.domain.exception
 
-import com.jsm.boardgame.common.support.BusinessException
+import com.jsm.boardgame.common.error.BusinessException
 
 class InsufficientBalanceException(
     logMessage: String,

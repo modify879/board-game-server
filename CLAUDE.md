@@ -67,7 +67,11 @@ DB 제약 위반 변환이 한 번도 실행되지 않았고, 오류 계약은 �
 com.jsm.boardgame
 ├── common/                       # 기술 설정·횡단 관심사만. 도메인 개념 금지
 │   ├── config/                   # 스프링 설정 (Security, Clock, Kotlin JDSL)
-│   └── support/                  # 오류 계약(ErrorCode/ErrorKind), 전역 예외 핸들러, traceId 필터
+│   ├── error/                    # 오류 계약. **domain 이 import 하는 유일한 common 패키지**
+│   │                             #   (ErrorCode/ErrorKind/BusinessException)
+│   ├── web/                      # HTTP 경계 구현. domain 은 절대 참조하지 않는다
+│   │                             #   (전역 예외 핸들러, 시큐리티 필터 핸들러, traceId 필터)
+│   └── persistence/              # 어댑터가 쓰는 영속 유틸 (제약명 파싱)
 │
 └── user/                         # ← 모든 바운디드 컨텍스트가 이 형태를 따른다
     ├── domain/
@@ -90,7 +94,11 @@ com.jsm.boardgame
     │   ├── persistence/
     │   │   ├── entity/           # JpaEntity, Spring Data, 매퍼
     │   │   └── adapter/          # 출력 포트 구현
-    │   └── security/             # 해싱 등 보안 관련 어댑터
+    │   ├── security/
+    │   │   ├── adapter/          # 인터페이스를 구현하는 것 — 우리 포트든 프레임워크 SPI든
+    │   │   └── config/           # 빈 조립과 설정값 (@ConfigurationProperties)
+    │   └── acl/                  # 다른 바운디드 컨텍스트를 부르는 어댑터. DB 를 건드리지 않으므로
+    │                             #   persistence 에 두지 않는다 — 여기 모아야 교차 참조가 눈에 띈다
     └── presentation/
         ├── config/               # 이 계층의 @ConfigurationProperties 와 그걸 읽는 조립기
         ├── exception/            # presentation 이 소유하는 예외 (비밀번호 확인 불일치)
@@ -132,7 +140,7 @@ presentation → application → domain ← infrastructure
 **컨텍스트를 넘어야 할 때**: 다른 컨텍스트가 필요하면 **부르는 쪽이 포트를 소유하고**,
 어댑터가 상대의 **공개된 `application`** 만 호출한다. 상대의 `domain`·`infrastructure` 는
 어느 계층에서도 참조하지 않는다. `wallet/application/port/UserExistence`(wallet 이 소유,
-아는 것은 Boolean 하나) ← `wallet/infrastructure/.../UserExistenceAdapter`
+아는 것은 Boolean 하나) ← `wallet/infrastructure/acl/UserExistenceAdapter`
 (`user.application.query` 만 import). 포트를 거르고 `UserQueryService` 를 직접 부르면
 안 되는 이유는 규칙 8 이다 — 실패가 `user` 의 errorCode 로 나가는데 깨진 규칙은 부르는 쪽의
 규칙이다. 지금 교차 import 는 저장소 전체에 이 한 곳뿐이고, 늘어나면 경계를 다시 봐야 한다는
@@ -265,7 +273,7 @@ fun interface DiceRoller { fun roll(count: Int): List<Int> }
 
 ### 8. 오류는 코드로 계약하고, 문구는 클라이언트가 만든다
 
-구현은 `common/support/` 와 각 컨텍스트의 `domain/exception/` 을 참조한다.
+구현은 `common/error/`·`common/web/` 과 각 컨텍스트의 `domain/exception/` 을 참조한다.
 여기에는 코드만 봐서는 되돌리기 쉬운 결정의 이유만 적는다.
 
 - 예외는 규칙을 소유한 컨텍스트가 소유한다. `common` 에 범용 예외를 두지 않는다

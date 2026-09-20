@@ -3,7 +3,7 @@ package com.jsm.boardgame.user.infrastructure.persistence.adapter
 import com.jsm.boardgame.user.infrastructure.persistence.entity.UserJpaRepository
 import com.jsm.boardgame.user.infrastructure.persistence.entity.toDomain
 import com.jsm.boardgame.user.infrastructure.persistence.entity.toJpaEntity
-import com.jsm.boardgame.common.support.violatedConstraint
+import com.jsm.boardgame.common.persistence.violatedConstraint
 import com.jsm.boardgame.user.domain.exception.DuplicateNicknameException
 import com.jsm.boardgame.user.domain.exception.DuplicateUsernameException
 import com.jsm.boardgame.user.domain.model.Nickname
