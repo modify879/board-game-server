@@ -86,6 +86,7 @@ com.jsm.boardgame
     │   │   └── service/          # UseCase 구현
     │   ├── port/                 # 규칙이 아니라 유스케이스가 필요로 하는 출력 포트
     │   │                         #   (세션 저장소, 토큰 발급기)
+    │   ├── exception/            # 도메인 불변식이 아닌, 유스케이스의 실패 (로그인 실패, 토큰 무효)
     │   └── query/
     │       ├── service/          # 조회 서비스
     │       ├── port/             # 조회 출력 포트
@@ -294,12 +295,42 @@ fun interface DiceRoller { fun roll(count: Int): List<Int> }
   이 저장소에서 실제로 두 번 뚫린 자리다
 - 로그 메시지에 비밀번호를 남기지 않는다. `RawPassword`·`PasswordHash` 는 `toString()` 이 마스킹되어 있다
 
+**예외는 그 실패를 소유한 계층에 둔다. `domain/exception` 은 "이 컨텍스트의 예외 전부"가 아니다.**
+판단 기준은 포트를 `domain/service` 와 `application/port` 로 가를 때 쓴 것과 같다 —
+**애그리거트가 그 단어를 아는가.** `User` 에는 세션도 토큰도 로그인도 없으므로
+`LoginFailedException`·`InvalidRefreshTokenException` 은 `application/exception` 이고,
+`RawPassword` 가 직접 던지는 `InvalidPasswordException` 은 `domain/exception` 이다.
+`presentation` 도 자기 예외를 갖는다(`PasswordConfirmMismatchException` — 애그리거트에 대응
+필드가 없는 입력 폼의 관심사).
+
+**반면 에러 코드 enum 은 계층이 아니라 컨텍스트당 하나다.** `UserErrorCode` 에는 세 계층의
+코드가 모두 들어 있다. 계층별로 쪼개면 **클라이언트가 보는 계약이 우리 패키지 구조를 따라
+흔들린다** — 예외를 한 계층 옮기는 리팩터링이 API 변경이 되어선 안 된다.
+`XxxNotFoundException` 을 domain 에 두는 것도 같은 이유로 그대로 둔다(문헌도 갈린다).
+
 ---
 
 ## 표준 형태
 
 `user` 컨텍스트가 참조 구현이다. 새 컨텍스트는 그 파일 배치를 그대로 따른다.
 여기에는 **코드를 봐도 의도가 드러나지 않는 것**만 적는다.
+
+### Command 는 원시 타입만 받는다. enum 도 예외가 아니다
+
+`Command` 필드는 `Long`/`String` 이고, 도메인 타입 변환은 서비스가 한다
+(`UserRole.of(command.role)`). `ChangeUserRoleCommand` 가 `UserRole` 을 직접 받던 것이
+13개 중 유일한 이탈이었다. `application` 이 계약이므로 여기서 도메인 타입을 받으면
+**도메인 enum 상수명이 곧 API 계약**이 되고, 이름을 다듬는 리팩터링이 클라이언트를 깨뜨린다.
+변환이 서비스로 오면 알 수 없는 값도 `USER_ROLE_INVALID` 로 규칙 8 을 따라 나간다 —
+잭슨 역직렬화에서 걸리면 `errorCode` 없는 응답이 된다.
+
+**`@RequestParam` 의 도메인 enum 은 그대로 둔다**(`AdminWalletController` 의 `status`).
+업계 통설은 enum 이 **출력**에서 위험하고 입력에서는 상대적으로 안전하다는 것이고
+(응답에 값을 추가하면 클라이언트가 깨진다), 이 저장소는 이미 위험한 쪽만 막아 뒀다 —
+`DepositRequestView.status` 는 `String` 이다. Hombergs 도 매핑 전략을 코드베이스 전체에
+하나로 강제하지 말라고 못 박는다. 입력 경계에서 도메인 enum 이 주는 컴파일 검사를 포기할
+이유가 없다. **`presentation` 은 지점별 판단이 허용되지만 `application` 계약은 아니다** —
+이 비대칭이 의도다.
 
 ### VO 는 팩토리에서 정규화하고, 실패하면 에러 코드를 가진 도메인 예외를 던진다
 

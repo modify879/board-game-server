@@ -5,6 +5,7 @@ import com.jsm.boardgame.user.application.command.usecase.ChangeUserRoleUseCase
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.domain.exception.UserNotFoundException
 import com.jsm.boardgame.user.domain.model.UserId
+import com.jsm.boardgame.user.domain.model.UserRole
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
@@ -23,9 +24,10 @@ class ChangeUserRoleService(
 ) : ChangeUserRoleUseCase {
 
     override fun changeRole(command: ChangeUserRoleCommand) {
+        val role = UserRole.of(command.role)
         val user = users.findById(UserId(command.targetUserId))
             ?: throw UserNotFoundException("역할을 변경하려는 사용자를 찾을 수 없음: userId=${command.targetUserId}")
-        user.changeRole(command.role)
+        user.changeRole(role)
         users.save(user)
 
         // 블랙리스트를 save() 뒤에 둔다. 마지막이라 Redis 가 실패하면 @Transactional 이 save() 를

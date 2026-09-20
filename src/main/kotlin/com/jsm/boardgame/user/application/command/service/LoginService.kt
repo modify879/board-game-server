@@ -7,7 +7,7 @@ import com.jsm.boardgame.common.error.BusinessException
 import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
-import com.jsm.boardgame.user.domain.exception.LoginFailedException
+import com.jsm.boardgame.user.application.exception.LoginFailedException
 import com.jsm.boardgame.user.domain.model.RawPassword
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
