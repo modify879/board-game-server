@@ -69,12 +69,19 @@ com.jsm.boardgame
     │   │                         #   (해싱, 셔플, 주사위)
     │   └── exception/            # 이 컨텍스트의 에러 코드와 도메인 예외
     ├── application/
-    │   ├── command/              # UseCase 인터페이스 + 구현 + Command
+    │   ├── command/
+    │   │   ├── usecase/          # UseCase 인터페이스 + Command (입력 포트)
+    │   │   └── service/          # UseCase 구현
     │   ├── port/                 # 규칙이 아니라 유스케이스가 필요로 하는 출력 포트
     │   │                         #   (세션 저장소, 토큰 발급기)
-    │   └── query/                # 조회 서비스 + 조회 출력 포트 + 응답 DTO
+    │   └── query/
+    │       ├── service/          # 조회 서비스
+    │       ├── port/             # 조회 출력 포트
+    │       └── view/             # 응답 DTO
     ├── infrastructure/
-    │   ├── persistence/          # JpaEntity, Spring Data, 매퍼, 어댑터
+    │   ├── persistence/
+    │   │   ├── entity/           # JpaEntity, Spring Data, 매퍼
+    │   │   └── adapter/          # 출력 포트 구현
     │   └── security/             # 해싱 등 보안 관련 어댑터
     └── presentation/
         ├── config/               # 이 계층의 @ConfigurationProperties 와 그걸 읽는 조립기
@@ -85,12 +92,24 @@ com.jsm.boardgame
         └── ws/                   # WebSocket 핸들러
 ```
 
+**한 패키지에 역할이 섞여 있으면 가른다. 크기는 기준이 아니다.**
+명령은 `usecase`(입력 포트) / `service`(구현), 조회는 `service`/`port`/`view`,
+영속은 `entity`/`adapter`.
+파일이 하나뿐인 하위 패키지가 생겨도 그대로 둔다 — **모양의 일관성이 탐색 비용보다 우선한다.**
+컨텍스트가 달라도 같은 자리에 같은 것이 있어야, 새 컨텍스트를 만들 때 판단할 것이 없다.
+`domain/model`·`domain/repository`·`domain/exception` 처럼 패키지명 자체가 이미 역할인 곳은
+더 가르지 않는다.
+
+명령/조회 절단면(규칙 3)이 역할 분리보다 **위**에 온다. 헥사고날 참조 구현(BuckPal)은
+`port/in`+`service` 를 최상위에 두지만 거기엔 명령/조회 분리가 없다. 이 프로젝트는 규칙 3이
+먼저이므로 `command/{usecase,service}` 가 맞다.
+
 계층 이름은 `domain` / `application` / `infrastructure` / `presentation` 으로 통일한다.
 `interfaces` 는 쓰지 않는다 — Kotlin 의 `interface` 키워드와 시각적으로 충돌하는데,
 이 프로젝트는 포트 인터페이스를 `domain` 과 `application` 에 두므로 혼동이 크다.
 
 헥사고날 대응: `presentation` = driving adapter, `infrastructure` = driven adapter,
-`domain` 과 `application` 의 포트 = output port, `application/command` 의 UseCase = input port.
+`domain` 과 `application` 의 포트 = output port, `application/command/usecase` 의 UseCase = input port.
 
 ### 의존성 방향
 
