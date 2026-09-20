@@ -86,6 +86,7 @@ class UserRepositoryAdapterIntegrationTest {
                 passwordHash = "hashed-password-value",
                 nickname = invalidNickname,
                 profileImageKey = null,
+                role = "USER",
             ),
         )
 

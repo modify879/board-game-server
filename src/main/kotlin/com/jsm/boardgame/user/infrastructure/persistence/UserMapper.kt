@@ -5,6 +5,7 @@ import com.jsm.boardgame.user.domain.model.PasswordHash
 import com.jsm.boardgame.user.domain.model.ProfileImageKey
 import com.jsm.boardgame.user.domain.model.User
 import com.jsm.boardgame.user.domain.model.UserId
+import com.jsm.boardgame.user.domain.model.UserRole
 import com.jsm.boardgame.user.domain.model.Username
 
 fun UserJpaEntity.toDomain(): User =
@@ -14,6 +15,7 @@ fun UserJpaEntity.toDomain(): User =
         passwordHash = PasswordHash(passwordHash),
         nickname = Nickname.reconstitute(nickname),
         profileImageKey = profileImageKey?.let(ProfileImageKey::reconstitute),
+        role = UserRole.valueOf(role),
     )
 
 fun User.toJpaEntity(): UserJpaEntity =
@@ -23,4 +25,5 @@ fun User.toJpaEntity(): UserJpaEntity =
         passwordHash = passwordHash.value,
         nickname = nickname.value,
         profileImageKey = profileImageKey?.value,
+        role = role.name,
     )

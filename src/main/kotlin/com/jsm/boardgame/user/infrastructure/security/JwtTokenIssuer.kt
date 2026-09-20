@@ -2,6 +2,7 @@ package com.jsm.boardgame.user.infrastructure.security
 
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
 import com.jsm.boardgame.user.application.port.IssuedTokens
+import com.jsm.boardgame.user.domain.model.UserRole
 import com.nimbusds.jose.jwk.source.ImmutableSecret
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm
 import org.springframework.security.oauth2.jwt.JwtClaimsSet
@@ -51,7 +52,7 @@ class JwtTokenIssuer(
 
     private val random = SecureRandom()
 
-    override fun issue(userId: Long): IssuedTokens {
+    override fun issue(userId: Long, role: UserRole): IssuedTokens {
         val now = Instant.now(clock)
         val subject = userId.toString()
 
@@ -60,6 +61,7 @@ class JwtTokenIssuer(
         val accessToken = encode(
             subject = subject,
             jti = accessTokenId,
+            role = role,
             issuedAt = now,
             expiresAt = accessTokenExpiresAt,
         )
@@ -81,10 +83,11 @@ class JwtTokenIssuer(
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
     }
 
-    private fun encode(subject: String, jti: String, issuedAt: Instant, expiresAt: Instant): String {
+    private fun encode(subject: String, jti: String, role: UserRole, issuedAt: Instant, expiresAt: Instant): String {
         val claims = JwtClaimsSet.builder()
             .subject(subject)
             .id(jti)
+            .claim("role", role.name)
             .issuedAt(issuedAt)
             .expiresAt(expiresAt)
             .build()

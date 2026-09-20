@@ -5,17 +5,24 @@ import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
 import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.domain.exception.InvalidRefreshTokenException
+import com.jsm.boardgame.user.domain.model.UserId
+import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
-// DB 에 접근하지 않는다(토큰 검증 + Redis 세션만 다룬다) — 트랜잭션이 불필요하다.
+// 새 액세스 토큰에는 현재 역할을 박아야 강등이 갱신 한 번으로 반영된다 — 그래서 users.findById 로
+// DB 를 읽는다. 역할을 Redis 세션 문자열에 끼워 넣지 않는 이유: 직렬화 포맷과 rotate() 의 Lua
+// 스크립트를 함께 건드려야 하고, 이 저장소에서 그 자리가 이미 두 번 버그가 났다.
 @Service
+@Transactional(readOnly = true)
 class RefreshTokenService(
     private val tokenIssuer: AuthTokenIssuer,
     private val sessions: AuthSessionStore,
+    private val users: UserRepository,
     @Value("\${app.jwt.access-token-ttl}") private val accessTokenTtl: Duration,
     private val clock: Clock,
 ) : RefreshTokenUseCase {
@@ -29,7 +36,9 @@ class RefreshTokenService(
         // 세션에도, 블랙리스트에도 아직 아무것도 쓰지 않았으므로 상태를 남기지 않아 안전하다.
         // "검사 후 발급"으로 순서를 바꾸면 검사와 발급 사이에 경합 창이 다시 생겨, 이번에 고치려는
         // "확인 후 실행"의 비원자성 문제가 그대로 재현된다.
-        val tokens = tokenIssuer.issue(userId)
+        val user = users.findById(UserId(userId))
+            ?: throw InvalidRefreshTokenException("리프레시 토큰의 사용자가 존재하지 않음: userId=$userId")
+        val tokens = tokenIssuer.issue(userId, user.role)
 
         // 직전 토큰 유예 칸에 무엇이 들어가는지는 여기서 정하지 않는다 — sessions.rotate() 구현이
         // 이번 회전으로 밀려난 현재 토큰을 스스로 그 칸에 채운다. AuthSessionStore.rotate 문서 참고.

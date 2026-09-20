@@ -12,9 +12,9 @@ import tools.jackson.databind.ObjectMapper
 
 /**
  * 인증은 됐지만 권한이 없는 요청에 스프링 시큐리티가 이걸 호출한다.
- * 지금은 URL 별 인가 규칙에 역할 구분이 없어 인증만 되면 통과하므로 실제로는
- * 잘 타지 않는 경로지만, 오류 계약(errorCode/traceId)을 지키기 위해
- * `AuthenticationEntryPoint` 와 짝을 맞춰 둔다.
+ * `/api/admin` 이하가 `hasRole("ADMIN")` 을 요구하므로 일반 사용자가 관리자 API 를 부를 때마다
+ * 실제로 타는 경로다. 필터 단계라 `@RestControllerAdvice` 를 거치지 않으니
+ * 오류 계약(errorCode/traceId)은 여기서 직접 지킨다 — `AuthenticationEntryPoint` 와 짝이다.
  */
 @Component
 class ProblemDetailAccessDeniedHandler(

@@ -2,12 +2,15 @@ package com.jsm.boardgame.common.config
 
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.core.convert.converter.Converter
 import org.springframework.http.HttpMethod
+import org.springframework.security.authentication.AbstractAuthenticationToken
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
+import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.security.oauth2.jwt.JwtDecoder
 import org.springframework.security.web.AuthenticationEntryPoint
 import org.springframework.security.web.SecurityFilterChain
@@ -22,6 +25,7 @@ import org.springframework.security.web.access.AccessDeniedHandler
  *
  * 인가 규칙은 회원가입/로그인/토큰 갱신만 permitAll 이고 그 외 전부 인증을 요구한다
  * (`GET /api/users/{id}`, `POST /api/auth/logout` 포함 — 확정된 결정).
+ * `/api/admin` 이하 전부는 ADMIN 역할을 추가로 요구한다.
  *
  * 액세스 토큰 검증은 [JwtDecoder] 빈(`user.infrastructure.security.JwtDecoderConfig`)에
  * 위임한다. 그 디코더가 로그아웃/세션 교체로 무효화된 토큰을 블랙리스트 검증기로 걸러낸다.
@@ -38,6 +42,7 @@ class SecurityConfig {
     fun filterChain(
         http: HttpSecurity,
         jwtDecoder: JwtDecoder,
+        jwtAuthenticationConverter: Converter<Jwt, out AbstractAuthenticationToken>,
         authenticationEntryPoint: AuthenticationEntryPoint,
         accessDeniedHandler: AccessDeniedHandler,
     ): SecurityFilterChain =
@@ -50,11 +55,12 @@ class SecurityConfig {
                 it
                     .requestMatchers(HttpMethod.POST, "/api/users").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/refresh").permitAll()
+                    .requestMatchers("/api/admin/**").hasRole("ADMIN")
                     .anyRequest().authenticated()
             }
             .oauth2ResourceServer {
                 it
-                    .jwt { jwt -> jwt.decoder(jwtDecoder) }
+                    .jwt { jwt -> jwt.decoder(jwtDecoder).jwtAuthenticationConverter(jwtAuthenticationConverter) }
                     .authenticationEntryPoint(authenticationEntryPoint)
                     .accessDeniedHandler(accessDeniedHandler)
             }
