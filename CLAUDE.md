@@ -462,7 +462,11 @@ DB 직접 `UPDATE` 로는 토큰을 죽일 수 없어 즉시 강등이 불가능
   복구 시 돈이 틀어지고 그 오류는 서버가 죽었을 때만 드러난다
 - 프로필 이미지 업로드 (스토리지 연동, presigned URL). 지금은 키를 저장할 자리만 있다
 - 닉네임·비밀번호 변경, 회원 탈퇴
-- **Flyway 마이그레이션** — 지금은 `ddl-auto: update`. 운영 배포 전 반드시 전환한다
+- **Flyway 마이그레이션** — 지금은 `ddl-auto: update`. 운영 배포 전 반드시 전환한다.
+  전환할 때 **`wallets.user_id` 에 외래키 `fk_wallets_user` 를 건다.** 관리자 조정의
+  `UserExistence` 확인은 친절한 오류용일 뿐 보장이 아니다(확인과 저장 사이에 탈퇴가 들어오면 뚫린다).
+  Hibernate 는 JPA 연관관계 없이 FK 를 만들지 못해 지금은 걸 수 없다 —
+  `@ManyToOne` 을 넣는 것은 컨텍스트 결합이 훨씬 커지므로 답이 아니다
 - **관리자용 화면** — 지금은 REST API 까지다
 - ArchUnit 의존성 규칙 테스트 — 규칙 1·2 를 문서가 아닌 빌드로 강제. 게임이 둘 이상 생기면 도입.
   `LedgerEntry.record` 가 `internal` 인 것은 의도 표시일 뿐이다 — 단일 모듈에서 `internal` 은
