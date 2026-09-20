@@ -8,6 +8,8 @@ import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import com.jsm.boardgame.wallet.application.query.port.DepositRequestQueryRepository
 import com.jsm.boardgame.wallet.application.query.port.WalletQueryRepository
+import com.jsm.boardgame.wallet.application.query.port.WithdrawalRequestQueryRepository
+import com.jsm.boardgame.wallet.domain.model.BankAccount
 import com.jsm.boardgame.wallet.domain.model.DepositRequest
 import com.jsm.boardgame.wallet.domain.model.DepositRequestStatus
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
@@ -15,9 +17,12 @@ import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.Wallet
+import com.jsm.boardgame.wallet.domain.model.WithdrawalRequest
+import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestStatus
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
+import com.jsm.boardgame.wallet.domain.repository.WithdrawalRequestRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
@@ -52,6 +57,12 @@ class WalletQueryRepositoryAdapterIntegrationTest {
 
     @Autowired
     private lateinit var depositRequests: DepositRequestRepository
+
+    @Autowired
+    private lateinit var withdrawalRequestQueryRepository: WithdrawalRequestQueryRepository
+
+    @Autowired
+    private lateinit var withdrawalRequests: WithdrawalRequestRepository
 
     @Autowired
     private lateinit var users: UserRepository
@@ -114,6 +125,25 @@ class WalletQueryRepositoryAdapterIntegrationTest {
 
         assertTrue(all.content.map { it.id }.containsAll(listOf(pending.id!!.value, approved.id!!.value)))
         assertTrue(pendingOnly.content.all { it.status == DepositRequestStatus.PENDING.name })
+        assertTrue(pendingOnly.content.any { it.id == pending.id.value })
+        assertTrue(pendingOnly.content.none { it.id == approved.id.value })
+    }
+
+    @Test
+    fun `findByStatus(null) 은 전체 환전 요청을, findByStatus(PENDING) 은 PENDING 만 돌려준다`() {
+        val userId = uniqueUserId()
+        val bankAccount = BankAccount.of("국민은행", "11122233344", "홍길동")
+        val pending = withdrawalRequests.save(WithdrawalRequest.request(userId, 10_000, bankAccount, now))
+        val approved = withdrawalRequests.save(WithdrawalRequest.request(userId, 20_000, bankAccount, now))
+        approved.approve(adminUserId = 1, at = now)
+        withdrawalRequests.save(approved)
+
+        val all = withdrawalRequestQueryRepository.findByStatus(null, PageRequest.of(0, 10))
+        val pendingOnly =
+            withdrawalRequestQueryRepository.findByStatus(WithdrawalRequestStatus.PENDING, PageRequest.of(0, 10))
+
+        assertTrue(all.content.map { it.id }.containsAll(listOf(pending.id!!.value, approved.id!!.value)))
+        assertTrue(pendingOnly.content.all { it.status == WithdrawalRequestStatus.PENDING.name })
         assertTrue(pendingOnly.content.any { it.id == pending.id.value })
         assertTrue(pendingOnly.content.none { it.id == approved.id.value })
     }

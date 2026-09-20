@@ -236,6 +236,59 @@ class AdminWalletApiIntegrationTest {
     }
 
     @Test
+    // 이 URL 은 403 테스트에서만 불리고 있어 성공 경로가 통째로 비어 있었다.
+    fun `관리자 충전 요청 목록 조회는 status 로 필터링한다`() {
+        val (_, adminToken) = signUpAdminAndLogin()
+        val (_, userToken) = signUpAndLogin()
+
+        val pendingId = requestDeposit(userToken, 4_000)
+        val approvedId = requestDeposit(userToken, 6_000)
+        authPost("/api/admin/deposit-requests/$approvedId/approve", adminToken).andExpect(status().isNoContent)
+
+        val all = authGet("/api/admin/deposit-requests", adminToken).andExpect(status().isOk).andReturn()
+        val allIds = JsonPath.read<List<Int>>(all.response.contentAsString, "$.content[*].id")
+        assertThat(allIds).contains(pendingId.toInt(), approvedId.toInt())
+
+        val pendingOnly = authGet("/api/admin/deposit-requests?status=PENDING", adminToken)
+            .andExpect(status().isOk)
+            .andReturn()
+        val pendingIds = JsonPath.read<List<Int>>(pendingOnly.response.contentAsString, "$.content[*].id")
+        val pendingStatuses = JsonPath.read<List<String>>(pendingOnly.response.contentAsString, "$.content[*].status")
+
+        assertThat(pendingIds).contains(pendingId.toInt())
+        assertThat(pendingIds).doesNotContain(approvedId.toInt())
+        assertThat(pendingStatuses).allMatch { it == "PENDING" }
+    }
+
+    @Test
+    fun `관리자 환전 요청 목록 조회는 status 로 필터링한다`() {
+        val (_, adminToken) = signUpAdminAndLogin()
+        val (_, userToken) = signUpAndLogin()
+
+        val depositRequestId = requestDeposit(userToken, 10_000)
+        authPost("/api/admin/deposit-requests/$depositRequestId/approve", adminToken).andExpect(status().isNoContent)
+
+        val pendingId = requestWithdrawal(userToken, 3_000)
+        val rejectedId = requestWithdrawal(userToken, 2_000)
+        authPost("/api/admin/withdrawal-requests/$rejectedId/reject", adminToken, """{"reason":"계좌 확인 불가"}""")
+            .andExpect(status().isNoContent)
+
+        val all = authGet("/api/admin/withdrawal-requests", adminToken).andExpect(status().isOk).andReturn()
+        val allIds = JsonPath.read<List<Int>>(all.response.contentAsString, "$.content[*].id")
+        assertThat(allIds).contains(pendingId.toInt(), rejectedId.toInt())
+
+        val pendingOnly = authGet("/api/admin/withdrawal-requests?status=PENDING", adminToken)
+            .andExpect(status().isOk)
+            .andReturn()
+        val pendingIds = JsonPath.read<List<Int>>(pendingOnly.response.contentAsString, "$.content[*].id")
+        val pendingStatuses = JsonPath.read<List<String>>(pendingOnly.response.contentAsString, "$.content[*].status")
+
+        assertThat(pendingIds).contains(pendingId.toInt())
+        assertThat(pendingIds).doesNotContain(rejectedId.toInt())
+        assertThat(pendingStatuses).allMatch { it == "PENDING" }
+    }
+
+    @Test
     fun `존재하지 않는 대상 사용자로 조정하면 400과 WALLET_OWNER_NOT_FOUND 를 응답하고 detail 이 없다`() {
         val (_, adminToken) = signUpAdminAndLogin()
         val nonExistentUserId = 987_654_321L
