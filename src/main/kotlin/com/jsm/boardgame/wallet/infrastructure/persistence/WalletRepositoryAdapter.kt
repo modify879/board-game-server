@@ -3,6 +3,7 @@ package com.jsm.boardgame.wallet.infrastructure.persistence
 import com.jsm.boardgame.common.support.violatedConstraint
 import com.jsm.boardgame.wallet.domain.exception.ConcurrentWalletUpdateException
 import com.jsm.boardgame.wallet.domain.exception.InsufficientBalanceException
+import com.jsm.boardgame.wallet.domain.exception.WalletOwnerNotFoundException
 import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.springframework.dao.DataIntegrityViolationException
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Repository
 
 private const val CONSTRAINT_BALANCE_NON_NEGATIVE = "ck_wallets_balance_non_negative"
 private const val CONSTRAINT_USER = "uk_wallets_user"
+private const val CONSTRAINT_OWNER = "fk_wallets_user"
 
 @Repository
 class WalletRepositoryAdapter(
@@ -39,10 +41,12 @@ class WalletRepositoryAdapter(
         }
 
     private fun translate(e: DataIntegrityViolationException): RuntimeException {
-        val constraintName = e.violatedConstraint(CONSTRAINT_BALANCE_NON_NEGATIVE, CONSTRAINT_USER) ?: return e
+        val constraintName =
+            e.violatedConstraint(CONSTRAINT_BALANCE_NON_NEGATIVE, CONSTRAINT_USER, CONSTRAINT_OWNER) ?: return e
         return when (constraintName) {
             CONSTRAINT_BALANCE_NON_NEGATIVE -> InsufficientBalanceException("CHECK 제약 위반: $constraintName")
             CONSTRAINT_USER -> ConcurrentWalletUpdateException("unique 제약 위반: $constraintName")
+            CONSTRAINT_OWNER -> WalletOwnerNotFoundException("FK 제약 위반: $constraintName")
             else -> e
         }
     }

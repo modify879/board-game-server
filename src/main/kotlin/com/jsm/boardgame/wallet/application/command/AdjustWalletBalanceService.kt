@@ -3,6 +3,7 @@ package com.jsm.boardgame.wallet.application.command
 import com.jsm.boardgame.wallet.application.port.UserExistence
 import com.jsm.boardgame.wallet.domain.exception.InvalidAdjustmentException
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
+import com.jsm.boardgame.wallet.domain.exception.WalletOwnerNotFoundException
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
@@ -48,12 +49,11 @@ class AdjustWalletBalanceService(
         val absoluteAmount = Money.of(Math.absExact(command.amount))
 
         // 이 확인은 친절한 오류용이고 보장이 아니다 — 확인과 저장 사이에 회원 탈퇴가 들어오면
-        // 그대로 뚫린다. 실제 보장은 wallets.user_id 외래키인데 Hibernate 가 JPA 연관관계 없이는
-        // FK 를 만들지 못해 ddl-auto: update 인 지금은 걸 수 없다. Flyway 전환 때
-        // fk_wallets_user 를 추가한다("유일성은 DB 가 보장한다" 와 같은 두 겹 구조다).
+        // 그대로 뚫린다. 실제 보장은 wallets.user_id 외래키(fk_wallets_user, data.sql)다 —
+        // "유일성은 DB 가 보장한다" 와 같은 두 겹 구조이고, 사전 체크와 FK 위반 둘 다
+        // WALLET_OWNER_NOT_FOUND 로 떨어진다.
         if (!userExistence.exists(command.targetUserId)) {
-            throw InvalidAdjustmentException(
-                WalletErrorCode.ADJUSTMENT_TARGET_NOT_FOUND,
+            throw WalletOwnerNotFoundException(
                 "조정 대상 사용자가 없음: targetUserId=${command.targetUserId}",
             )
         }

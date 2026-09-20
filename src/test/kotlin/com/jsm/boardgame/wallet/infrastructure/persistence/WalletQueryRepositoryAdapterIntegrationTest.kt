@@ -1,6 +1,11 @@
 package com.jsm.boardgame.wallet.infrastructure.persistence
 
 import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.user.domain.model.Nickname
+import com.jsm.boardgame.user.domain.model.PasswordHash
+import com.jsm.boardgame.user.domain.model.User
+import com.jsm.boardgame.user.domain.model.Username
+import com.jsm.boardgame.user.domain.repository.UserRepository
 import com.jsm.boardgame.wallet.application.query.DepositRequestQueryRepository
 import com.jsm.boardgame.wallet.application.query.WalletQueryRepository
 import com.jsm.boardgame.wallet.domain.model.DepositRequest
@@ -18,6 +23,7 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.data.domain.PageRequest
 import java.time.Instant
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -47,9 +53,21 @@ class WalletQueryRepositoryAdapterIntegrationTest {
     @Autowired
     private lateinit var depositRequests: DepositRequestRepository
 
+    @Autowired
+    private lateinit var users: UserRepository
+
     private val now: Instant = Instant.parse("2026-01-01T00:00:00Z")
 
-    private fun uniqueUserId(): Long = System.nanoTime()
+    // fk_wallets_user 가 걸려 있으므로 존재하지 않는 userId 로는 지갑을 열 수 없다.
+    private fun uniqueUserId(): Long {
+        val suffix = UUID.randomUUID().toString().replace("-", "").take(9).lowercase()
+        val user = User.register(
+            username = Username.of("u$suffix"),
+            passwordHash = PasswordHash("hashed-password-value"),
+            nickname = Nickname.of("n" + suffix.take(5)),
+        )
+        return users.save(user).id!!.value
+    }
 
     @Test
     fun `원장 페이지네이션이 id 내림차순으로 나오고 totalElements 가 맞다`() {

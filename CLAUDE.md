@@ -304,6 +304,9 @@ value class Nickname private constructor(val value: String) {
 **이름을 붙인** unique 제약(`uk_users_username`)이 실제 보장이다 — 이름이 있어야 어댑터가 어느 제약이
 깨졌는지 구분해 도메인 예외로 변환할 수 있다. 스프링 예외가 `application` 까지 올라가면 의존성 방향이 깨진다.
 
+외래키도 같은 구조다. `AdjustWalletBalanceService` 의 `UserExistence` 사전 체크는 친절한 오류용이고
+`fk_wallets_user` 가 실제 보장이며, 둘 다 `WALLET_OWNER_NOT_FOUND` 로 떨어진다.
+
 ### 제약 위반을 도메인 예외로 번역하려면 `saveAndFlush` 여야 한다
 
 `jpa.save()` 만 쓰면 **UPDATE 는 트랜잭션 커밋 시점에야 flush 되므로** CHECK 제약 위반과
@@ -434,7 +437,7 @@ DB 직접 `UPDATE` 로는 토큰을 죽일 수 없어 즉시 강등이 불가능
 
 - **JWT 서명 키 교체** — `application.yaml` 에 개발용 키가 커밋되어 있다.
   저장소를 읽을 수 있는 사람은 누구나 임의 사용자로 토큰을 위조할 수 있다.
-  운영에서는 `APP_JWT_SECRET` 환경변수로 반드시 덮어쓴다. Flyway 와 같은 등급의 배포 전 필수 항목이다
+  운영에서는 `APP_JWT_SECRET` 환경변수로 반드시 덮어쓴다. 배포 전 필수 항목이다
 - **클라이언트 single-flight** — 토큰 갱신 경합은 서버만으로 완전히 못 막는다.
   화면 하나에서 API 요청 여러 개가 동시에 401 을 받으면 각자 갱신을 시도하는데,
   서버는 그게 "같은 의도의 중복"인지 "진짜 여러 번의 시도"인지 알 방법이 없다 — 클라이언트만 안다.
@@ -462,11 +465,15 @@ DB 직접 `UPDATE` 로는 토큰을 죽일 수 없어 즉시 강등이 불가능
   복구 시 돈이 틀어지고 그 오류는 서버가 죽었을 때만 드러난다
 - 프로필 이미지 업로드 (스토리지 연동, presigned URL). 지금은 키를 저장할 자리만 있다
 - 닉네임·비밀번호 변경, 회원 탈퇴
-- **Flyway 마이그레이션** — 지금은 `ddl-auto: update`. 운영 배포 전 반드시 전환한다.
-  전환할 때 **`wallets.user_id` 에 외래키 `fk_wallets_user` 를 건다.** 관리자 조정의
-  `UserExistence` 확인은 친절한 오류용일 뿐 보장이 아니다(확인과 저장 사이에 탈퇴가 들어오면 뚫린다).
-  Hibernate 는 JPA 연관관계 없이 FK 를 만들지 못해 지금은 걸 수 없다 —
-  `@ManyToOne` 을 넣는 것은 컨텍스트 결합이 훨씬 커지므로 답이 아니다
+- **스키마 관리 방침** — `ddl-auto: update` 를 계속 쓴다. 운영 전 Flyway 로 전환할 계획이 **없다.**
+  `ddl-auto: update` 는 **추가만 하고 아무것도 지우지 않는다** — 컬럼 삭제·이름 변경·타입 변경·
+  데이터 이관을 하지 않는다. 그런 변경이 필요해지면 그때는 손으로 SQL 을 쳐야 하고, 이 선택의
+  대가가 그것이다. **Hibernate 가 만들지 못하는 제약(FK 등)은 `src/main/resources/data.sql` 의
+  멱등 DDL 로 건다** (`fk_wallets_user` 가 그 예다). 손으로 한 번 실행하는 방식을 쓰지 않는 이유는
+  Testcontainers 의 빈 DB 에 제약이 없어 번역 경로가 검증되지 않기 때문이다.
+  **`data.sql` 의 문장 구분자는 `;` 가 아니라 `@@@` 다**(`spring.sql.init.separator`) —
+  스프링의 기본 분할기가 `do $$ ... $$` 블록 안의 `;` 에서 잘라 버리기 때문이다.
+  여기에 문장을 더할 때 `;` 로 끝내면 조용히 앞 문장과 합쳐진다
 - **관리자용 화면** — 지금은 REST API 까지다
 - ArchUnit 의존성 규칙 테스트 — 규칙 1·2 를 문서가 아닌 빌드로 강제. 게임이 둘 이상 생기면 도입.
   `LedgerEntry.record` 가 `internal` 인 것은 의도 표시일 뿐이다 — 단일 모듈에서 `internal` 은

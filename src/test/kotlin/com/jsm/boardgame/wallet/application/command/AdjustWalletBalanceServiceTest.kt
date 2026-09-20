@@ -4,6 +4,7 @@ import com.jsm.boardgame.wallet.application.port.UserExistence
 import com.jsm.boardgame.wallet.domain.exception.InsufficientBalanceException
 import com.jsm.boardgame.wallet.domain.exception.InvalidAdjustmentException
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
+import com.jsm.boardgame.wallet.domain.exception.WalletOwnerNotFoundException
 import com.jsm.boardgame.wallet.domain.model.LedgerEntry
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryId
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
@@ -159,12 +160,12 @@ class AdjustWalletBalanceServiceTest {
     }
 
     @Test
-    fun `존재하지 않는 사용자를 대상으로 조정하면 ADJUSTMENT_TARGET_NOT_FOUND 이고 지갑이 만들어지지 않는다`() {
-        val e = assertFailsWith<InvalidAdjustmentException> {
+    fun `존재하지 않는 사용자를 대상으로 조정하면 WALLET_OWNER_NOT_FOUND 이고 지갑이 만들어지지 않는다`() {
+        val e = assertFailsWith<WalletOwnerNotFoundException> {
             service.adjust(AdjustWalletBalanceCommand(targetUserId = 999, amount = 1_000, reason = "사유", adminUserId = 99))
         }
 
-        assertEquals(WalletErrorCode.ADJUSTMENT_TARGET_NOT_FOUND, e.errorCode)
+        assertEquals(WalletErrorCode.WALLET_OWNER_NOT_FOUND, e.errorCode)
         assertTrue(wallets.stored.isEmpty())
     }
 }

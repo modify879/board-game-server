@@ -1,9 +1,15 @@
 package com.jsm.boardgame.wallet.infrastructure.persistence
 
 import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.user.domain.model.Nickname
+import com.jsm.boardgame.user.domain.model.PasswordHash
+import com.jsm.boardgame.user.domain.model.User
+import com.jsm.boardgame.user.domain.model.Username
+import com.jsm.boardgame.user.domain.repository.UserRepository
 import com.jsm.boardgame.wallet.domain.exception.ConcurrentWalletUpdateException
 import com.jsm.boardgame.wallet.domain.exception.InsufficientBalanceException
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
+import com.jsm.boardgame.wallet.domain.exception.WalletOwnerNotFoundException
 import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.model.WalletId
@@ -11,6 +17,7 @@ import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -30,7 +37,20 @@ class WalletRepositoryAdapterIntegrationTest {
     @Autowired
     private lateinit var wallets: WalletRepository
 
-    private fun uniqueUserId(): Long = System.nanoTime()
+    @Autowired
+    private lateinit var users: UserRepository
+
+    // fk_wallets_user 가 실제로 걸려 있으므로 존재하지 않는 userId 로는 저장할 수 없다 —
+    // 가짜 nanoTime 대신 실제 사용자 행을 만들어 그 id 를 쓴다.
+    private fun uniqueUserId(): Long {
+        val suffix = UUID.randomUUID().toString().replace("-", "").take(9).lowercase()
+        val user = User.register(
+            username = Username.of("u$suffix"),
+            passwordHash = PasswordHash("hashed-password-value"),
+            nickname = Nickname.of("n" + suffix.take(5)),
+        )
+        return users.save(user).id!!.value
+    }
 
     @Test
     fun `음수 잔액을 저장하면 InsufficientBalanceException 으로 번역된다`() {
@@ -102,5 +122,27 @@ class WalletRepositoryAdapterIntegrationTest {
 
         assertEquals(Money.of(500), found?.balance)
         assertEquals(1L, found?.version)
+    }
+
+    // 이 테스트가 실패하면 data.sql 이 안 돈 것이다 — fk_wallets_user 가 실제로 걸려 있고
+    // 어댑터가 그 위반을 도메인 예외로 번역하는지를 함께 검증한다.
+    @Test
+    fun `존재하지 않는 userId 로 지갑을 저장하면 WalletOwnerNotFoundException 으로 번역된다`() {
+        val nonExistentUserId = 987_654_321L
+
+        val e = assertFailsWith<WalletOwnerNotFoundException> {
+            wallets.save(Wallet.open(userId = nonExistentUserId))
+        }
+        assertEquals(WalletErrorCode.WALLET_OWNER_NOT_FOUND, e.errorCode)
+    }
+
+    @Test
+    fun `findOrOpen 도 존재하지 않는 userId 면 WalletOwnerNotFoundException 으로 번역된다`() {
+        val nonExistentUserId = 987_654_322L
+
+        val e = assertFailsWith<WalletOwnerNotFoundException> {
+            wallets.findOrOpen(nonExistentUserId)
+        }
+        assertEquals(WalletErrorCode.WALLET_OWNER_NOT_FOUND, e.errorCode)
     }
 }

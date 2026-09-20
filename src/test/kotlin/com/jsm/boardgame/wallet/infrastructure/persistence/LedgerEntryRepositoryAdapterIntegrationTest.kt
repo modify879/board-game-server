@@ -1,6 +1,11 @@
 package com.jsm.boardgame.wallet.infrastructure.persistence
 
 import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.user.domain.model.Nickname
+import com.jsm.boardgame.user.domain.model.PasswordHash
+import com.jsm.boardgame.user.domain.model.User
+import com.jsm.boardgame.user.domain.model.Username
+import com.jsm.boardgame.user.domain.repository.UserRepository
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
@@ -12,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import java.time.Instant
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -29,9 +35,23 @@ class LedgerEntryRepositoryAdapterIntegrationTest {
     @Autowired
     private lateinit var ledgerEntriesJpa: LedgerEntryJpaRepository
 
+    @Autowired
+    private lateinit var users: UserRepository
+
+    // fk_wallets_user 가 걸려 있으므로 존재하지 않는 userId 로는 지갑을 열 수 없다.
+    private fun uniqueUserId(): Long {
+        val suffix = UUID.randomUUID().toString().replace("-", "").take(9).lowercase()
+        val user = User.register(
+            username = Username.of("u$suffix"),
+            passwordHash = PasswordHash("hashed-password-value"),
+            nickname = Nickname.of("n" + suffix.take(5)),
+        )
+        return users.save(user).id!!.value
+    }
+
     @Test
     fun `저장한 엔트리를 다시 읽으면 type amount balanceAfter reference memo 가 보존된다`() {
-        val wallet = wallets.save(Wallet.open(userId = System.nanoTime()))
+        val wallet = wallets.save(Wallet.open(userId = uniqueUserId()))
         val reference = LedgerReference(LedgerReferenceType.DEPOSIT_REQUEST, 7)
         val entry = wallet.record(
             type = LedgerEntryType.DEPOSIT,

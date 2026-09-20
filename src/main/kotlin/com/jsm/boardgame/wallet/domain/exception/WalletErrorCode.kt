@@ -20,7 +20,9 @@ enum class WalletErrorCode(override val kind: ErrorKind) : ErrorCode {
     WITHDRAWAL_REQUEST_NOT_FOUND(ErrorKind.NOT_FOUND),
     WITHDRAWAL_REQUEST_ALREADY_PROCESSED(ErrorKind.CONFLICT),
     // 없는 리소스에 접근한 게 아니라 관리자가 보낸 요청의 대상이 틀린 것이므로 NOT_FOUND 가 아니라 INVALID(400)다.
-    ADJUSTMENT_TARGET_NOT_FOUND(ErrorKind.INVALID),
+    // UserExistence 사전 체크와 fk_wallets_user 위반이 둘 다 이 코드로 떨어진다 — 조정 전용 이름이면
+    // 어댑터가 환전·충전 경로의 FK 위반에도 "조정" 코드를 내보내게 된다.
+    WALLET_OWNER_NOT_FOUND(ErrorKind.INVALID),
     ;
 
     override val code: String get() = name
