@@ -2,6 +2,11 @@ package com.jsm.boardgame.wallet.presentation.rest
 
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
+import com.jsm.boardgame.wallet.domain.model.LedgerReference
+import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
+import com.jsm.boardgame.wallet.domain.model.Money
+import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -17,6 +22,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -33,6 +39,9 @@ class WalletApiIntegrationTest {
 
     @Autowired
     private lateinit var walletRepository: WalletRepository
+
+    @Autowired
+    private lateinit var ledgerEntryRepository: LedgerEntryRepository
 
     private fun uniqueUsername(): String =
         "u" + UUID.randomUUID().toString().replace("-", "").take(9).lowercase()
@@ -85,6 +94,27 @@ class WalletApiIntegrationTest {
 
     private fun authDelete(url: String, accessToken: String): ResultActions =
         mockMvc.perform(delete(url).header("Authorization", "Bearer $accessToken"))
+
+    /** 환전은 요청 시점에 즉시 차감되므로, 요청을 만들려면 잔액이 먼저 있어야 한다. */
+    private fun fundWallet(userId: Long, amount: Long) {
+        val wallet = walletRepository.findOrOpen(userId)
+        val entry = wallet.record(
+            type = LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT,
+            amount = Money.of(amount),
+            reference = LedgerReference(LedgerReferenceType.ADMIN_ADJUSTMENT, 0),
+            at = Instant.now(),
+        )
+        walletRepository.save(wallet)
+        ledgerEntryRepository.save(entry)
+    }
+
+    private fun requestWithdrawal(accessToken: String, amount: Int): Int {
+        val body = """{"amount":$amount,"bankName":"국민은행","accountNumber":"11122233344","accountHolder":"홍길동"}"""
+        val result = authPost("/api/wallet/withdrawal-requests", accessToken, body)
+            .andExpect(status().isCreated)
+            .andReturn()
+        return JsonPath.read(result.response.contentAsString, "$.requestId")
+    }
 
     @Test
     fun `지갑이 없는 사용자도 잔액 조회는 200과 잔액 0을 응답하고 지갑을 만들지 않는다`() {
@@ -190,6 +220,24 @@ class WalletApiIntegrationTest {
         authDelete("/api/wallet/deposit-requests/$requestId", accessToken)
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.errorCode").value("DEPOSIT_REQUEST_ALREADY_PROCESSED"))
+    }
+
+    @Test
+    fun `환전 요청 목록 조회는 본인 것만 돌려준다`() {
+        val (userIdA, accessTokenA) = signUpAndLogin()
+        val (userIdB, accessTokenB) = signUpAndLogin()
+        fundWallet(userIdA, 10_000)
+        fundWallet(userIdB, 10_000)
+
+        requestWithdrawal(accessTokenA, 5000)
+        requestWithdrawal(accessTokenB, 7000)
+
+        val result = authGet("/api/wallet/withdrawal-requests", accessTokenA)
+            .andExpect(status().isOk)
+            .andReturn()
+
+        val amounts = JsonPath.read<List<Int>>(result.response.contentAsString, "$.content[*].amount")
+        assertThat(amounts).containsExactly(5000)
     }
 
     @Test
