@@ -58,9 +58,6 @@ private class LoginFakeUserRepository : UserRepository {
     }
 }
 
-/**
- * hash = "hashed:" + raw 규약으로 실제 문자열 비교를 한다.
- */
 private class LoginFakePasswordHasher : PasswordHasher {
     override fun hash(raw: RawPassword): PasswordHash = PasswordHash("hashed:${raw.value}")
 
