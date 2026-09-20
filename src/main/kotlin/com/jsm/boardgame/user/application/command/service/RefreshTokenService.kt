@@ -7,7 +7,7 @@ import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
 import com.jsm.boardgame.user.application.port.RotationResult
-import com.jsm.boardgame.user.domain.exception.InvalidRefreshTokenException
+import com.jsm.boardgame.user.application.exception.InvalidRefreshTokenException
 import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Value

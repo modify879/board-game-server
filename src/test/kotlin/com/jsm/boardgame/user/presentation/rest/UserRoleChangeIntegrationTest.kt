@@ -162,4 +162,22 @@ class UserRoleChangeIntegrationTest {
             .andExpect(status().isForbidden)
             .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"))
     }
+
+    @Test
+    // 역할이 도메인 enum 이던 시절에는 알 수 없는 값이 잭슨 역직렬화에서 걸려
+    // errorCode 없는 응답으로 샜다. 이제 UserRole.of() 가 계약대로 떨어뜨린다.
+    fun `알 수 없는 역할 문자열은 400 과 USER_ROLE_INVALID 를 응답한다`() {
+        val password = "password123"
+        val usernameA = uniqueUsername()
+        val idA = idFromLocation(signUp(usernameA, password).andExpect(status().isCreated))
+        promoteToAdmin(idA)
+        val accessTokenA = accessTokenOf(login(usernameA, password).andExpect(status().isOk))
+
+        val usernameB = uniqueUsername()
+        val idB = idFromLocation(signUp(usernameB, password).andExpect(status().isCreated))
+
+        changeRole(idB, "SUPER_ADMIN", accessTokenA)
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("USER_ROLE_INVALID"))
+    }
 }

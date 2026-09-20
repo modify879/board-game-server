@@ -26,3 +26,7 @@ class DuplicateUsernameException(
 class DuplicateNicknameException(
     logMessage: String,
 ) : BusinessException(UserErrorCode.DUPLICATE_NICKNAME, logMessage)
+
+class InvalidUserRoleException(
+    logMessage: String,
+) : BusinessException(UserErrorCode.USER_ROLE_INVALID, logMessage)

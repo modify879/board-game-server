@@ -5,6 +5,7 @@ import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.domain.exception.UserErrorCode
+import com.jsm.boardgame.user.domain.exception.InvalidUserRoleException
 import com.jsm.boardgame.user.domain.exception.UserNotFoundException
 import com.jsm.boardgame.user.domain.model.Nickname
 import com.jsm.boardgame.user.domain.model.PasswordHash
@@ -85,7 +86,7 @@ class ChangeUserRoleServiceTest {
     fun `대상 사용자의 역할이 바뀌고 저장된다`() {
         users.put(1L, UserRole.USER)
 
-        service.changeRole(ChangeUserRoleCommand(1L, UserRole.ADMIN))
+        service.changeRole(ChangeUserRoleCommand(1L, "ADMIN"))
 
         assertEquals(UserRole.ADMIN, users.findById(UserId(1L))!!.role)
     }
@@ -95,7 +96,7 @@ class ChangeUserRoleServiceTest {
         users.put(1L, UserRole.ADMIN)
         sessions.start(1L, AuthSession("jti-1", "refresh-1", Instant.now().plusSeconds(1_000)))
 
-        service.changeRole(ChangeUserRoleCommand(1L, UserRole.USER))
+        service.changeRole(ChangeUserRoleCommand(1L, "USER"))
 
         assertTrue(sessions.isAccessTokenBlacklisted("jti-1"))
     }
@@ -104,7 +105,7 @@ class ChangeUserRoleServiceTest {
     fun `세션이 없는 사용자도 예외 없이 역할만 바뀐다`() {
         users.put(1L, UserRole.USER)
 
-        service.changeRole(ChangeUserRoleCommand(1L, UserRole.ADMIN))
+        service.changeRole(ChangeUserRoleCommand(1L, "ADMIN"))
 
         assertEquals(UserRole.ADMIN, users.findById(UserId(1L))!!.role)
     }
@@ -112,7 +113,7 @@ class ChangeUserRoleServiceTest {
     @Test
     fun `없는 사용자면 USER_NOT_FOUND`() {
         val e = assertFailsWith<UserNotFoundException> {
-            service.changeRole(ChangeUserRoleCommand(999L, UserRole.ADMIN))
+            service.changeRole(ChangeUserRoleCommand(999L, "ADMIN"))
         }
 
         assertEquals(UserErrorCode.USER_NOT_FOUND, e.errorCode)
@@ -123,8 +124,38 @@ class ChangeUserRoleServiceTest {
         users.put(1L, UserRole.ADMIN)
         sessions.start(1L, AuthSession("jti-1", "refresh-1", Instant.now().plusSeconds(1_000)))
 
-        service.changeRole(ChangeUserRoleCommand(1L, UserRole.USER))
+        service.changeRole(ChangeUserRoleCommand(1L, "USER"))
 
         assertFalse(sessions.clearCalled)
+    }
+
+    @Test
+    fun `알 수 없는 역할 문자열이면 USER_ROLE_INVALID`() {
+        users.put(1L, UserRole.USER)
+
+        val e = assertFailsWith<InvalidUserRoleException> {
+            service.changeRole(ChangeUserRoleCommand(1L, "SUPER_ADMIN"))
+        }
+
+        assertEquals(UserErrorCode.USER_ROLE_INVALID, e.errorCode)
+        assertEquals(UserRole.USER, users.findById(UserId(1L))!!.role)
+    }
+
+    @Test
+    fun `역할 검사가 사용자 조회보다 먼저다 - 없는 사용자에 잘못된 역할이면 USER_ROLE_INVALID`() {
+        val e = assertFailsWith<InvalidUserRoleException> {
+            service.changeRole(ChangeUserRoleCommand(999L, "nope"))
+        }
+
+        assertEquals(UserErrorCode.USER_ROLE_INVALID, e.errorCode)
+    }
+
+    @Test
+    fun `소문자와 공백은 정규화되어 통과한다`() {
+        users.put(1L, UserRole.USER)
+
+        service.changeRole(ChangeUserRoleCommand(1L, " admin "))
+
+        assertEquals(UserRole.ADMIN, users.findById(UserId(1L))!!.role)
     }
 }

@@ -6,7 +6,7 @@ import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
 import com.jsm.boardgame.user.application.port.IssuedTokens
 import com.jsm.boardgame.user.application.port.RotationResult
-import com.jsm.boardgame.user.domain.exception.LoginFailedException
+import com.jsm.boardgame.user.application.exception.LoginFailedException
 import com.jsm.boardgame.user.domain.exception.UserErrorCode
 import com.jsm.boardgame.user.domain.model.Nickname
 import com.jsm.boardgame.user.domain.model.PasswordHash
