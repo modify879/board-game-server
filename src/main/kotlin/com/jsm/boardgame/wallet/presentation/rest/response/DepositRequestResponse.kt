@@ -1,6 +1,6 @@
 package com.jsm.boardgame.wallet.presentation.rest.response
 
-import com.jsm.boardgame.wallet.application.query.DepositRequestView
+import com.jsm.boardgame.wallet.application.query.view.DepositRequestView
 import java.time.Instant
 
 data class DepositRequestResponse(

@@ -1,6 +1,6 @@
 package com.jsm.boardgame.user.presentation.rest.request
 
-import com.jsm.boardgame.user.application.command.LoginCommand
+import com.jsm.boardgame.user.application.command.usecase.LoginCommand
 
 data class LoginRequest(
     val username: String,

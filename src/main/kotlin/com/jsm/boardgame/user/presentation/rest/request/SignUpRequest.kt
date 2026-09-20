@@ -1,6 +1,6 @@
 package com.jsm.boardgame.user.presentation.rest.request
 
-import com.jsm.boardgame.user.application.command.SignUpCommand
+import com.jsm.boardgame.user.application.command.usecase.SignUpCommand
 import com.jsm.boardgame.user.presentation.exception.PasswordConfirmMismatchException
 
 data class SignUpRequest(

@@ -33,6 +33,9 @@ Docker 가 실행 중이어야 한다.
   빠뜨리면 "Failed to determine a suitable driver class" 로 컨텍스트가 뜨지 않는다
 - **목 라이브러리를 쓰지 않는다.** 인메모리 페이크를 테스트 파일 안에 직접 만든다
   (`SignUpServiceTest` 의 `FakeUserRepository` 참조)
+  - **페이크 이름에는 테스트별 접두를 붙인다**(`RequestFakeWalletRepository`, `RejectFakeWalletRepository`).
+    Kotlin 의 top-level `private` 클래스는 파일 스코프가 아니라 패키지 레벨 JVM 클래스라,
+    같은 패키지의 두 테스트가 `FakeWalletRepository` 를 함께 쓰면 재선언 오류로 컴파일이 깨진다.
 - **예외는 메시지가 아니라 `errorCode` 로 검증한다.** 메시지로 검증하면 규칙 8 이 무의미해진다
 - 테스트 이름은 백틱을 쓴 한국어 문장으로 쓴다
 - **컨테이너가 필요한 테스트는 클래스 이름에 `IntegrationTest` 접미사를 붙인다.**
@@ -46,6 +49,11 @@ Docker 가 실행 중이어야 한다.
 DB 제약 위반 변환이 한 번도 실행되지 않았고, 오류 계약은 스프링이 body 를 미리 만들어 주는
 경로만 타서 `body=null` 로 오는 405·404 가 통째로 빠져 있었다.
 대표 케이스 하나를 통과했다고 그 규칙이 검증된 것이 아니다.
+
+**wallet 통합 테스트는 실제 `users` 행을 먼저 만들어야 한다.** `fk_wallets_user` 때문에
+합성 userId(`System.nanoTime()` 등)로 지갑을 열면 FK 위반으로 떨어진다. `UserRepository` 를
+주입받아 사용자를 만들고 그 id 를 써라(`WalletRepositoryAdapterIntegrationTest` 참조).
+충전·환전 **요청** 테이블에는 FK 가 없어 거기서는 합성 id 가 통한다 — 이 비대칭이 헷갈리는 자리다.
 
 ---
 
@@ -69,12 +77,19 @@ com.jsm.boardgame
     │   │                         #   (해싱, 셔플, 주사위)
     │   └── exception/            # 이 컨텍스트의 에러 코드와 도메인 예외
     ├── application/
-    │   ├── command/              # UseCase 인터페이스 + 구현 + Command
+    │   ├── command/
+    │   │   ├── usecase/          # UseCase 인터페이스 + Command (입력 포트)
+    │   │   └── service/          # UseCase 구현
     │   ├── port/                 # 규칙이 아니라 유스케이스가 필요로 하는 출력 포트
     │   │                         #   (세션 저장소, 토큰 발급기)
-    │   └── query/                # 조회 서비스 + 조회 출력 포트 + 응답 DTO
+    │   └── query/
+    │       ├── service/          # 조회 서비스
+    │       ├── port/             # 조회 출력 포트
+    │       └── view/             # 응답 DTO
     ├── infrastructure/
-    │   ├── persistence/          # JpaEntity, Spring Data, 매퍼, 어댑터
+    │   ├── persistence/
+    │   │   ├── entity/           # JpaEntity, Spring Data, 매퍼
+    │   │   └── adapter/          # 출력 포트 구현
     │   └── security/             # 해싱 등 보안 관련 어댑터
     └── presentation/
         ├── config/               # 이 계층의 @ConfigurationProperties 와 그걸 읽는 조립기
@@ -85,12 +100,24 @@ com.jsm.boardgame
         └── ws/                   # WebSocket 핸들러
 ```
 
+**한 패키지에 역할이 섞여 있으면 가른다. 크기는 기준이 아니다.**
+명령은 `usecase`(입력 포트) / `service`(구현), 조회는 `service`/`port`/`view`,
+영속은 `entity`/`adapter`.
+파일이 하나뿐인 하위 패키지가 생겨도 그대로 둔다 — **모양의 일관성이 탐색 비용보다 우선한다.**
+컨텍스트가 달라도 같은 자리에 같은 것이 있어야, 새 컨텍스트를 만들 때 판단할 것이 없다.
+`domain/model`·`domain/repository`·`domain/exception` 처럼 패키지명 자체가 이미 역할인 곳은
+더 가르지 않는다.
+
+명령/조회 절단면(규칙 3)이 역할 분리보다 **위**에 온다. 헥사고날 참조 구현(BuckPal)은
+`port/in`+`service` 를 최상위에 두지만 거기엔 명령/조회 분리가 없다. 이 프로젝트는 규칙 3이
+먼저이므로 `command/{usecase,service}` 가 맞다.
+
 계층 이름은 `domain` / `application` / `infrastructure` / `presentation` 으로 통일한다.
 `interfaces` 는 쓰지 않는다 — Kotlin 의 `interface` 키워드와 시각적으로 충돌하는데,
 이 프로젝트는 포트 인터페이스를 `domain` 과 `application` 에 두므로 혼동이 크다.
 
 헥사고날 대응: `presentation` = driving adapter, `infrastructure` = driven adapter,
-`domain` 과 `application` 의 포트 = output port, `application/command` 의 UseCase = input port.
+`domain` 과 `application` 의 포트 = output port, `application/command/usecase` 의 UseCase = input port.
 
 ### 의존성 방향
 
@@ -101,6 +128,15 @@ presentation → application → domain ← infrastructure
 - `domain` 은 아무것도 의존하지 않는다.
 - `application` 과 `domain` 은 `infrastructure` 를 참조하지 않는다. 예외 없다.
 - 바운디드 컨텍스트끼리 서로의 `domain` 을 참조하지 않는다.
+
+**컨텍스트를 넘어야 할 때**: 다른 컨텍스트가 필요하면 **부르는 쪽이 포트를 소유하고**,
+어댑터가 상대의 **공개된 `application`** 만 호출한다. 상대의 `domain`·`infrastructure` 는
+어느 계층에서도 참조하지 않는다. `wallet/application/port/UserExistence`(wallet 이 소유,
+아는 것은 Boolean 하나) ← `wallet/infrastructure/.../UserExistenceAdapter`
+(`user.application.query` 만 import). 포트를 거르고 `UserQueryService` 를 직접 부르면
+안 되는 이유는 규칙 8 이다 — 실패가 `user` 의 errorCode 로 나가는데 깨진 규칙은 부르는 쪽의
+규칙이다. 지금 교차 import 는 저장소 전체에 이 한 곳뿐이고, 늘어나면 경계를 다시 봐야 한다는
+신호다.
 
 ---
 
@@ -335,6 +371,16 @@ UPDATE 경로**로 잡는다 (`WalletRepositoryAdapterIntegrationTest`).
 
 **이중기입은 쓰지 않는다.** 대신 `referenceType`/`referenceId` 로 모든 엔트리가 출처를 가리킨다.
 
+### 한 트랜잭션이 애그리거트 여럿을 고치는 것은 의도된 이탈이다
+
+Vernon 의 "한 트랜잭션에 애그리거트 하나" 원칙을 지키지 않는다. `ApproveDepositRequestService` 는
+`DepositRequest`·`Wallet`·`LedgerEntry` 셋을 한 트랜잭션에서 고친다.
+`Wallet`+`LedgerEntry` 2개는 **구조적으로 피할 수 없다** — 원장은 무한히 늘어나는 컬렉션이라
+애그리거트 안에 넣을 수 없고, `balance` 를 지우고 매번 SUM 하면 조회 비용이 폭증한다.
+스냅샷+원장을 택한 대가다. 세 번째를 떼어내려면 아웃박스+이벤트+정산 대조가 필요하고
+"승인됐는데 잔액은 그대로"인 창이 생긴다. 이 규모에서는 순손해다.
+Vernon 의 원칙은 확장성과 경합을 위한 것이지 정확성을 위한 것이 아니다.
+
 ### 환전은 요청 시점에 차감한다
 
 요청만 걸어두고 차감을 승인 시점으로 미루면, 요청 후 게임에서 다 잃은 뒤 승인되어 잔액이 음수가 된다.
@@ -399,6 +445,11 @@ DB 직접 `UPDATE` 로는 토큰을 죽일 수 없어 즉시 강등이 불가능
 
 `spring.data.web.pageable.serialization-mode: via_dto`. `Page` 를 그대로 직렬화하면 응답 JSON 이
 `PageImpl` 의 내부 구조에 묶여 계약이 불안정해진다. 클라이언트는 `content` 와 `page` 를 보면 된다.
+
+### 주석 안에 관리자 경로 와일드카드를 그대로 쓰지 않는다
+
+Kotlin 은 블록 주석 중첩을 지원해서 KDoc 안의 별표-슬래시가 주석을 닫아버린다.
+`Unclosed comment` 는 엉뚱한 줄을 가리켜 원인을 찾기 어렵다. `/api/admin` 이하 처럼 풀어 쓴다.
 
 ### 액세스 토큰은 JWT, 리프레시 토큰은 불투명하다
 

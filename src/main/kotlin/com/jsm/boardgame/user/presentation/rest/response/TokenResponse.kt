@@ -1,6 +1,6 @@
 package com.jsm.boardgame.user.presentation.rest.response
 
-import com.jsm.boardgame.user.application.command.AuthTokens
+import com.jsm.boardgame.user.application.command.usecase.AuthTokens
 import java.time.Instant
 
 data class TokenResponse(

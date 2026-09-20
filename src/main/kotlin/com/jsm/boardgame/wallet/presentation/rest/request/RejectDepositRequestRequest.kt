@@ -1,6 +1,6 @@
 package com.jsm.boardgame.wallet.presentation.rest.request
 
-import com.jsm.boardgame.wallet.application.command.RejectDepositRequestCommand
+import com.jsm.boardgame.wallet.application.command.usecase.RejectDepositRequestCommand
 
 data class RejectDepositRequestRequest(val reason: String) {
     fun toCommand(requestId: Long, adminUserId: Long): RejectDepositRequestCommand =

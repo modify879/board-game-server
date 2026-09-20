@@ -1,15 +1,15 @@
 package com.jsm.boardgame.wallet.presentation.rest
 
 import com.jsm.boardgame.common.support.AuthenticationRequiredException
-import com.jsm.boardgame.wallet.application.command.CancelDepositRequestCommand
-import com.jsm.boardgame.wallet.application.command.CancelDepositRequestUseCase
-import com.jsm.boardgame.wallet.application.command.CancelWithdrawalRequestCommand
-import com.jsm.boardgame.wallet.application.command.CancelWithdrawalRequestUseCase
-import com.jsm.boardgame.wallet.application.command.RequestDepositUseCase
-import com.jsm.boardgame.wallet.application.command.RequestWithdrawalUseCase
-import com.jsm.boardgame.wallet.application.query.DepositRequestQueryService
-import com.jsm.boardgame.wallet.application.query.WalletQueryService
-import com.jsm.boardgame.wallet.application.query.WithdrawalRequestQueryService
+import com.jsm.boardgame.wallet.application.command.usecase.CancelDepositRequestCommand
+import com.jsm.boardgame.wallet.application.command.usecase.CancelDepositRequestUseCase
+import com.jsm.boardgame.wallet.application.command.usecase.CancelWithdrawalRequestCommand
+import com.jsm.boardgame.wallet.application.command.usecase.CancelWithdrawalRequestUseCase
+import com.jsm.boardgame.wallet.application.command.usecase.RequestDepositUseCase
+import com.jsm.boardgame.wallet.application.command.usecase.RequestWithdrawalUseCase
+import com.jsm.boardgame.wallet.application.query.service.DepositRequestQueryService
+import com.jsm.boardgame.wallet.application.query.service.WalletQueryService
+import com.jsm.boardgame.wallet.application.query.service.WithdrawalRequestQueryService
 import com.jsm.boardgame.wallet.presentation.config.DepositAccountResolver
 import com.jsm.boardgame.wallet.presentation.rest.request.RequestDepositRequest
 import com.jsm.boardgame.wallet.presentation.rest.request.RequestWithdrawalRequest

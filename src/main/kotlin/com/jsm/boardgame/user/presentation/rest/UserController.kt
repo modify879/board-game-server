@@ -1,7 +1,7 @@
 package com.jsm.boardgame.user.presentation.rest
 
-import com.jsm.boardgame.user.application.command.SignUpUseCase
-import com.jsm.boardgame.user.application.query.UserQueryService
+import com.jsm.boardgame.user.application.command.usecase.SignUpUseCase
+import com.jsm.boardgame.user.application.query.service.UserQueryService
 import com.jsm.boardgame.user.presentation.config.ProfileImageUrlResolver
 import com.jsm.boardgame.user.presentation.rest.request.SignUpRequest
 import com.jsm.boardgame.user.presentation.rest.response.UserProfileResponse

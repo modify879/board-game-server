@@ -1,6 +1,6 @@
 package com.jsm.boardgame.wallet.presentation.rest.response
 
-import com.jsm.boardgame.wallet.application.query.WalletBalanceView
+import com.jsm.boardgame.wallet.application.query.view.WalletBalanceView
 
 data class WalletBalanceResponse(val balance: Long) {
     companion object {
