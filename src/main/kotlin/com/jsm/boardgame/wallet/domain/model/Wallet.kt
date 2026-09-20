@@ -5,6 +5,9 @@ import com.jsm.boardgame.wallet.domain.exception.InvalidAmountException
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
 import java.time.Instant
 
+@JvmInline
+value class WalletId(val value: Long)
+
 class Wallet private constructor(
     val id: WalletId?,
     // user 컨텍스트의 UserId 를 쓰지 않는다 — 컨텍스트끼리 domain 을 참조하지 않는다(규칙 1).

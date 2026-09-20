@@ -6,6 +6,11 @@ import com.jsm.boardgame.wallet.domain.exception.InvalidRejectionReasonException
 import com.jsm.boardgame.wallet.domain.exception.NotRequestOwnerException
 import java.time.Instant
 
+@JvmInline
+value class DepositRequestId(val value: Long)
+
+enum class DepositRequestStatus { PENDING, APPROVED, REJECTED, CANCELED }
+
 class DepositRequest private constructor(
     val id: DepositRequestId?,
     val userId: Long,

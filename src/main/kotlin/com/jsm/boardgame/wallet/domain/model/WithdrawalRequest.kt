@@ -6,6 +6,11 @@ import com.jsm.boardgame.wallet.domain.exception.NotRequestOwnerException
 import com.jsm.boardgame.wallet.domain.exception.WithdrawalRequestAlreadyProcessedException
 import java.time.Instant
 
+@JvmInline
+value class WithdrawalRequestId(val value: Long)
+
+enum class WithdrawalRequestStatus { PENDING, APPROVED, REJECTED, CANCELED }
+
 class WithdrawalRequest private constructor(
     val id: WithdrawalRequestId?,
     val userId: Long,
