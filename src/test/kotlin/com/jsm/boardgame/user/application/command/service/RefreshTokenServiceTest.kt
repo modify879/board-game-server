@@ -53,7 +53,7 @@ private class RefreshFakeAuthTokenIssuer : AuthTokenIssuer {
 }
 
 /**
- * 실제 [com.jsm.boardgame.user.infrastructure.security.RedisAuthSessionStore] 와 같은 유예 규칙을
+ * 실제 [com.jsm.boardgame.user.infrastructure.security.adapter.RedisAuthSessionStore] 와 같은 유예 규칙을
  * 흉내 낸다 — 직전 토큰은 한 세대만 기억하고, 그 세대에 한해서만 [refreshReuseGrace] 동안
  * 재사용을 허용한다. 두 세대 전 토큰은 애초에 기억하지 않으므로 유예와 무관하게 거부된다.
  *
@@ -108,7 +108,7 @@ private class RefreshInMemoryAuthSessionStore(
     override fun isAccessTokenBlacklisted(accessTokenId: String): Boolean = blacklist.containsKey(accessTokenId)
 
     /**
-     * 실제 [com.jsm.boardgame.user.infrastructure.security.RedisAuthSessionStore.rotate] 와 같은 규칙으로
+     * 실제 [com.jsm.boardgame.user.infrastructure.security.adapter.RedisAuthSessionStore.rotate] 와 같은 규칙으로
      * 대조와 교체를 한 번에 수행한다 — 현재 토큰이거나 유예 안의 직전 토큰이면 교체하고, 아니면 세션을
      * 건드리지 않은 채 Mismatch 를 돌려준다. 통과하면 다음 직전 칸에는 이번에 밀려난 현재 토큰
      * (stored.session.refreshToken)이 들어간다 — 제시된 토큰이 현재 칸과 일치했든 유예 중인 직전

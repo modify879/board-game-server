@@ -1,5 +1,6 @@
-package com.jsm.boardgame.common.support
+package com.jsm.boardgame.common.web
 
+import com.jsm.boardgame.common.error.ErrorCode
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.MDC

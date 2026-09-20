@@ -1,4 +1,4 @@
-package com.jsm.boardgame.common.support
+package com.jsm.boardgame.common.persistence
 
 import org.hibernate.exception.ConstraintViolationException
 import org.springframework.dao.DataIntegrityViolationException

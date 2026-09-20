@@ -1,4 +1,4 @@
-package com.jsm.boardgame.user.infrastructure.security
+package com.jsm.boardgame.user.infrastructure.security.config
 
 import org.springframework.security.oauth2.jwt.Jwt
 import java.time.Instant

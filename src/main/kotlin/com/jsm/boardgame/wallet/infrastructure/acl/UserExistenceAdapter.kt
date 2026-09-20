@@ -1,4 +1,4 @@
-package com.jsm.boardgame.wallet.infrastructure.persistence.adapter
+package com.jsm.boardgame.wallet.infrastructure.acl
 
 import com.jsm.boardgame.user.application.query.service.UserQueryService
 import com.jsm.boardgame.wallet.application.port.UserExistence

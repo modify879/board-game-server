@@ -1,6 +1,6 @@
 package com.jsm.boardgame.user.domain.exception
 
-import com.jsm.boardgame.common.support.BusinessException
+import com.jsm.boardgame.common.error.BusinessException
 
 class UserNotFoundException(
     logMessage: String,

@@ -3,7 +3,7 @@ package com.jsm.boardgame.user.application.command.service
 import com.jsm.boardgame.user.application.command.usecase.AuthTokens
 import com.jsm.boardgame.user.application.command.usecase.LoginCommand
 import com.jsm.boardgame.user.application.command.usecase.LoginUseCase
-import com.jsm.boardgame.common.support.BusinessException
+import com.jsm.boardgame.common.error.BusinessException
 import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer

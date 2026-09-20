@@ -1,6 +1,6 @@
 package com.jsm.boardgame.user.presentation.rest
 
-import com.jsm.boardgame.common.support.AuthenticationRequiredException
+import com.jsm.boardgame.common.error.AuthenticationRequiredException
 import com.jsm.boardgame.user.application.command.usecase.LoginUseCase
 import com.jsm.boardgame.user.application.command.usecase.LogoutUseCase
 import com.jsm.boardgame.user.application.command.usecase.RefreshTokenUseCase

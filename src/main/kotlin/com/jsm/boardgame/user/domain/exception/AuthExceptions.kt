@@ -1,6 +1,6 @@
 package com.jsm.boardgame.user.domain.exception
 
-import com.jsm.boardgame.common.support.BusinessException
+import com.jsm.boardgame.common.error.BusinessException
 
 /**
  * RawPassword(길이 미달·초과)와 PasswordHash(빈 값) 검증 실패를 대표하는 예외.

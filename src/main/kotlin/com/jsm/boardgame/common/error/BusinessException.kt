@@ -1,4 +1,4 @@
-package com.jsm.boardgame.common.support
+package com.jsm.boardgame.common.error
 
 /**
  * errorCode 는 클라이언트 계약으로 응답에 나간다.

@@ -1,6 +1,6 @@
 package com.jsm.boardgame.wallet.presentation.rest
 
-import com.jsm.boardgame.common.support.AuthenticationRequiredException
+import com.jsm.boardgame.common.error.AuthenticationRequiredException
 import com.jsm.boardgame.wallet.application.command.usecase.CancelDepositRequestCommand
 import com.jsm.boardgame.wallet.application.command.usecase.CancelDepositRequestUseCase
 import com.jsm.boardgame.wallet.application.command.usecase.CancelWithdrawalRequestCommand

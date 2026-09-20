@@ -1,7 +1,7 @@
 package com.jsm.boardgame.wallet.domain.exception
 
-import com.jsm.boardgame.common.support.ErrorCode
-import com.jsm.boardgame.common.support.ErrorKind
+import com.jsm.boardgame.common.error.ErrorCode
+import com.jsm.boardgame.common.error.ErrorKind
 
 enum class WalletErrorCode(override val kind: ErrorKind) : ErrorCode {
     AMOUNT_NEGATIVE(ErrorKind.INVALID),

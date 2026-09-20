@@ -1,7 +1,7 @@
 package com.jsm.boardgame.user.domain.exception
 
-import com.jsm.boardgame.common.support.ErrorCode
-import com.jsm.boardgame.common.support.ErrorKind
+import com.jsm.boardgame.common.error.ErrorCode
+import com.jsm.boardgame.common.error.ErrorKind
 
 enum class UserErrorCode(override val kind: ErrorKind) : ErrorCode {
     NICKNAME_LENGTH(ErrorKind.INVALID),

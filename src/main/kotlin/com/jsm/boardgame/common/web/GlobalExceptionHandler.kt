@@ -1,5 +1,7 @@
-package com.jsm.boardgame.common.support
+package com.jsm.boardgame.common.web
 
+import com.jsm.boardgame.common.error.BusinessException
+import com.jsm.boardgame.common.error.ErrorKind
 import jakarta.servlet.http.HttpServletRequest
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
