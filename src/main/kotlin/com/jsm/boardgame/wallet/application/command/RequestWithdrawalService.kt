@@ -4,7 +4,6 @@ import com.jsm.boardgame.wallet.domain.model.BankAccount
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
-import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequest
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
@@ -39,9 +38,9 @@ class RequestWithdrawalService(
         // 원장 엔트리가 요청을 가리켜야 하므로 요청을 먼저 저장해 id 를 받는다.
         val saved = withdrawalRequests.save(request)
 
-        // 지갑이 없으면 여기서 만든다. 잔액 0 이므로 아래 record 가 INSUFFICIENT_BALANCE 로 떨어진다 —
+        // 지갑이 없으면 잔액 0 인 채로 만들어지므로 아래 record 가 INSUFFICIENT_BALANCE 로 떨어진다 —
         // "지갑 없음" 을 따로 알리지 않는 것이 의도다.
-        val wallet = wallets.findByUserId(command.userId) ?: wallets.save(Wallet.open(command.userId))
+        val wallet = wallets.findOrOpen(command.userId)
         val entry = wallet.record(
             type = LedgerEntryType.WITHDRAWAL_HOLD,
             amount = saved.amount,

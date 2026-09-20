@@ -4,7 +4,6 @@ import com.jsm.boardgame.wallet.domain.exception.WithdrawalRequestNotFoundExcept
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
-import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
@@ -40,7 +39,7 @@ class CancelWithdrawalRequestService(
         request.cancel(command.requesterUserId, now)
         withdrawalRequests.save(request)
 
-        val wallet = wallets.findByUserId(request.userId) ?: wallets.save(Wallet.open(request.userId))
+        val wallet = wallets.findOrOpen(request.userId)
         val entry = wallet.record(
             type = LedgerEntryType.WITHDRAWAL_REFUND,
             amount = request.amount,

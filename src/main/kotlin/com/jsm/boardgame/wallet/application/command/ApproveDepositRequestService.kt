@@ -5,7 +5,6 @@ import com.jsm.boardgame.wallet.domain.model.DepositRequestId
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
-import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
@@ -36,8 +35,8 @@ class ApproveDepositRequestService(
         request.approve(command.adminUserId, creditedAmount, now)
         depositRequests.save(request)
 
-        // 2) 지갑은 없으면 여기서 만든다(lazy). 저장해서 id 를 받아야 원장을 붙일 수 있다.
-        val wallet = wallets.findByUserId(request.userId) ?: wallets.save(Wallet.open(request.userId))
+        // 2) 지갑은 없으면 여기서 만든다(findOrOpen).
+        val wallet = wallets.findOrOpen(request.userId)
 
         val entry = wallet.record(
             type = LedgerEntryType.DEPOSIT,

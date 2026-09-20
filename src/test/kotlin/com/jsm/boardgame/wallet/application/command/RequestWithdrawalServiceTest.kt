@@ -66,6 +66,8 @@ private class RequestFakeWalletRepository : WalletRepository {
         stored[wallet.userId] = saved
         return saved
     }
+
+    override fun findOrOpen(userId: Long): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
 }
 
 private class RequestFakeLedgerEntryRepository : LedgerEntryRepository {

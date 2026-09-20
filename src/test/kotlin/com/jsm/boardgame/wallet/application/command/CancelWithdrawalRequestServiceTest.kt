@@ -45,6 +45,8 @@ private class CancelFakeWalletRepository : WalletRepository {
         stored[wallet.userId] = wallet
         return wallet
     }
+
+    override fun findOrOpen(userId: Long): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
 }
 
 private class CancelFakeLedgerEntryRepository : LedgerEntryRepository {

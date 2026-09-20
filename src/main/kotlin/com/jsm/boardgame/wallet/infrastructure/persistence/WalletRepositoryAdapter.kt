@@ -20,6 +20,9 @@ class WalletRepositoryAdapter(
     override fun findByUserId(userId: Long): Wallet? =
         jpa.findByUserId(userId)?.toDomain()
 
+    override fun findOrOpen(userId: Long): Wallet =
+        findByUserId(userId) ?: save(Wallet.open(userId))
+
     /**
      * `save` 대신 `saveAndFlush` 를 쓴다. `save` 만 쓰면 UPDATE 는 트랜잭션 커밋 시점에야
      * flush 되므로, CHECK 제약 위반과 `@Version` 충돌이 이 어댑터의 `catch` 를 지나쳐 버리고

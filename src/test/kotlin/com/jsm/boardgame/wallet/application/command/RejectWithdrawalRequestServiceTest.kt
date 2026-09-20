@@ -47,6 +47,8 @@ private class RejectFakeWalletRepository : WalletRepository {
         stored[wallet.userId] = wallet
         return wallet
     }
+
+    override fun findOrOpen(userId: Long): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
 }
 
 private class RejectFakeLedgerEntryRepository : LedgerEntryRepository {

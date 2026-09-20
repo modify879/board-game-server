@@ -8,7 +8,6 @@ import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.MONEY_UNIT
 import com.jsm.boardgame.wallet.domain.model.Money
-import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.springframework.stereotype.Service
@@ -61,7 +60,7 @@ class AdjustWalletBalanceService(
 
         val now = Instant.now(clock)
         val type = if (command.amount > 0) LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT else LedgerEntryType.ADMIN_ADJUSTMENT_DEBIT
-        val wallet = wallets.findByUserId(command.targetUserId) ?: wallets.save(Wallet.open(command.targetUserId))
+        val wallet = wallets.findOrOpen(command.targetUserId)
 
         val entry = wallet.record(
             type = type,
