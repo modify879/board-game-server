@@ -1,6 +1,6 @@
 package com.jsm.boardgame.user.presentation.rest.response
 
-import com.jsm.boardgame.user.application.query.UserProfile
+import com.jsm.boardgame.user.application.query.view.UserProfile
 
 data class UserProfileResponse(
     val id: Long,

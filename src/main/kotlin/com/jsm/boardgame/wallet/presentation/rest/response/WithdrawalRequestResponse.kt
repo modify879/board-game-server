@@ -1,6 +1,6 @@
 package com.jsm.boardgame.wallet.presentation.rest.response
 
-import com.jsm.boardgame.wallet.application.query.WithdrawalRequestView
+import com.jsm.boardgame.wallet.application.query.view.WithdrawalRequestView
 import java.time.Instant
 
 data class WithdrawalRequestResponse(

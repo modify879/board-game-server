@@ -1,6 +1,6 @@
 package com.jsm.boardgame.user.presentation.rest
 
-import com.jsm.boardgame.user.application.command.ChangeUserRoleUseCase
+import com.jsm.boardgame.user.application.command.usecase.ChangeUserRoleUseCase
 import com.jsm.boardgame.user.presentation.rest.request.ChangeUserRoleRequest
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.PathVariable

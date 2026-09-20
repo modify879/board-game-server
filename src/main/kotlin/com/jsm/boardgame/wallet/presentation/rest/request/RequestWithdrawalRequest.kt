@@ -1,6 +1,6 @@
 package com.jsm.boardgame.wallet.presentation.rest.request
 
-import com.jsm.boardgame.wallet.application.command.RequestWithdrawalCommand
+import com.jsm.boardgame.wallet.application.command.usecase.RequestWithdrawalCommand
 
 data class RequestWithdrawalRequest(
     val amount: Long,

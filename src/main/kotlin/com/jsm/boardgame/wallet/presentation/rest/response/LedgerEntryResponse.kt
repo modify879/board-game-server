@@ -1,6 +1,6 @@
 package com.jsm.boardgame.wallet.presentation.rest.response
 
-import com.jsm.boardgame.wallet.application.query.LedgerEntryView
+import com.jsm.boardgame.wallet.application.query.view.LedgerEntryView
 import java.time.Instant
 
 data class LedgerEntryResponse(
