@@ -1,5 +1,10 @@
 package com.jsm.boardgame.wallet.infrastructure.persistence
 
+import com.jsm.boardgame.wallet.domain.model.DepositRequest
+import com.jsm.boardgame.wallet.domain.model.DepositRequestId
+import com.jsm.boardgame.wallet.domain.model.DepositRequestStatus
+import com.jsm.boardgame.wallet.domain.model.Money
+import com.linecorp.kotlinjdsl.support.spring.data.jpa.repository.KotlinJdslJpqlExecutor
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.GeneratedValue
@@ -8,6 +13,7 @@ import jakarta.persistence.Id
 import jakarta.persistence.Index
 import jakarta.persistence.Table
 import jakarta.persistence.Version
+import org.springframework.data.jpa.repository.JpaRepository
 import java.time.Instant
 
 @Entity
@@ -50,3 +56,35 @@ class DepositRequestJpaEntity(
     @Column(name = "version", nullable = false)
     var version: Long = 0,
 )
+
+interface DepositRequestJpaRepository :
+    JpaRepository<DepositRequestJpaEntity, Long>,
+    KotlinJdslJpqlExecutor
+
+fun DepositRequestJpaEntity.toDomain(): DepositRequest =
+    DepositRequest.reconstitute(
+        id = DepositRequestId(id),
+        userId = userId,
+        requestedAmount = Money.reconstitute(requestedAmount),
+        requestedAt = requestedAt,
+        status = DepositRequestStatus.valueOf(status),
+        creditedAmount = creditedAmount?.let(Money::reconstitute),
+        processedBy = processedBy,
+        processedAt = processedAt,
+        rejectionReason = rejectionReason,
+        version = version,
+    )
+
+fun DepositRequest.toJpaEntity(): DepositRequestJpaEntity =
+    DepositRequestJpaEntity(
+        id = id?.value ?: 0,
+        userId = userId,
+        requestedAmount = requestedAmount.amount,
+        requestedAt = requestedAt,
+        status = status.name,
+        creditedAmount = creditedAmount?.amount,
+        processedBy = processedBy,
+        processedAt = processedAt,
+        rejectionReason = rejectionReason,
+        version = version,
+    )

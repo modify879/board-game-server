@@ -1,5 +1,11 @@
 package com.jsm.boardgame.wallet.infrastructure.persistence
 
+import com.jsm.boardgame.wallet.domain.model.BankAccount
+import com.jsm.boardgame.wallet.domain.model.Money
+import com.jsm.boardgame.wallet.domain.model.WithdrawalRequest
+import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestId
+import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestStatus
+import com.linecorp.kotlinjdsl.support.spring.data.jpa.repository.KotlinJdslJpqlExecutor
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.GeneratedValue
@@ -8,6 +14,7 @@ import jakarta.persistence.Id
 import jakarta.persistence.Index
 import jakarta.persistence.Table
 import jakarta.persistence.Version
+import org.springframework.data.jpa.repository.JpaRepository
 import java.time.Instant
 
 @Entity
@@ -57,3 +64,37 @@ class WithdrawalRequestJpaEntity(
     @Column(name = "version", nullable = false)
     var version: Long = 0,
 )
+
+interface WithdrawalRequestJpaRepository :
+    JpaRepository<WithdrawalRequestJpaEntity, Long>,
+    KotlinJdslJpqlExecutor
+
+fun WithdrawalRequestJpaEntity.toDomain(): WithdrawalRequest =
+    WithdrawalRequest.reconstitute(
+        id = WithdrawalRequestId(id),
+        userId = userId,
+        amount = Money.reconstitute(amount),
+        bankAccount = BankAccount.reconstitute(bankName, accountNumber, accountHolder),
+        requestedAt = requestedAt,
+        status = WithdrawalRequestStatus.valueOf(status),
+        processedBy = processedBy,
+        processedAt = processedAt,
+        rejectionReason = rejectionReason,
+        version = version,
+    )
+
+fun WithdrawalRequest.toJpaEntity(): WithdrawalRequestJpaEntity =
+    WithdrawalRequestJpaEntity(
+        id = id?.value ?: 0,
+        userId = userId,
+        amount = amount.amount,
+        bankName = bankAccount.bankName,
+        accountNumber = bankAccount.accountNumber,
+        accountHolder = bankAccount.accountHolder,
+        requestedAt = requestedAt,
+        status = status.name,
+        processedBy = processedBy,
+        processedAt = processedAt,
+        rejectionReason = rejectionReason,
+        version = version,
+    )

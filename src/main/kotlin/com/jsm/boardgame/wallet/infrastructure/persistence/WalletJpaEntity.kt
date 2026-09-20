@@ -1,5 +1,9 @@
 package com.jsm.boardgame.wallet.infrastructure.persistence
 
+import com.jsm.boardgame.wallet.domain.model.Money
+import com.jsm.boardgame.wallet.domain.model.Wallet
+import com.jsm.boardgame.wallet.domain.model.WalletId
+import com.linecorp.kotlinjdsl.support.spring.data.jpa.repository.KotlinJdslJpqlExecutor
 import jakarta.persistence.CheckConstraint
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -9,6 +13,7 @@ import jakarta.persistence.Id
 import jakarta.persistence.Table
 import jakarta.persistence.UniqueConstraint
 import jakarta.persistence.Version
+import org.springframework.data.jpa.repository.JpaRepository
 
 @Entity
 @Table(
@@ -34,3 +39,27 @@ class WalletJpaEntity(
     @Column(name = "version", nullable = false)
     var version: Long = 0,
 )
+
+// KotlinJdslJpqlExecutor 를 상속하면 findAll/findPage 등의 실행기가 자동 주입된다 (UserJpaRepository 와 같은 이유).
+interface WalletJpaRepository :
+    JpaRepository<WalletJpaEntity, Long>,
+    KotlinJdslJpqlExecutor {
+
+    fun findByUserId(userId: Long): WalletJpaEntity?
+}
+
+fun WalletJpaEntity.toDomain(): Wallet =
+    Wallet.reconstitute(
+        id = WalletId(id),
+        userId = userId,
+        balance = Money.reconstitute(balance),
+        version = version,
+    )
+
+fun Wallet.toJpaEntity(): WalletJpaEntity =
+    WalletJpaEntity(
+        id = id?.value ?: 0,
+        userId = userId,
+        balance = balance.amount,
+        version = version,
+    )
