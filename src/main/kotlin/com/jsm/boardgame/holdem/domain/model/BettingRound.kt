@@ -1,0 +1,217 @@
+package com.jsm.boardgame.holdem.domain.model
+
+import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
+import com.jsm.boardgame.holdem.domain.exception.IllegalBettingActionException
+
+enum class SeatStatus { ACTIVE, FOLDED, ALL_IN }
+
+sealed interface BettingAction {
+    data object Fold : BettingAction
+    data object Check : BettingAction
+    data object Call : BettingAction
+
+    /** 이번 라운드 누적 투입액 기준 "얼마까지 올린다". */
+    data class RaiseTo(val amount: Chips) : BettingAction
+}
+
+class BettingSeat(
+    val seatNo: Int,
+    stack: Chips,
+    committed: Chips,
+    status: SeatStatus,
+) {
+    var stack: Chips = stack
+        private set
+
+    /** 이번 라운드 투입액. */
+    var committed: Chips = committed
+        private set
+
+    var status: SeatStatus = status
+        private set
+
+    internal fun commit(amount: Chips) {
+        stack -= amount
+        committed += amount
+        if (stack.isZero() && status == SeatStatus.ACTIVE) {
+            status = SeatStatus.ALL_IN
+        }
+    }
+
+    internal fun fold() {
+        status = SeatStatus.FOLDED
+    }
+}
+
+/**
+ * 한 스트리트의 베팅. 좌석 순서(누가 먼저 행동하는지, 헤즈업 예외)는 Hand 애그리거트가 정해서
+ * [firstToActSeatNo] 로 넘긴다 — 여기서는 주어진 순서대로 시계 방향(좌석 번호 오름차순, 순환)으로만 돈다.
+ */
+class BettingRound private constructor(
+    val seats: List<BettingSeat>,
+    currentBet: Chips,
+    lastRaiseSize: Chips,
+    lastFullLevel: Chips,
+    firstToActSeatNo: Int,
+) {
+    var currentBet: Chips = currentBet
+        private set
+
+    /** 마지막 풀 레이즈(또는 재오픈한 짧은 올인)의 증분. 다음 최소 레이즈 = currentBet + 이 값. */
+    private var lastRaiseSize: Chips = lastRaiseSize
+
+    /** 마지막으로 액션이 열린(풀 레이즈 또는 재오픈) 시점의 currentBet. 짧은 올인 누적분 재오픈 판정 기준선. */
+    private var lastFullLevel: Chips = lastFullLevel
+
+    /** 이 집합에 있으면 그 좌석은 지금 레벨에서 이미 행동했다 — 다시 레이즈할 수 없다. */
+    private val actedSinceLastFullRaise = mutableSetOf<Int>()
+
+    private var toAct: Int? = null
+
+    init {
+        toAct = if (isRoundComplete()) null else firstActiveSeatNoFrom(firstToActSeatNo)
+    }
+
+    val minRaiseTo: Chips get() = currentBet + lastRaiseSize
+    val toActSeatNo: Int? get() = toAct
+    val isComplete: Boolean get() = toAct == null
+
+    fun callAmount(seatNo: Int): Chips {
+        val seat = seatOf(seatNo)
+        return Chips.min(currentBet - seat.committed, seat.stack)
+    }
+
+    fun canRaise(seatNo: Int): Boolean = seatNo !in actedSinceLastFullRaise
+
+    fun act(seatNo: Int, action: BettingAction) {
+        if (isComplete) {
+            throw IllegalBettingActionException(HoldemErrorCode.BETTING_ROUND_CLOSED, "라운드가 이미 종료되었습니다")
+        }
+        if (toAct != seatNo) {
+            throw IllegalBettingActionException(HoldemErrorCode.NOT_YOUR_TURN, "지금은 $seatNo 번 좌석의 차례가 아닙니다: toAct=$toAct")
+        }
+        val seat = seatOf(seatNo)
+        when (action) {
+            BettingAction.Fold -> seat.fold()
+            BettingAction.Check -> check(seat)
+            BettingAction.Call -> call(seat)
+            is BettingAction.RaiseTo -> raiseTo(seat, action.amount)
+        }
+        toAct = if (isRoundComplete()) null else nextActiveSeatNoAfter(seatNo)
+    }
+
+    private fun check(seat: BettingSeat) {
+        if (seat.committed != currentBet) {
+            throw IllegalBettingActionException(
+                HoldemErrorCode.CANNOT_CHECK,
+                "커밋한 금액이 현재 베팅에 못 미쳐 체크할 수 없습니다: committed=${seat.committed}, currentBet=$currentBet",
+            )
+        }
+        actedSinceLastFullRaise.add(seat.seatNo)
+    }
+
+    private fun call(seat: BettingSeat) {
+        seat.commit(Chips.min(currentBet - seat.committed, seat.stack))
+        actedSinceLastFullRaise.add(seat.seatNo)
+    }
+
+    private fun raiseTo(seat: BettingSeat, amount: Chips) {
+        if (amount <= currentBet) {
+            throw IllegalBettingActionException(HoldemErrorCode.RAISE_TOO_SMALL, "레이즈 금액이 현재 베팅 이하입니다: amount=$amount, currentBet=$currentBet")
+        }
+        val needed = amount - seat.committed
+        if (needed > seat.stack) {
+            throw IllegalBettingActionException(HoldemErrorCode.INSUFFICIENT_STACK, "레이즈에 필요한 칩이 스택을 초과합니다: needed=$needed, stack=${seat.stack}")
+        }
+        val isAllIn = needed == seat.stack
+        if (amount < minRaiseTo && !isAllIn) {
+            throw IllegalBettingActionException(HoldemErrorCode.RAISE_TOO_SMALL, "최소 레이즈 미만입니다: amount=$amount, minRaiseTo=$minRaiseTo")
+        }
+        if (!canRaise(seat.seatNo)) {
+            throw IllegalBettingActionException(HoldemErrorCode.RAISE_NOT_ALLOWED, "이미 이번 레벨에서 행동해 다시 레이즈할 수 없습니다: seatNo=${seat.seatNo}")
+        }
+
+        seat.commit(needed)
+
+        if (amount >= minRaiseTo) {
+            // 자발적 풀 레이즈 — 액션을 완전히 새로 연다.
+            lastRaiseSize = amount - currentBet
+            currentBet = amount
+            lastFullLevel = amount
+            actedSinceLastFullRaise.clear()
+            actedSinceLastFullRaise.add(seat.seatNo)
+        } else {
+            // 풀 레이즈에 못 미치는 올인. 짧은 올인이 누적되어 lastFullLevel 대비 풀 레이즈 이상 쌓이면 재오픈된다.
+            currentBet = amount
+            if (amount - lastFullLevel >= lastRaiseSize) {
+                lastRaiseSize = amount - lastFullLevel
+                lastFullLevel = amount
+                actedSinceLastFullRaise.clear()
+                actedSinceLastFullRaise.add(seat.seatNo)
+            } else {
+                actedSinceLastFullRaise.add(seat.seatNo)
+            }
+        }
+    }
+
+    private fun isRoundComplete(): Boolean {
+        val contenders = seats.filter { it.status != SeatStatus.FOLDED }
+        if (contenders.size <= 1) return true
+        val activeSeats = seats.filter { it.status == SeatStatus.ACTIVE }
+        if (activeSeats.isEmpty()) return true
+        return activeSeats.all { it.committed == currentBet && it.seatNo in actedSinceLastFullRaise }
+    }
+
+    private fun activeSeatNosSorted(): List<Int> =
+        seats.filter { it.status == SeatStatus.ACTIVE }.map { it.seatNo }.sorted()
+
+    private fun firstActiveSeatNoFrom(seatNo: Int): Int? {
+        val activeSeatNos = activeSeatNosSorted()
+        if (activeSeatNos.isEmpty()) return null
+        return activeSeatNos.firstOrNull { it >= seatNo } ?: activeSeatNos.first()
+    }
+
+    private fun nextActiveSeatNoAfter(seatNo: Int): Int? {
+        val activeSeatNos = activeSeatNosSorted()
+        if (activeSeatNos.isEmpty()) return null
+        return activeSeatNos.firstOrNull { it > seatNo } ?: activeSeatNos.first()
+    }
+
+    private fun seatOf(seatNo: Int): BettingSeat = seats.first { it.seatNo == seatNo }
+
+    companion object {
+        /** 포스트플랍. currentBet = 0, 최소 베팅 = bigBlind. */
+        fun open(seats: List<BettingSeat>, bigBlind: Chips, firstToActSeatNo: Int): BettingRound =
+            BettingRound(
+                seats = seats.sortedBy { it.seatNo },
+                currentBet = Chips.ZERO,
+                lastRaiseSize = bigBlind,
+                lastFullLevel = Chips.ZERO,
+                firstToActSeatNo = firstToActSeatNo,
+            )
+
+        /** 프리플랍. 블라인드를 여기서 포스팅한다. 블라인드가 스택보다 크면 스택 전부를 내고 ALL_IN 이 되지만 currentBet 은 항상 full bigBlind 다. */
+        fun preflop(
+            seats: List<BettingSeat>,
+            smallBlind: Chips,
+            bigBlind: Chips,
+            sbSeatNo: Int,
+            bbSeatNo: Int,
+            firstToActSeatNo: Int,
+        ): BettingRound {
+            val sorted = seats.sortedBy { it.seatNo }
+            val sbSeat = sorted.first { it.seatNo == sbSeatNo }
+            val bbSeat = sorted.first { it.seatNo == bbSeatNo }
+            sbSeat.commit(Chips.min(smallBlind, sbSeat.stack))
+            bbSeat.commit(Chips.min(bigBlind, bbSeat.stack))
+
+            return BettingRound(
+                seats = sorted,
+                currentBet = bigBlind,
+                lastRaiseSize = bigBlind,
+                lastFullLevel = bigBlind,
+                firstToActSeatNo = firstToActSeatNo,
+            )
+        }
+    }
+}
