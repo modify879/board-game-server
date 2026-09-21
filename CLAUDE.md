@@ -21,8 +21,9 @@ Docker 가 떠 있어야 한다. 접속 정보는 `application.yaml` 에 적지 
   빠뜨리면 "Failed to determine a suitable driver class" 로 컨텍스트가 뜨지 않는다
 - 컨테이너가 필요한 테스트만 클래스 이름에 `IntegrationTest` 접미사를 붙인다
 - 목 라이브러리를 쓰지 않는다. 인메모리 페이크를 테스트 파일 안에 만든다
-- **페이크 이름에 테스트별 접두를 붙인다**(`RequestFakeWalletRepository`). Kotlin 의 top-level
-  `private` 은 파일이 아니라 패키지 스코프라, 같은 패키지의 두 테스트가 같은 이름을 쓰면 재선언 오류다
+- **페이크 이름에 테스트별 접두를 붙인다**(`RequestFakeWalletRepository`). top-level `private`
+  클래스는 파일 안에서만 보이지만 이름은 패키지를 차지해, 같은 패키지의 두 테스트가 같은
+  이름을 쓰면 `Redeclaration` 이다
 - 예외는 메시지가 아니라 `errorCode` 로 검증한다
 - 테스트 이름은 백틱을 쓴 한국어 문장
 - wallet 통합 테스트는 `UserRepository` 로 **실제 `users` 행을 먼저 만든다**. `fk_wallets_user`
@@ -154,6 +155,8 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
   TTL 로만 소멸시킨다 — 지우면 재사용 탐지가 무력화된다
 - 역할 변경은 액세스 토큰 블랙리스트 + 갱신으로 반영한다. 리프레시 토큰은 살려둔다.
   최초 관리자 한 명만 DB 로 직접 만들고, 이후는 `POST /api/admin/users/{id}/role` 을 쓴다
+- top-level `private` 함수는 이름이 패키지에서 충돌하지 않는 대신 **다른 파일에서 보이지 않는다.**
+  파일 간에 헬퍼를 공유할 수 없어 `requireUserId()` 가 컨트롤러마다 복사되어 있다
 
 ## git flow
 
