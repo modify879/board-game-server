@@ -14,6 +14,8 @@ enum class LedgerEntryType(val direction: LedgerDirection) {
     WITHDRAWAL_REFUND(LedgerDirection.CREDIT),
     ADMIN_ADJUSTMENT_CREDIT(LedgerDirection.CREDIT),
     ADMIN_ADJUSTMENT_DEBIT(LedgerDirection.DEBIT),
+    GAME_BUY_IN(LedgerDirection.DEBIT),
+    GAME_CASH_OUT(LedgerDirection.CREDIT),
 }
 
 class LedgerEntry private constructor(
