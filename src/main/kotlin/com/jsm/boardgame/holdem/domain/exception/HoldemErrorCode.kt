@@ -20,6 +20,14 @@ enum class HoldemErrorCode(override val kind: ErrorKind) : ErrorCode {
 
     HAND_ALREADY_FINISHED(ErrorKind.CONFLICT),
     NOT_ENOUGH_PLAYERS(ErrorKind.INVALID),
+
+    TABLE_NAME_INVALID(ErrorKind.INVALID),
+    SEAT_NO_OUT_OF_RANGE(ErrorKind.INVALID),
+    SEAT_TAKEN(ErrorKind.CONFLICT),
+    ALREADY_SEATED(ErrorKind.CONFLICT),
+    // 없는 리소스가 아니라 앉은 적 없는 사용자의 기립 요청이라 404 다.
+    NOT_SEATED(ErrorKind.NOT_FOUND),
+    BUY_IN_OUT_OF_RANGE(ErrorKind.INVALID),
     ;
 
     override val code: String get() = name
