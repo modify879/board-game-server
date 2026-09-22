@@ -29,6 +29,8 @@ class Hand private constructor(
     private val holeCards: Map<Int, List<Card>>,
     private val deck: Deck,
     private val postflopFirstToActSeatNo: Int,
+    /** 핸드 시작 시점 스택. 취소·환불이 이 값으로 되돌리는 것만으로 끝나도록 따로 둔다. */
+    private val startingStacks: Map<Int, Chips>,
     private val stacks: MutableMap<Int, Chips>,
     private val statuses: MutableMap<Int, SeatStatus>,
     private val totalContributed: MutableMap<Int, Chips>,
@@ -68,6 +70,26 @@ class Hand private constructor(
         val inFlight = currentRound?.seats?.fold(Chips.ZERO) { acc, s -> acc + s.committed } ?: Chips.ZERO
         return accumulated + inFlight
     }
+
+    /**
+     * 진행 중 핸드의 상태 스냅샷. 덱과 팟은 담지 않는다 — 덱은 저장하면 진행 중인 판의 미래 카드를
+     * DB 접근자가 알게 되고(규칙 6), 팟은 좌석별 총 투입액에서 유도되므로 따로 저장하면 두 곳이
+     * 어긋날 수 있다. 복원은 [Companion.reconstitute] 를 거친다.
+     */
+    fun snapshot(): HandSnapshot = HandSnapshot(
+        buttonSeatNo = buttonSeatNo,
+        bigBlind = bigBlind,
+        seatNos = seatNos,
+        street = street,
+        board = board,
+        holeCards = holeCards.mapValues { it.value.toList() },
+        postflopFirstToActSeatNo = postflopFirstToActSeatNo,
+        startingStacks = startingStacks.toMap(),
+        stacks = stacks.toMap(),
+        statuses = statuses.toMap(),
+        totalContributed = totalContributed.toMap(),
+        currentRound = currentRound?.snapshot(),
+    )
 
     fun act(seatNo: Int, action: BettingAction) {
         val round = currentRound
@@ -226,6 +248,7 @@ class Hand private constructor(
                 holeCards = holeCards,
                 deck = deck,
                 postflopFirstToActSeatNo = postflopFirstToActSeatNo,
+                startingStacks = stacks,
                 stacks = stacks.toMutableMap(),
                 statuses = seatNos.associateWith { SeatStatus.ACTIVE }.toMutableMap(),
                 totalContributed = seatNos.associateWith { Chips.ZERO }.toMutableMap(),
@@ -236,6 +259,47 @@ class Hand private constructor(
             if (preflopRound.isComplete) {
                 hand.onRoundComplete(preflopRound)
             }
+            return hand
+        }
+
+        /**
+         * 영속 복원 전용 — 검증하지 않는다(매퍼 규약: `reconstitute()` 는 검증하지 않는다).
+         * 진행 중(라운드가 열려 있는) 핸드만 대상이다 — 이미 끝난 핸드는 정산이 끝나 복구할 상태가
+         * 없어 애초에 저장 대상이 아니다.
+         * 덱은 스냅샷에 없다 — 이미 딜된 카드(홀카드+보드)를 뺀 나머지를 [shuffler] 로 새로 섞어
+         * 다시 만든다. 아직 아무도 본 적 없는 카드라 어떤 순열이든 통계적으로 동일하다.
+         */
+        fun reconstitute(snapshot: HandSnapshot, shuffler: Shuffler): Hand {
+            val dealtCards = snapshot.holeCards.values.flatten() + snapshot.board
+            val remainingCards = Deck.FULL - dealtCards
+            val deck = Deck.reconstitute(shuffler, remainingCards)
+
+            val currentRound = snapshot.currentRound?.let { round ->
+                BettingRound.reconstitute(
+                    seats = round.seats.map { BettingSeat(it.seatNo, it.stack, it.committed, it.status) },
+                    currentBet = round.currentBet,
+                    lastRaiseSize = round.lastRaiseSize,
+                    lastFullLevel = round.lastFullLevel,
+                    actedSinceLastFullRaise = round.actedSinceLastFullRaise,
+                    toActSeatNo = round.toActSeatNo,
+                )
+            }
+
+            val hand = Hand(
+                buttonSeatNo = snapshot.buttonSeatNo,
+                bigBlind = snapshot.bigBlind,
+                seatNos = snapshot.seatNos,
+                holeCards = snapshot.holeCards,
+                deck = deck,
+                postflopFirstToActSeatNo = snapshot.postflopFirstToActSeatNo,
+                startingStacks = snapshot.startingStacks,
+                stacks = snapshot.stacks.toMutableMap(),
+                statuses = snapshot.statuses.toMutableMap(),
+                totalContributed = snapshot.totalContributed.toMutableMap(),
+                currentRound = currentRound,
+            )
+            hand.street = snapshot.street
+            hand.boardCards.addAll(snapshot.board)
             return hand
         }
     }
