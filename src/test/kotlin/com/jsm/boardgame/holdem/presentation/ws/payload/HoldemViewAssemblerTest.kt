@@ -4,6 +4,7 @@ import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import kotlin.test.Test
@@ -37,7 +38,19 @@ class HoldemViewAssemblerTest {
         assertNull(view.toActSeatNo)
         assertEquals(2, view.seats.size)
         assertTrue(view.seats.all { it.status == "SITTING_OUT" })
+        assertTrue(view.seats.all { it.presence == "SEATED" })
         assertEquals(10_000L, view.seats.first { it.seatNo == 1 }.stack)
+    }
+
+    @Test
+    fun `연결이 끊긴 좌석은 공개 뷰에 presence DISCONNECTED 로 나타난다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        table.markPresence(100, SeatPresence.DISCONNECTED)
+
+        val view = publicViewOf(TableId(1), table, null)
+
+        assertEquals("DISCONNECTED", view.seats.first { it.seatNo == 1 }.presence)
+        assertEquals("SEATED", view.seats.first { it.seatNo == 2 }.presence)
     }
 
     @Test

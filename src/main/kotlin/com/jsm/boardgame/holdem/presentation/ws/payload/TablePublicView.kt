@@ -21,4 +21,5 @@ data class SeatPublicView(
     val stack: Long,
     val totalContributed: Long,
     val status: String,
+    val presence: String,
 )

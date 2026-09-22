@@ -20,6 +20,7 @@ fun publicViewOf(tableId: TableId, table: HoldemTable, hand: Hand?): TablePublic
                 stack = hand.stackOf(seat.seatNo).amount,
                 totalContributed = hand.totalContributedBy(seat.seatNo).amount,
                 status = hand.statusOf(seat.seatNo).name,
+                presence = seat.presence.name,
             )
         } else {
             SeatPublicView(
@@ -28,6 +29,7 @@ fun publicViewOf(tableId: TableId, table: HoldemTable, hand: Hand?): TablePublic
                 stack = seat.stack.amount,
                 totalContributed = 0L,
                 status = "SITTING_OUT",
+                presence = seat.presence.name,
             )
         }
     }

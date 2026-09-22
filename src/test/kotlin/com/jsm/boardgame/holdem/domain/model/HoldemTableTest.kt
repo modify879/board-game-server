@@ -118,6 +118,23 @@ class HoldemTableTest {
     }
 
     @Test
+    fun `markPresence 는 좌석의 연결 상태를 바꾼다`() {
+        val table = newTable()
+        table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(10_000))
+
+        table.markPresence(1L, SeatPresence.DISCONNECTED)
+
+        assertEquals(SeatPresence.DISCONNECTED, table.seatAt(1)?.presence)
+    }
+
+    @Test
+    fun `앉은 적 없는 사용자의 markPresence 는 NOT_SEATED 로 거부된다`() {
+        val table = newTable()
+        val e = assertFailsWith<NotSeatedException> { table.markPresence(1L, SeatPresence.DISCONNECTED) }
+        assertEquals(HoldemErrorCode.NOT_SEATED, e.errorCode)
+    }
+
+    @Test
     fun `공백 테이블 이름은 TABLE_NAME_INVALID 로 거부된다`() {
         val e = assertFailsWith<InvalidTableNameException> { HoldemTable.create("   ") }
         assertEquals(HoldemErrorCode.TABLE_NAME_INVALID, e.errorCode)

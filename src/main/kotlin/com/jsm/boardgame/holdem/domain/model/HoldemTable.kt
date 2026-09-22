@@ -50,6 +50,11 @@ class HoldemTable private constructor(
         return seat.stack
     }
 
+    fun markPresence(userId: Long, presence: SeatPresence) {
+        val seat = seatOf(userId) ?: throw NotSeatedException("이 테이블에 앉아 있지 않은 사용자입니다: userId=$userId")
+        seat.applyPresence(presence)
+    }
+
     fun seatOf(userId: Long): Seat? = seats.values.find { it.userId == userId }
 
     fun seatAt(seatNo: Int): Seat? = seats[seatNo]
