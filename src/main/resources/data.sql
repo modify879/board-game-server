@@ -14,3 +14,15 @@ do $$ begin
 exception when duplicate_object then null;
 end $$
 @@@
+do $$ begin
+    alter table holdem_seats
+        add constraint fk_holdem_seats_table foreign key (table_id) references holdem_tables(id);
+exception when duplicate_object then null;
+end $$
+@@@
+do $$ begin
+    alter table holdem_seats
+        add constraint fk_holdem_seats_user foreign key (user_id) references users(id);
+exception when duplicate_object then null;
+end $$
+@@@

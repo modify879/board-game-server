@@ -21,3 +21,11 @@ class IllegalHandStateException(
     code: HoldemErrorCode,
     logMessage: String,
 ) : BusinessException(code, logMessage)
+
+class InvalidTableNameException(logMessage: String) : BusinessException(HoldemErrorCode.TABLE_NAME_INVALID, logMessage)
+class SeatNoOutOfRangeException(logMessage: String) : BusinessException(HoldemErrorCode.SEAT_NO_OUT_OF_RANGE, logMessage)
+class SeatTakenException(logMessage: String) : BusinessException(HoldemErrorCode.SEAT_TAKEN, logMessage)
+class AlreadySeatedException(logMessage: String) : BusinessException(HoldemErrorCode.ALREADY_SEATED, logMessage)
+class NotSeatedException(logMessage: String) : BusinessException(HoldemErrorCode.NOT_SEATED, logMessage)
+class BuyInOutOfRangeException(logMessage: String) : BusinessException(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, logMessage)
+class ConcurrentTableUpdateException(logMessage: String) : BusinessException(HoldemErrorCode.CONCURRENT_TABLE_UPDATE, logMessage)

@@ -24,7 +24,8 @@ data class HandResult(
 class Hand private constructor(
     val buttonSeatNo: Int,
     private val bigBlind: Chips,
-    private val seatNos: List<Int>,
+    /** 이 핸드에 딜된 좌석. 핸드 도중 테이블에 새로 앉은 좌석은 여기에 없다. */
+    val seatNos: List<Int>,
     private val holeCards: Map<Int, List<Card>>,
     private val deck: Deck,
     private val postflopFirstToActSeatNo: Int,
