@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.StartHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StartHandUseCase
+import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
 import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
 import com.jsm.boardgame.holdem.application.port.HandStore
@@ -11,6 +12,7 @@ import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -28,6 +30,7 @@ class StartHandService(
     private val handStore: HandStore,
     private val shuffler: Shuffler,
     private val handSettler: HandSettler,
+    private val eventPublisher: ApplicationEventPublisher,
 ) : StartHandUseCase {
 
     override fun start(command: StartHandCommand) {
@@ -65,5 +68,6 @@ class StartHandService(
 
         handStore.save(tableId, hand)
         tables.save(table)
+        eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand))
     }
 }

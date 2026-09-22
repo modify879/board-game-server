@@ -55,6 +55,11 @@ class SecurityConfig {
                 it
                     .requestMatchers(HttpMethod.POST, "/api/users").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/refresh").permitAll()
+                    // STOMP 핸드셰이크(HTTP 업그레이드) 요청은 permitAll 이다. 브라우저는 이 요청에
+                    // Authorization 헤더를 못 붙이므로 여기서 막으면 CONNECT 프레임 인증 자체가
+                    // 시작되지 못한다. 실제 인증은 CONNECT STOMP 프레임에서
+                    // StompAuthenticationInterceptor 가 하고, 구독 인가는 별도 인터셉터가 한다.
+                    .requestMatchers("/ws/**").permitAll()
                     .requestMatchers("/api/admin/**").hasRole("ADMIN")
                     .anyRequest().authenticated()
             }

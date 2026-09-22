@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.PlayActionCommand
 import com.jsm.boardgame.holdem.application.command.usecase.PlayActionUseCase
+import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.exception.HandNotFoundException
 import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
 import com.jsm.boardgame.holdem.application.exception.UnknownActionException
@@ -11,6 +12,7 @@ import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -25,6 +27,7 @@ class PlayActionService(
     private val tables: HoldemTableRepository,
     private val handStore: HandStore,
     private val handSettler: HandSettler,
+    private val eventPublisher: ApplicationEventPublisher,
 ) : PlayActionUseCase {
 
     override fun play(command: PlayActionCommand) {
@@ -42,6 +45,7 @@ class PlayActionService(
             handSettler.settle(tableId, table, hand)
         } else {
             handStore.save(tableId, hand)
+            eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand))
         }
     }
 

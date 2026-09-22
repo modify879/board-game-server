@@ -20,6 +20,11 @@ class Seat private constructor(
         stack = newStack
     }
 
+    /** 연결 상태 변경도 테이블 애그리거트(HoldemTable)를 거친다. */
+    internal fun applyPresence(newPresence: SeatPresence) {
+        presence = newPresence
+    }
+
     companion object {
         /** 착석 시점 생성. presence 는 항상 SEATED 로 시작한다. seatNo·buyIn 검증은 HoldemTable 이 한다(블라인드 등 테이블 컨텍스트가 필요해서). */
         fun of(seatNo: Int, userId: Long, stack: Chips): Seat = Seat(seatNo, userId, stack, SeatPresence.SEATED)

@@ -54,6 +54,10 @@ class Hand private constructor(
     fun stackOf(seatNo: Int): Chips =
         currentRound?.seats?.firstOrNull { it.seatNo == seatNo }?.stack ?: stacks.getValue(seatNo)
 
+    /** 이 좌석의 베팅 상태. 공개 뷰가 폴드·올인 좌석을 표시하려면 필요하다. */
+    fun statusOf(seatNo: Int): SeatStatus =
+        currentRound?.seats?.firstOrNull { it.seatNo == seatNo }?.status ?: statuses.getValue(seatNo)
+
     fun totalContributedBy(seatNo: Int): Chips {
         val inFlight = currentRound?.seats?.firstOrNull { it.seatNo == seatNo }?.committed ?: Chips.ZERO
         return totalContributed.getValue(seatNo) + inFlight
