@@ -42,7 +42,7 @@ import javax.crypto.spec.SecretKeySpec
 
 /**
  * holdem STOMP CONNECT 인증과 SUBSCRIBE 인가 통합 테스트.
- * 좌석별 뷰(브로드캐스트 페이로드)와 타이머는 다음 조각이라 여기서 다루지 않는다 —
+ * 타이머는 다음 조각이라 여기서 다루지 않는다 —
  * 여기는 CONNECT 관문과 구독 인가만 검증한다.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -141,6 +141,42 @@ class HoldemStompIntegrationTest {
         val tableId = createTable(accessToken)
         sitDown(accessToken, tableId, 1, buyIn).andExpect(status().isCreated)
         return SeatedUser(userId, accessToken, tableId)
+    }
+
+    private data class TablePair(val tableId: Long, val a: SeatedUser, val b: SeatedUser)
+
+    private fun seatTwoUsersAtSameTable(buyIn: Long = 10_000L, fundAmount: Long = 15_000L): TablePair {
+        val (userIdA, tokenA) = signUpAndLogin()
+        fundWallet(userIdA, fundAmount)
+        val tableId = createTable(tokenA)
+        sitDown(tokenA, tableId, 1, buyIn).andExpect(status().isCreated)
+
+        val (userIdB, tokenB) = signUpAndLogin()
+        fundWallet(userIdB, fundAmount)
+        sitDown(tokenB, tableId, 2, buyIn).andExpect(status().isCreated)
+
+        return TablePair(tableId, SeatedUser(userIdA, tokenA, tableId), SeatedUser(userIdB, tokenB, tableId))
+    }
+
+    private fun startHandRest(accessToken: String, tableId: Long) {
+        authPost("/api/holdem/tables/$tableId/hands", accessToken).andExpect(status().isCreated)
+    }
+
+    private fun capturingFrameHandler(): Pair<StompFrameHandler, LinkedBlockingQueue<String>> {
+        val messages = LinkedBlockingQueue<String>()
+        val handler = object : StompFrameHandler {
+            override fun getPayloadType(headers: StompHeaders): Type = ByteArray::class.java
+            override fun handleFrame(headers: StompHeaders, payload: Any?) {
+                messages.add(String(payload as ByteArray, Charsets.UTF_8))
+            }
+        }
+        return handler to messages
+    }
+
+    private fun drainAll(queue: LinkedBlockingQueue<String>) {
+        while (queue.poll(500, TimeUnit.MILLISECONDS) != null) {
+            // 구독 시점에 온 스냅샷 등 이전 메시지를 비운다.
+        }
     }
 
     // ---------- 만료 토큰을 직접 발급하는 헬퍼 (JwtTokenIssuer 와 같은 방식, 과거 시각으로 발급) ----------
@@ -300,5 +336,119 @@ class HoldemStompIntegrationTest {
 
         val errorHeaders = handler.errorFrames.poll(5, TimeUnit.SECONDS)
         assertThat(errorHeaders?.getFirst("errorCode")).isEqualTo("ACCESS_DENIED")
+    }
+
+    // ---------- 좌석별 페이로드 ----------
+
+    @Test
+    fun `구독 중에 핸드를 시작하면 각자 개인 큐로 자기 홀카드만 담긴 페이로드를 받고 공개 채널 원문에는 어느 쪽 카드도 없다`() {
+        val pair = seatTwoUsersAtSameTable()
+
+        val (sessionA, _) = tryConnect(pair.a.accessToken)
+        checkNotNull(sessionA)
+        val (publicHandlerA, publicQueueA) = capturingFrameHandler()
+        val (privateHandlerA, privateQueueA) = capturingFrameHandler()
+        sessionA.subscribe(HoldemDestinations.publicTopicOf(pair.tableId), publicHandlerA)
+        sessionA.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandlerA)
+
+        val (sessionB, _) = tryConnect(pair.b.accessToken)
+        checkNotNull(sessionB)
+        val (privateHandlerB, privateQueueB) = capturingFrameHandler()
+        sessionB.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandlerB)
+
+        // 구독 시점에 온 스냅샷(핸드 없음 상태)을 비운 뒤 핸드를 시작한다.
+        drainAll(publicQueueA)
+        drainAll(privateQueueA)
+        drainAll(privateQueueB)
+
+        startHandRest(pair.a.accessToken, pair.tableId)
+
+        val publicJson = publicQueueA.poll(5, TimeUnit.SECONDS)
+        val privateJsonA = privateQueueA.poll(5, TimeUnit.SECONDS)
+        val privateJsonB = privateQueueB.poll(5, TimeUnit.SECONDS)
+
+        assertThat(publicJson).isNotNull()
+        assertThat(privateJsonA).isNotNull()
+        assertThat(privateJsonB).isNotNull()
+        assertThat(JsonPath.read<Boolean>(publicJson, "$.handInProgress")).isTrue()
+
+        val holeCardsA = JsonPath.read<List<String>>(privateJsonA, "$.holeCards")
+        val holeCardsB = JsonPath.read<List<String>>(privateJsonB, "$.holeCards")
+        assertThat(holeCardsA).hasSize(2)
+        assertThat(holeCardsB).hasSize(2)
+        for (card in holeCardsB) {
+            // 카드 표기는 JSON 에서 항상 문자열 값으로만 나온다. 따옴표 없이 찾으면
+            // toActSeatNo 같은 필드 이름의 부분 문자열에 걸려 오탐이 난다.
+            assertThat(privateJsonA)
+                .withFailMessage("Player B의 카드 ${card}가 Player A의 private JSON에 노출됨")
+                .doesNotContain("\"$card\"")
+        }
+        for (card in holeCardsA) {
+            assertThat(privateJsonB)
+                .withFailMessage("Player A의 카드 ${card}가 Player B의 private JSON에 노출됨")
+                .doesNotContain("\"$card\"")
+        }
+        // 규칙 6 의 계약을 원문 바이트 수준에서 재확인한다.
+        for (card in holeCardsA + holeCardsB) {
+            assertThat(publicJson)
+                .withFailMessage("카드 ${card}가 공개 채널 원문에 노출됨")
+                .doesNotContain("\"$card\"")
+        }
+
+        sessionA.disconnect()
+        sessionB.disconnect()
+    }
+
+    @Test
+    fun `핸드가 이미 진행 중인 테이블을 구독하면 그 시점 상태를 스냅샷으로 즉시 받는다`() {
+        val pair = seatTwoUsersAtSameTable()
+        startHandRest(pair.a.accessToken, pair.tableId)
+
+        val (sessionA, _) = tryConnect(pair.a.accessToken)
+        checkNotNull(sessionA)
+        val (publicHandlerA, publicQueueA) = capturingFrameHandler()
+        val (privateHandlerA, privateQueueA) = capturingFrameHandler()
+        sessionA.subscribe(HoldemDestinations.publicTopicOf(pair.tableId), publicHandlerA)
+        sessionA.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandlerA)
+
+        val (sessionB, _) = tryConnect(pair.b.accessToken)
+        checkNotNull(sessionB)
+        val (privateHandlerB, privateQueueB) = capturingFrameHandler()
+        sessionB.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandlerB)
+
+        val publicJson = publicQueueA.poll(5, TimeUnit.SECONDS)
+        val privateJsonA = privateQueueA.poll(5, TimeUnit.SECONDS)
+        val privateJsonB = privateQueueB.poll(5, TimeUnit.SECONDS)
+
+        assertThat(publicJson).isNotNull()
+        assertThat(privateJsonA).isNotNull()
+        assertThat(privateJsonB).isNotNull()
+        assertThat(JsonPath.read<Boolean>(publicJson, "$.handInProgress")).isTrue()
+
+        val holeCardsA = JsonPath.read<List<String>>(privateJsonA, "$.holeCards")
+        val holeCardsB = JsonPath.read<List<String>>(privateJsonB, "$.holeCards")
+        assertThat(holeCardsA).hasSize(2)
+        assertThat(holeCardsB).hasSize(2)
+        assertThat(holeCardsA).doesNotContainAnyElementsOf(holeCardsB)
+        for (card in holeCardsB) {
+            // 카드 표기는 JSON 에서 항상 문자열 값으로만 나온다. 따옴표 없이 찾으면
+            // toActSeatNo 같은 필드 이름의 부분 문자열에 걸려 오탐이 난다.
+            assertThat(privateJsonA)
+                .withFailMessage("Player B의 카드 ${card}가 Player A의 private JSON에 노출됨")
+                .doesNotContain("\"$card\"")
+        }
+        for (card in holeCardsA) {
+            assertThat(privateJsonB)
+                .withFailMessage("Player A의 카드 ${card}가 Player B의 private JSON에 노출됨")
+                .doesNotContain("\"$card\"")
+        }
+        for (card in holeCardsA + holeCardsB) {
+            assertThat(publicJson)
+                .withFailMessage("카드 ${card}가 공개 채널 원문에 노출됨")
+                .doesNotContain("\"$card\"")
+        }
+
+        sessionA.disconnect()
+        sessionB.disconnect()
     }
 }

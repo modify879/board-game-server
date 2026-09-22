@@ -14,6 +14,7 @@ import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
+import org.springframework.context.ApplicationEventPublisher
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -60,8 +61,9 @@ class PlayActionServiceTest {
     private val tables = PlayActionFakeTableRepository()
     private val handStore = PlayActionFakeHandStore()
     private val identityShuffler = Shuffler { it }
-    private val handSettler = HandSettler(tables, handStore)
-    private val service = PlayActionService(tables, handStore, handSettler)
+    private val eventPublisher = ApplicationEventPublisher { }
+    private val handSettler = HandSettler(tables, handStore, eventPublisher)
+    private val service = PlayActionService(tables, handStore, handSettler, eventPublisher)
 
     /** userId = seatNo * 1000 으로 대응시킨다. */
     private fun tableWithHand(vararg stacks: Pair<Int, Long>): TableId {
