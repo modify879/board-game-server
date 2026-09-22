@@ -43,6 +43,7 @@ private class ExpireConnectionFakeHandStore : HandStore {
     override fun find(tableId: TableId): Hand? = stored[tableId.value]
     override fun save(tableId: TableId, hand: Hand) { stored[tableId.value] = hand }
     override fun remove(tableId: TableId) { stored.remove(tableId.value) }
+    override fun findAllInProgress(): List<TableId> = stored.keys.map { TableId(it) }
 }
 
 private class ExpireConnectionFakeStandUpUseCase : StandUpUseCase {

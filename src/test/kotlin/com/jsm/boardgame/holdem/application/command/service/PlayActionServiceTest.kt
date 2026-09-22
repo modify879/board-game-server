@@ -54,6 +54,7 @@ private class PlayActionFakeHandStore : HandStore {
     override fun find(tableId: TableId): Hand? = store[tableId.value]
     override fun save(tableId: TableId, hand: Hand) { store[tableId.value] = hand }
     override fun remove(tableId: TableId) { store.remove(tableId.value) }
+    override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
 }
 
 class PlayActionServiceTest {

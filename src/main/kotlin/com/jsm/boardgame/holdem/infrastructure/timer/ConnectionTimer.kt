@@ -9,6 +9,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceUs
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.infrastructure.recovery.HandRecovery
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
 import org.springframework.core.task.TaskRejectedException
@@ -40,7 +41,12 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * ponytail: 연결 타이머 예약과 퇴장 예약 모두 인메모리([ConcurrentHashMap])다 - 단일 인스턴스
  * 전제이고 재시작하면 전부 사라진다(DISCONNECTED 로 남았던 좌석 표시나 밀린 퇴장 예약이 없어진다).
- * 5단계(재시작 복구)가 이 자리를 다시 본다.
+ *
+ * [HandRecovery] 가 테이블을 복구하는 3분 유예 동안은 이 타이머가 그 좌석들에 대해 돌면 안 된다 -
+ * 서버가 죽어있던 시간, 그리고 그 유예가 끝날 때까지 기다리는 시간은 플레이어 책임이 아니기
+ * 때문이다. 그래서 [onSessionDisconnect] 는 처리를 시작하기 전에 [HandRecovery.isAwaitingRecovery]
+ * 를 먼저 묻는다 - 참이면 presence 갱신도, 예약도 하지 않고 그대로 끝낸다. 별도 포트 인터페이스를
+ * 두지 않고 같은 infrastructure 계층의 구체 타입을 직접 주입받는 것으로 충분하다.
  */
 @Component
 class ConnectionTimer(
@@ -49,6 +55,7 @@ class ConnectionTimer(
     private val updateSeatPresenceUseCase: UpdateSeatPresenceUseCase,
     private val expireConnectionUseCase: ExpireConnectionUseCase,
     private val standUpUseCase: StandUpUseCase,
+    private val handRecovery: HandRecovery,
 ) {
     private class ScheduledExpiry(val future: ScheduledFuture<*>, val token: Long)
 
@@ -62,6 +69,8 @@ class ConnectionTimer(
     @EventListener
     fun onSessionDisconnect(event: SessionDisconnectEvent) {
         val userId = event.user?.name?.toLongOrNull() ?: return
+        // 복구 유예 중에는 이 타이머가 돌지 않는다 - 서버 다운타임은 플레이어 책임이 아니다.
+        if (handRecovery.isAwaitingRecovery(userId)) return
 
         updateSeatPresenceUseCase.update(UpdateSeatPresenceCommand(userId, SeatPresence.DISCONNECTED.name))
 
