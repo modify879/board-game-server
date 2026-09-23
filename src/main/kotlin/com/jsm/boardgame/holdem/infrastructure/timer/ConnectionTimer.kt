@@ -9,9 +9,11 @@ import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceUs
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
-import com.jsm.boardgame.holdem.infrastructure.recovery.HandRecovery
+import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.slf4j.LoggerFactory
+import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
+import org.springframework.core.annotation.Order
 import org.springframework.core.task.TaskRejectedException
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
@@ -40,13 +42,24 @@ import java.util.concurrent.atomic.AtomicLong
  * StandUpUseCase 로 실제 기립시킨다.
  *
  * ponytail: 연결 타이머 예약과 퇴장 예약 모두 인메모리([ConcurrentHashMap])다 - 단일 인스턴스
- * 전제이고 재시작하면 전부 사라진다(DISCONNECTED 로 남았던 좌석 표시나 밀린 퇴장 예약이 없어진다).
+ * 전제이고 재시작하면 전부 사라진다. 그래서 [onApplicationReady] 가 부팅 시 다시 seed 한다 -
+ * 그 시점에 앉아 있는 모든 사용자는 정의상 아무도 접속하지 않은 상태이므로, 전원에게 연결 감시를
+ * 새로 건다. 이 시딩이 없으면, 재시작 전에 앉아 있다가 다시 안 들어온 사람은
+ * SessionDisconnectEvent 가 다시는 오지 않아 감시 자체가 걸리지 않고 자리를 영원히 지키게 된다 -
+ * 이 클래스가 고치는 버그의 회귀 지점이다.
  *
- * [HandRecovery] 가 테이블을 복구하는 3분 유예 동안은 이 타이머가 그 좌석들에 대해 돌면 안 된다 -
- * 서버가 죽어있던 시간, 그리고 그 유예가 끝날 때까지 기다리는 시간은 플레이어 책임이 아니기
- * 때문이다. 그래서 [onSessionDisconnect] 는 처리를 시작하기 전에 [HandRecovery.isAwaitingRecovery]
- * 를 먼저 묻는다 - 참이면 presence 갱신도, 예약도 하지 않고 그대로 끝낸다. 별도 포트 인터페이스를
- * 두지 않고 같은 infrastructure 계층의 구체 타입을 직접 주입받는 것으로 충분하다.
+ * 복구 유예 중인 테이블([HandRecovery] 가 진행 중 핸드를 복구하는 3분 동안)의 참가자는 이 부팅
+ * 시딩에서 빠져야 한다 - 서버가 죽어있던 시간은 플레이어 책임이 아니다. 예전에는 이 컴포넌트가
+ * `HandRecovery.isAwaitingRecovery(userId)` 를 물어보는 pull 방식이었는데, 복구가 끝났을 때 안
+ * 돌아온 사람에게 감시를 새로 걸어야 하는 이번 요구와 합치면(`HandRecovery` 가 이 컴포넌트를
+ * 다시 불러야 한다) 순환 빈 의존이 된다. 그래서 방향을 뒤집었다: [suspendWatch] 로 `HandRecovery`
+ * 가 유예 대상을 이 컴포넌트에 미리 알려주고(push), [beginWatch]/[cancelWatch] 로 복구가 끝난
+ * 결과를 반영하게 한다. 새 포트 인터페이스는 두지 않는다 - 둘 다 같은 infrastructure 계층의
+ * 구체 타입이라 직접 의존으로 충분하다.
+ *
+ * [onApplicationReady] 와 `HandRecovery.onApplicationReady` 는 같은 `ApplicationReadyEvent` 를
+ * 듣는다. `HandRecovery` 쪽이 먼저 실행되어 복구 대상 테이블의 참가자를 [suspendWatch] 로 걸어둬야
+ * 이 컴포넌트의 부팅 시딩이 그들을 뺄 수 있어, `@Order` 로 순서를 강제한다(낮은 값이 먼저 실행).
  */
 @Component
 class ConnectionTimer(
@@ -55,7 +68,7 @@ class ConnectionTimer(
     private val updateSeatPresenceUseCase: UpdateSeatPresenceUseCase,
     private val expireConnectionUseCase: ExpireConnectionUseCase,
     private val standUpUseCase: StandUpUseCase,
-    private val handRecovery: HandRecovery,
+    private val tables: HoldemTableRepository,
 ) {
     private class ScheduledExpiry(val future: ScheduledFuture<*>, val token: Long)
 
@@ -66,12 +79,44 @@ class ConnectionTimer(
     // 핸드가 끝날 때까지 미뤄둔 퇴장. tableId -> 대기 중인 userId 목록.
     private val pendingStandUps = ConcurrentHashMap<TableId, MutableSet<Long>>()
 
+    // 복구 유예 중이라 연결 감시를 걸면 안 되는 userId 들. HandRecovery 가 채우고 비운다.
+    private val suspended = ConcurrentHashMap.newKeySet<Long>()
+
+    /** HandRecovery.onApplicationReady(@Order(0)) 다음으로 실행되어야 한다 - 클래스 KDoc 참고. */
+    @EventListener(ApplicationReadyEvent::class)
+    @Order(1)
+    fun onApplicationReady() {
+        val toWatch = tables.findAllSeatedUserIds().filterNot { it in suspended }
+        toWatch.forEach { beginWatch(it) }
+        log.info("부팅 시 착석 중이던 사용자 {}명에게 연결 감시를 다시 걸었습니다.", toWatch.size)
+    }
+
     @EventListener
     fun onSessionDisconnect(event: SessionDisconnectEvent) {
         val userId = event.user?.name?.toLongOrNull() ?: return
         // 복구 유예 중에는 이 타이머가 돌지 않는다 - 서버 다운타임은 플레이어 책임이 아니다.
-        if (handRecovery.isAwaitingRecovery(userId)) return
+        if (userId in suspended) return
+        beginWatch(userId)
+    }
 
+    @EventListener
+    fun onSessionConnected(event: SessionConnectedEvent) {
+        val userId = event.user?.name?.toLongOrNull() ?: return
+
+        cancelWatch(userId)
+        // 만료가 먼저 일어나 이미 퇴장 예약이 걸려 있었을 수도 있다(연결 타이머 예약과 퇴장 예약은
+        // 서로 다른 생명주기라 token 만으로는 못 막는다) - 재접속했으니 그 예약도 지운다.
+        pendingStandUps.values.forEach { it.remove(userId) }
+
+        updateSeatPresenceUseCase.update(UpdateSeatPresenceCommand(userId, SeatPresence.SEATED.name))
+    }
+
+    /**
+     * 연결 감시를 (다시) 건다 - DISCONNECTED 로 표시하고 [CONNECTION_TIMEOUT] 뒤로 만료를 예약한다.
+     * 일반적인 연결 끊김, 부팅 시딩, 복구 유예가 끝났는데 안 돌아온 사용자 셋 다 이 경로를 탄다.
+     */
+    fun beginWatch(userId: Long) {
+        suspended.remove(userId)
         updateSeatPresenceUseCase.update(UpdateSeatPresenceCommand(userId, SeatPresence.DISCONNECTED.name))
 
         scheduled.remove(userId)?.future?.cancel(false)
@@ -88,18 +133,21 @@ class ConnectionTimer(
         }
     }
 
-    @EventListener
-    fun onSessionConnected(event: SessionConnectedEvent) {
-        val userId = event.user?.name?.toLongOrNull() ?: return
-
+    /**
+     * 예약된 만료를 지우고 유예 표시도 지운다. 재접속, 그리고 복구가 끝났을 때 이미 돌아와 있던
+     * 사용자에게 쓴다 - 유예 중엔 [onSessionDisconnect] 가 애초에 감시를 걸지 않으므로 지울 예약이
+     * 없는 게 정상이지만, 방어적으로 같이 처리한다.
+     */
+    fun cancelWatch(userId: Long) {
+        suspended.remove(userId)
         scheduled.remove(userId)?.future?.cancel(false)
         // cancel() 은 최선 노력이라, 이미 시작된 실행이 있다면 토큰을 바꿔 무효화한다.
         tokens.computeIfAbsent(userId) { AtomicLong() }.incrementAndGet()
-        // 만료가 먼저 일어나 이미 퇴장 예약이 걸려 있었을 수도 있다(연결 타이머 예약과 퇴장 예약은
-        // 서로 다른 생명주기라 token 만으로는 못 막는다) - 재접속했으니 그 예약도 지운다.
-        pendingStandUps.values.forEach { it.remove(userId) }
+    }
 
-        updateSeatPresenceUseCase.update(UpdateSeatPresenceCommand(userId, SeatPresence.SEATED.name))
+    /** `HandRecovery` 가 테이블 복구를 시작하며 그 참가자들의 연결 감시를 유예시킨다. */
+    fun suspendWatch(userIds: Collection<Long>) {
+        suspended.addAll(userIds)
     }
 
     private fun onExpire(userId: Long, token: Long) {

@@ -23,6 +23,8 @@ private class CancelHandFakeTableRepository : HoldemTableRepository {
     override fun findByUserId(userId: Long): HoldemTable? =
         store.values.firstOrNull { it.seatOf(userId) != null }?.let { copyOf(it) }
 
+    override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
+
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: TableId(nextId++)
         val saved = copyOf(table, id)
@@ -72,7 +74,16 @@ class CancelHandServiceTest {
     private fun startAndStoreHand(tableId: TableId, startingStacks: Map<Int, Chips>): Hand {
         val table = tables.findById(tableId)!!
         table.moveButtonToNextOccupiedSeat()
-        val hand = Hand.start(startingStacks, table.buttonSeatNo!!, table.smallBlind, table.bigBlind, identityShuffler)
+        val buttonSeatNo = table.buttonSeatNo!!
+        val seatNos = startingStacks.keys.sorted()
+        fun nextSeatNo(from: Int): Int = seatNos[(seatNos.indexOf(from) + 1) % seatNos.size]
+        val (smallBlindSeatNo, bigBlindSeatNo) = if (seatNos.size == 2) {
+            buttonSeatNo to nextSeatNo(buttonSeatNo)
+        } else {
+            val sb = nextSeatNo(buttonSeatNo)
+            sb to nextSeatNo(sb)
+        }
+        val hand = Hand.start(startingStacks, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, table.smallBlind, table.bigBlind, identityShuffler)
         handStore.save(tableId, hand)
         return hand
     }

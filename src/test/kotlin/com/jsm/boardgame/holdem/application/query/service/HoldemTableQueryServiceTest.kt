@@ -43,7 +43,7 @@ class HoldemTableQueryServiceTest {
     private val service = HoldemTableQueryService(tableQuery, handStore)
 
     private fun sampleHand(): Hand =
-        Hand.start(mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)), 1, Chips.of(100), Chips.of(200), Shuffler { it })
+        Hand.start(mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)), 1, 1, 2, Chips.of(100), Chips.of(200), Shuffler { it })
 
     @Test
     fun `핸드가 진행 중이 아니면 테이블 목록을 돌려준다`() {

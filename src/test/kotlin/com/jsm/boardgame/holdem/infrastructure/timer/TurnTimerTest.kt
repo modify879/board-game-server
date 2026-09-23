@@ -85,7 +85,16 @@ class TurnTimerTest {
         }
         table.moveButtonToNextOccupiedSeat()
         val handStacks = stacks.associate { (seatNo, buyIn) -> seatNo to Chips.of(buyIn) }
-        return Hand.start(handStacks, table.buttonSeatNo!!, table.smallBlind, table.bigBlind, identityShuffler)
+        val buttonSeatNo = table.buttonSeatNo!!
+        val seatNos = handStacks.keys.sorted()
+        fun nextSeatNo(from: Int): Int = seatNos[(seatNos.indexOf(from) + 1) % seatNos.size]
+        val (smallBlindSeatNo, bigBlindSeatNo) = if (seatNos.size == 2) {
+            buttonSeatNo to nextSeatNo(buttonSeatNo)
+        } else {
+            val sb = nextSeatNo(buttonSeatNo)
+            sb to nextSeatNo(sb)
+        }
+        return Hand.start(handStacks, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, table.smallBlind, table.bigBlind, identityShuffler)
     }
 
     private fun event(hand: Hand?, tableId: TableId = TableId(1L)): HandBroadcastRequested {

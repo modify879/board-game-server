@@ -45,6 +45,8 @@ class HandInProgressStoreAdapterIntegrationTest {
     private fun newHand(): Hand = Hand.start(
         stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)),
         buttonSeatNo = 1,
+        smallBlindSeatNo = 2,
+        bigBlindSeatNo = 3,
         smallBlind = Chips.of(100),
         bigBlind = Chips.of(200),
         shuffler = shuffler,

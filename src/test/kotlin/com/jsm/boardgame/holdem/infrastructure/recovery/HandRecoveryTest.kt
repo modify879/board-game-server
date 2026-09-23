@@ -2,15 +2,23 @@ package com.jsm.boardgame.holdem.infrastructure.recovery
 
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
+import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionCommand
+import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandUseCase
+import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
+import com.jsm.boardgame.holdem.application.command.usecase.StandUpUseCase
+import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceCommand
+import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceUseCase
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
+import com.jsm.boardgame.holdem.infrastructure.timer.ConnectionTimer
 import org.springframework.messaging.support.MessageBuilder
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.scheduling.Trigger
@@ -25,7 +33,6 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 private class HandRecoveryFakeScheduledFuture : ScheduledFuture<Any?> {
@@ -108,6 +115,25 @@ private class HandRecoveryFakeTableRepository : HoldemTableRepository {
         store[id.value] = saved
         return saved
     }
+
+    override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
+}
+
+private class HandRecoveryFakeUpdateSeatPresenceUseCase : UpdateSeatPresenceUseCase {
+    val calls = mutableListOf<UpdateSeatPresenceCommand>()
+    override fun update(command: UpdateSeatPresenceCommand) {
+        calls += command
+    }
+}
+
+private class HandRecoveryFakeExpireConnectionUseCase(
+    private val reservedTableId: TableId?,
+) : ExpireConnectionUseCase {
+    override fun expire(command: ExpireConnectionCommand): TableId? = reservedTableId
+}
+
+private class HandRecoveryFakeStandUpUseCase : StandUpUseCase {
+    override fun standUp(command: StandUpCommand) {}
 }
 
 private class HandRecoveryFakeResumeHandUseCase : ResumeHandUseCase {
@@ -134,6 +160,15 @@ class HandRecoveryTest {
     private fun connectedEvent(userId: Long) =
         SessionConnectedEvent(this, fakeMessage, HandRecoveryFakePrincipal(userId))
 
+    private fun newConnectionTimer(tables: HoldemTableRepository): ConnectionTimer = ConnectionTimer(
+        HandRecoveryFakeTaskScheduler(),
+        clock,
+        HandRecoveryFakeUpdateSeatPresenceUseCase(),
+        HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null),
+        HandRecoveryFakeStandUpUseCase(),
+        tables,
+    )
+
     /** userId = seatNo * 1000L 로 좌석을 채운 테이블을 만들고 참가시켜 진행 중 핸드를 만든다. */
     private fun seatTableWithHand(tables: HandRecoveryFakeTableRepository, tableId: Long, vararg seatNos: Int): Hand {
         var table = HoldemTable.create("test-table")
@@ -152,7 +187,15 @@ class HandRecoveryTest {
         tables.save(table)
         table.moveButtonToNextOccupiedSeat()
         val stacks = seatNos.associateWith { Chips.of(10_000) }
-        return Hand.start(stacks, table.buttonSeatNo!!, table.smallBlind, table.bigBlind, identityShuffler)
+        return Hand.start(
+            stacks = stacks,
+            buttonSeatNo = table.buttonSeatNo!!,
+            smallBlindSeatNo = table.buttonSeatNo,
+            bigBlindSeatNo = stacks.keys.single { it != table.buttonSeatNo },
+            smallBlind = table.smallBlind,
+            bigBlind = table.bigBlind,
+            shuffler = identityShuffler,
+        )
     }
 
     @Test
@@ -162,7 +205,7 @@ class HandRecoveryTest {
         val scheduler = HandRecoveryFakeTaskScheduler()
         val resumeUseCase = HandRecoveryFakeResumeHandUseCase()
         val cancelUseCase = HandRecoveryFakeCancelHandUseCase()
-        val recovery = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase)
+        val recovery = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase, newConnectionTimer(tables))
 
         recovery.onApplicationReady()
 
@@ -178,7 +221,7 @@ class HandRecoveryTest {
         val scheduler = HandRecoveryFakeTaskScheduler()
         val resumeUseCase = HandRecoveryFakeResumeHandUseCase()
         val cancelUseCase = HandRecoveryFakeCancelHandUseCase()
-        val recovery = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase)
+        val recovery = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase, newConnectionTimer(tables))
 
         val hand = seatTableWithHand(tables, 1L, 1, 2)
         handStore.put(TableId(1L), hand)
@@ -200,7 +243,7 @@ class HandRecoveryTest {
         val scheduler = HandRecoveryFakeTaskScheduler()
         val resumeUseCase = HandRecoveryFakeResumeHandUseCase()
         val cancelUseCase = HandRecoveryFakeCancelHandUseCase()
-        val recovery = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase)
+        val recovery = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase, newConnectionTimer(tables))
 
         val hand = seatTableWithHand(tables, 1L, 1, 2)
         handStore.put(TableId(1L), hand)
@@ -219,7 +262,7 @@ class HandRecoveryTest {
         val scheduler = HandRecoveryFakeTaskScheduler()
         val resumeUseCase = HandRecoveryFakeResumeHandUseCase()
         val cancelUseCase = HandRecoveryFakeCancelHandUseCase()
-        val recovery = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase)
+        val recovery = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase, newConnectionTimer(tables))
 
         val hand = seatTableWithHand(tables, 1L, 1, 2)
         handStore.put(TableId(1L), hand)
@@ -240,7 +283,7 @@ class HandRecoveryTest {
         val scheduler = HandRecoveryFakeTaskScheduler()
         val resumeUseCase = HandRecoveryFakeResumeHandUseCase()
         val cancelUseCase = HandRecoveryFakeCancelHandUseCase()
-        val recovery = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase)
+        val recovery = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase, newConnectionTimer(tables))
 
         val hand = seatTableWithHand(tables, 1L, 1, 2)
         handStore.put(TableId(1L), hand)
@@ -258,26 +301,70 @@ class HandRecoveryTest {
     }
 
     @Test
-    fun `복구 유예 중인 사용자는 참을, 완료되면 거짓을 돌려준다`() {
+    fun `복구를 시작하면 참가자들의 연결 감시를 유예시켜 부팅 스캔에서 제외한다`() {
         val handStore = HandRecoveryFakeHandStore()
         val tables = HandRecoveryFakeTableRepository()
         val scheduler = HandRecoveryFakeTaskScheduler()
         val resumeUseCase = HandRecoveryFakeResumeHandUseCase()
         val cancelUseCase = HandRecoveryFakeCancelHandUseCase()
-        val recovery = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase)
+
+        val timerScheduler = HandRecoveryFakeTaskScheduler()
+        val presenceUseCase = HandRecoveryFakeUpdateSeatPresenceUseCase()
+        val connectionTimer = ConnectionTimer(
+            timerScheduler,
+            clock,
+            presenceUseCase,
+            HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null),
+            HandRecoveryFakeStandUpUseCase(),
+            tables,
+        )
+        val recovery = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase, connectionTimer)
+
+        val hand = seatTableWithHand(tables, 1L, 1, 2)
+        handStore.put(TableId(1L), hand)
+
+        recovery.onApplicationReady() // HandRecovery 가 먼저 실행돼(@Order(0)) 1000L/2000L 을 유예시킨다
+        connectionTimer.onApplicationReady() // 그 뒤 ConnectionTimer 의 부팅 스캔이 돈다(@Order(1))
+
+        assertEquals(0, presenceUseCase.calls.size)
+    }
+
+    @Test
+    fun `복구가 끝났을 때 안 돌아온 사람에게는 연결 감시가 새로 걸리고 돌아온 사람에게는 걸리지 않는다`() {
+        val handStore = HandRecoveryFakeHandStore()
+        val tables = HandRecoveryFakeTableRepository()
+        val recoveryScheduler = HandRecoveryFakeTaskScheduler()
+        val resumeUseCase = HandRecoveryFakeResumeHandUseCase()
+        val cancelUseCase = HandRecoveryFakeCancelHandUseCase()
+
+        val timerScheduler = HandRecoveryFakeTaskScheduler()
+        val presenceUseCase = HandRecoveryFakeUpdateSeatPresenceUseCase()
+        val connectionTimer = ConnectionTimer(
+            timerScheduler,
+            clock,
+            presenceUseCase,
+            HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null),
+            HandRecoveryFakeStandUpUseCase(),
+            tables,
+        )
+        val recovery = HandRecovery(handStore, tables, recoveryScheduler, clock, resumeUseCase, cancelUseCase, connectionTimer)
 
         val hand = seatTableWithHand(tables, 1L, 1, 2)
         handStore.put(TableId(1L), hand)
 
         recovery.onApplicationReady()
+        recovery.onSessionConnected(connectedEvent(1000L)) // 1000L 만 복귀, 2000L 은 끝까지 안 돌아온다
+        recoveryScheduler.scheduledCalls[0].task.run() // 유예 3분 경과 -> 핸드 취소 + 감시 반영
 
-        assertTrue(recovery.isAwaitingRecovery(1000L))
-        assertTrue(recovery.isAwaitingRecovery(2000L))
+        assertEquals(1, cancelUseCase.calls.size)
 
-        recovery.onSessionConnected(connectedEvent(1000L))
-        recovery.onSessionConnected(connectedEvent(2000L))
+        // 안 돌아온 2000L: DISCONNECTED 표시 + 3분 뒤 만료가 새로 예약된다.
+        assertEquals(1, presenceUseCase.calls.size)
+        assertEquals(2000L, presenceUseCase.calls[0].userId)
+        assertEquals(SeatPresence.DISCONNECTED.name, presenceUseCase.calls[0].presence)
+        assertEquals(1, timerScheduler.scheduledCalls.size)
 
-        assertFalse(recovery.isAwaitingRecovery(1000L))
-        assertFalse(recovery.isAwaitingRecovery(2000L))
+        // 돌아온 1000L 에게는 어떤 감시도 걸리지 않는다.
+        assertTrue(presenceUseCase.calls.none { it.userId == 1000L })
     }
 }

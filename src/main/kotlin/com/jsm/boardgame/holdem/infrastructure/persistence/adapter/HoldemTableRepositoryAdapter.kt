@@ -36,6 +36,8 @@ class HoldemTableRepositoryAdapter(
         return findById(TableId(seatEntity.tableId))
     }
 
+    override fun findAllSeatedUserIds(): List<Long> = seatJpa.findAll().map { it.userId }
+
     override fun save(table: HoldemTable): HoldemTable {
         val savedTable = try {
             tableJpa.saveAndFlush(table.toJpaEntity())

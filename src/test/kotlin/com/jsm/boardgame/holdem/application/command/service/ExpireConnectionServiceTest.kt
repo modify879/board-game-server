@@ -22,6 +22,8 @@ private class ExpireConnectionFakeHoldemTableRepository : HoldemTableRepository 
 
     override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
+    override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
+
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: run { sequence += 1; TableId(sequence) }
         val saved = HoldemTable.reconstitute(
@@ -91,6 +93,8 @@ class ExpireConnectionServiceTest {
             Hand.start(
                 mapOf(1 to Chips.of(8_000), 2 to Chips.of(8_000)),
                 buttonSeatNo = 1,
+                smallBlindSeatNo = 1,
+                bigBlindSeatNo = 2,
                 HoldemTable.SMALL_BLIND,
                 HoldemTable.BIG_BLIND,
                 Shuffler { it },
