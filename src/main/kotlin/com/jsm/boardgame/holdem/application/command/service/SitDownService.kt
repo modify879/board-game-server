@@ -39,7 +39,7 @@ class SitDownService(
 
         // 도메인 검증(좌석 범위·점유·바이인 범위)을 지갑 차감보다 먼저 해서, 좌석이 이미 찼는데
         // 지갑만 빠지는 순서가 생기지 않게 한다.
-        table.sitDown(command.seatNo, command.userId, Chips.of(command.buyIn))
+        table.sitDown(command.seatNo, command.userId, Chips.of(command.buyIn), command.postBlindImmediately)
 
         // memo 가 유일하게 "어느 게임인가" 를 나른다 — LedgerEntryType 이 이미 방향을 말하고
         // LedgerReferenceType.GAME_TABLE 엔 게임 이름이 없다. 표시 문구를 넣지 않는다(규칙 8, 문구는 클라이언트가 만든다).

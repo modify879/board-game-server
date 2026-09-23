@@ -207,6 +207,7 @@ class Hand private constructor(
             smallBlind: Chips,
             bigBlind: Chips,
             shuffler: Shuffler,
+            extraPostSeatNos: Set<Int> = emptySet(),
         ): Hand {
             if (stacks.size < 2 || bigBlindSeatNo !in stacks) {
                 throw IllegalHandStateException(
@@ -239,7 +240,7 @@ class Hand private constructor(
             }
 
             val bettingSeats = seatNos.map { seatNo -> BettingSeat(seatNo, stacks.getValue(seatNo), Chips.ZERO, SeatStatus.ACTIVE) }
-            val preflopRound = BettingRound.preflop(bettingSeats, smallBlind, bigBlind, smallBlindSeatNo, bigBlindSeatNo, preflopFirstToActSeatNo)
+            val preflopRound = BettingRound.preflop(bettingSeats, smallBlind, bigBlind, smallBlindSeatNo, bigBlindSeatNo, preflopFirstToActSeatNo, extraPostSeatNos)
 
             val hand = Hand(
                 buttonSeatNo = buttonSeatNo,

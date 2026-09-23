@@ -155,4 +155,26 @@ class SitDownServiceTest {
         assertEquals(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, e.errorCode)
         assertEquals(0, walletTransfer.toGameCalls.size)
     }
+
+    @Test
+    fun `postBlindImmediately 를 true 로 착석하면 즉시 참가 상태가 되고 진입료를 빚진다`() {
+        val tableId = createTable()
+
+        service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, seatNo = 1, buyIn = 8_000, postBlindImmediately = true))
+
+        val seat = tables.findById(tableId)!!.seatAt(1)!!
+        assertEquals(false, seat.awaitingBigBlind)
+        assertEquals(true, seat.owesImmediatePost)
+    }
+
+    @Test
+    fun `postBlindImmediately 를 생략하고 착석하면 BB 대기 상태가 되고 진입료가 없다`() {
+        val tableId = createTable()
+
+        service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, seatNo = 1, buyIn = 8_000))
+
+        val seat = tables.findById(tableId)!!.seatAt(1)!!
+        assertEquals(true, seat.awaitingBigBlind)
+        assertEquals(false, seat.owesImmediatePost)
+    }
 }

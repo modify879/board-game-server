@@ -82,6 +82,8 @@ class HoldemTableRepositoryAdapter(
             userId = userId,
             stack = stack.amount,
             presence = presence.name,
+            awaitingBigBlind = awaitingBigBlind,
+            owesImmediatePost = owesImmediatePost,
         )
 
     private fun translateSeat(e: DataIntegrityViolationException): RuntimeException {

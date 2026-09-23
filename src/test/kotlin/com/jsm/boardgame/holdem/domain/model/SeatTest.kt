@@ -2,6 +2,8 @@ package com.jsm.boardgame.holdem.domain.model
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class SeatTest {
 
@@ -29,5 +31,34 @@ class SeatTest {
         )
         assertEquals(SeatPresence.DISCONNECTED, seat.presence)
         assertEquals(-100L, seat.stack.amount)
+    }
+
+    @Test
+    fun `postBlindImmediately 를 true 로 착석하면 즉시 참가하되 진입료를 빚진다`() {
+        val seat = Seat.of(seatNo = 1, userId = 1L, stack = Chips.of(10_000), postBlindImmediately = true)
+        assertFalse(seat.awaitingBigBlind)
+        assertTrue(seat.owesImmediatePost)
+    }
+
+    @Test
+    fun `postBlindImmediately 를 생략하거나 false 로 착석하면 BB 를 기다리고 진입료가 없다`() {
+        val default = Seat.of(seatNo = 1, userId = 1L, stack = Chips.of(10_000))
+        assertTrue(default.awaitingBigBlind)
+        assertFalse(default.owesImmediatePost)
+
+        val explicit = Seat.of(seatNo = 1, userId = 1L, stack = Chips.of(10_000), postBlindImmediately = false)
+        assertTrue(explicit.awaitingBigBlind)
+        assertFalse(explicit.owesImmediatePost)
+    }
+
+    @Test
+    fun `clearAwaitingBigBlind 와 consumeImmediatePost 는 각각의 플래그만 끈다`() {
+        val awaiting = Seat.of(seatNo = 1, userId = 1L, stack = Chips.of(10_000), postBlindImmediately = false)
+        awaiting.clearAwaitingBigBlind()
+        assertFalse(awaiting.awaitingBigBlind)
+
+        val owing = Seat.of(seatNo = 1, userId = 1L, stack = Chips.of(10_000), postBlindImmediately = true)
+        owing.consumeImmediatePost()
+        assertFalse(owing.owesImmediatePost)
     }
 }

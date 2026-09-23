@@ -40,6 +40,10 @@ class HoldemSeatJpaEntity(
     var stack: Long,
     @Column(name = "presence", columnDefinition = "text", nullable = false)
     var presence: String,
+    @Column(name = "awaiting_big_blind", nullable = false)
+    var awaitingBigBlind: Boolean,
+    @Column(name = "owes_immediate_post", nullable = false)
+    var owesImmediatePost: Boolean,
 )
 
 interface HoldemSeatJpaRepository : JpaRepository<HoldemSeatJpaEntity, Long>, KotlinJdslJpqlExecutor {
@@ -54,6 +58,8 @@ fun HoldemSeatJpaEntity.toDomain(): Seat =
         userId = userId,
         stack = Chips.reconstitute(stack),
         presence = SeatPresence.valueOf(presence),
+        awaitingBigBlind = awaitingBigBlind,
+        owesImmediatePost = owesImmediatePost,
     )
 
 // Seat -> HoldemSeatJpaEntity 매핑은 여기 두지 않는다: 부모 테이블의 DB id 와, 기존 행이 있다면

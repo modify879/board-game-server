@@ -266,4 +266,37 @@ class BettingRoundTest {
             assertEquals(chips(0), round.seats.first { it.seatNo == seatNo }.committed)
         }
     }
+
+    @Test
+    fun `extraPostSeatNos 로 지정한 좌석은 BB 처럼 빅블라인드만큼 추가로 커밋한다`() {
+        val round = BettingRound.preflop(
+            seats = listOf(seat(1, 100_000), seat(2, 100_000), seat(3, 100_000), seat(4, 100_000)),
+            smallBlind = chips(100),
+            bigBlind = chips(200),
+            sbSeatNo = 1,
+            bbSeatNo = 2,
+            firstToActSeatNo = 3,
+            extraPostSeatNos = setOf(4),
+        )
+
+        val extraSeat = round.seats.first { it.seatNo == 4 }
+        assertEquals(chips(200), extraSeat.committed)
+        assertEquals(chips(99_800), extraSeat.stack)
+    }
+
+    @Test
+    fun `extraPostSeatNos 로 포스팅한 좌석도 옵션을 가져 라운드가 곧바로 끝나지 않는다`() {
+        val round = BettingRound.preflop(
+            seats = listOf(seat(1, 100_000), seat(2, 100_000), seat(3, 100_000), seat(4, 100_000)),
+            smallBlind = chips(100),
+            bigBlind = chips(200),
+            sbSeatNo = 1,
+            bbSeatNo = 2,
+            firstToActSeatNo = 3,
+            extraPostSeatNos = setOf(4),
+        )
+
+        assertFalse(round.isComplete)
+        assertTrue(round.canRaise(4))
+    }
 }
