@@ -247,4 +247,23 @@ class BettingRoundTest {
         val e = assertFailsWith<IllegalBettingActionException> { round.act(2, BettingAction.Check) }
         assertEquals(HoldemErrorCode.BETTING_ROUND_CLOSED, e.errorCode)
     }
+
+    @Test
+    fun `sbSeatNo 가 null 이면 아무도 SB 를 내지 않고 currentBet 은 풀 빅블라인드다`() {
+        val round = BettingRound.preflop(
+            seats = listOf(seat(1, 100_000), seat(2, 100_000), seat(3, 100_000)),
+            smallBlind = chips(100),
+            bigBlind = chips(200),
+            sbSeatNo = null,
+            bbSeatNo = 2,
+            firstToActSeatNo = 3,
+        )
+
+        val bbSeat = round.seats.first { it.seatNo == 2 }
+        assertEquals(chips(200), bbSeat.committed)
+        assertEquals(chips(200), round.currentBet)
+        for (seatNo in listOf(1, 3)) {
+            assertEquals(chips(0), round.seats.first { it.seatNo == seatNo }.committed)
+        }
+    }
 }

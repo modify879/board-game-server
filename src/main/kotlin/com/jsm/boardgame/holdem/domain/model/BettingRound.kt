@@ -221,19 +221,23 @@ class BettingRound private constructor(
                 firstToActSeatNo = firstToActSeatNo,
             )
 
-        /** 프리플랍. 블라인드를 여기서 포스팅한다. 블라인드가 스택보다 크면 스택 전부를 내고 ALL_IN 이 되지만 currentBet 은 항상 full bigBlind 다. */
+        /** 프리플랍. 블라인드를 여기서 포스팅한다. [sbSeatNo] 가 null 이면 아무도 스몰 블라인드를 내지 않는다
+         * (dead small blind) — 그래도 currentBet 은 항상 full bigBlind 다. 블라인드가 스택보다 크면
+         * 스택 전부를 내고 ALL_IN 이 되지만 currentBet 은 항상 full bigBlind 다. */
         fun preflop(
             seats: List<BettingSeat>,
             smallBlind: Chips,
             bigBlind: Chips,
-            sbSeatNo: Int,
+            sbSeatNo: Int?,
             bbSeatNo: Int,
             firstToActSeatNo: Int,
         ): BettingRound {
             val sorted = seats.sortedBy { it.seatNo }
-            val sbSeat = sorted.first { it.seatNo == sbSeatNo }
+            if (sbSeatNo != null) {
+                val sbSeat = sorted.first { it.seatNo == sbSeatNo }
+                sbSeat.commit(Chips.min(smallBlind, sbSeat.stack))
+            }
             val bbSeat = sorted.first { it.seatNo == bbSeatNo }
-            sbSeat.commit(Chips.min(smallBlind, sbSeat.stack))
             bbSeat.commit(Chips.min(bigBlind, bbSeat.stack))
 
             return BettingRound(

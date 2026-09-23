@@ -203,4 +203,112 @@ class HoldemTableTest {
         assertEquals("   ", table.name)
         assertEquals(42, table.buttonSeatNo)
     }
+
+    @Test
+    fun `advanceBlinds 는 첫 핸드에서 참가 좌석 중 가장 작은 번호를 BB 로 둔다`() {
+        val table = newTable()
+
+        val positions = table.advanceBlinds(setOf(1, 2, 3))
+
+        assertEquals(1, positions.bigBlindSeatNo)
+        assertEquals(3, positions.smallBlindSeatNo)
+        assertEquals(2, positions.buttonSeatNo)
+        assertEquals(2, table.buttonSeatNo)
+        assertEquals(3, table.smallBlindSeatNo)
+        assertEquals(1, table.bigBlindSeatNo)
+    }
+
+    @Test
+    fun `advanceBlinds 를 좌석 수만큼 연속 호출하면 모든 좌석이 정확히 한 번씩 BB 와 SB 가 된다`() {
+        val table = newTable()
+        val seatNos = setOf(1, 2, 3, 4)
+        val bbSeen = mutableListOf<Int>()
+        val sbSeen = mutableListOf<Int>()
+
+        repeat(seatNos.size) {
+            val positions = table.advanceBlinds(seatNos)
+            bbSeen += positions.bigBlindSeatNo
+            sbSeen += positions.smallBlindSeatNo!!
+        }
+
+        assertEquals(seatNos, bbSeen.toSet())
+        assertEquals(seatNos.size, bbSeen.size)
+        assertEquals(seatNos, sbSeen.toSet())
+        assertEquals(seatNos.size, sbSeen.size)
+    }
+
+    @Test
+    fun `한 좌석이 빠져도 남은 좌석들은 BB 를 건너뛰지 않는다`() {
+        val table = newTable()
+        repeat(4) { table.advanceBlinds(setOf(1, 2, 3, 4)) } // 4핸드를 돌려 좌석2가 빠지기 전 상태를 만든다
+
+        val remaining = setOf(1, 3, 4)
+        val bbSeen = mutableListOf<Int>()
+        repeat(remaining.size) {
+            bbSeen += table.advanceBlinds(remaining).bigBlindSeatNo
+        }
+
+        assertEquals(remaining, bbSeen.toSet())
+        assertEquals(remaining.size, bbSeen.size)
+    }
+
+    @Test
+    fun `직전 SB 좌석이 비면 버튼이 그 좌석 번호에 그대로 남는 dead button 이다`() {
+        val table = HoldemTable.reconstitute(
+            id = TableId(1L),
+            name = "t",
+            smallBlind = HoldemTable.SMALL_BLIND,
+            bigBlind = HoldemTable.BIG_BLIND,
+            buttonSeatNo = 2,
+            seats = emptyMap(),
+            version = 0,
+            smallBlindSeatNo = 3, // 직전 SB 였던 좌석 — 이번 핸드엔 없다
+            bigBlindSeatNo = 4,   // 직전 BB — 이번 핸드에도 있다
+        )
+
+        val positions = table.advanceBlinds(setOf(1, 2, 4))
+
+        assertEquals(3, positions.buttonSeatNo)     // 비어 있어도 그대로
+        assertEquals(4, positions.smallBlindSeatNo) // 직전 BB(4) 가 이번엔 참가하므로 dead 아님
+        assertEquals(1, positions.bigBlindSeatNo)   // 직전 BB(4) 다음의 참가 좌석, 순환
+    }
+
+    @Test
+    fun `직전 BB 좌석이 비면 아무도 SB 를 내지 않는 dead small blind 다`() {
+        val table = HoldemTable.reconstitute(
+            id = TableId(1L),
+            name = "t",
+            smallBlind = HoldemTable.SMALL_BLIND,
+            bigBlind = HoldemTable.BIG_BLIND,
+            buttonSeatNo = 2,
+            seats = emptyMap(),
+            version = 0,
+            smallBlindSeatNo = 3,
+            bigBlindSeatNo = 4, // 직전 BB — 이번 핸드엔 없다
+        )
+
+        val positions = table.advanceBlinds(setOf(1, 2, 3))
+
+        assertEquals(3, positions.buttonSeatNo)        // 직전 SB(3) 그대로, 이번엔 참가하니 dead 아님
+        assertEquals(null, positions.smallBlindSeatNo) // 직전 BB(4) 가 이번엔 없어 dead small blind
+        assertEquals(1, positions.bigBlindSeatNo)      // 직전 BB(4) 다음의 참가 좌석, 순환
+    }
+
+    @Test
+    fun `헤즈업은 매 핸드 버튼이 두 좌석을 번갈아 맡는다`() {
+        val table = newTable()
+
+        val first = table.advanceBlinds(setOf(1, 2))
+        assertEquals(1, first.buttonSeatNo)
+        assertEquals(1, first.smallBlindSeatNo)
+        assertEquals(2, first.bigBlindSeatNo)
+
+        val second = table.advanceBlinds(setOf(1, 2))
+        assertEquals(2, second.buttonSeatNo)
+        assertEquals(2, second.smallBlindSeatNo)
+        assertEquals(1, second.bigBlindSeatNo)
+
+        val third = table.advanceBlinds(setOf(1, 2))
+        assertEquals(1, third.buttonSeatNo)
+    }
 }

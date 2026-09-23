@@ -23,7 +23,7 @@ class HandSnapshotTest {
 
     @Test
     fun `프리플랍 중간 상태에서 복원해도 다음 차례 좌석과 BB 옵션이 그대로다`() {
-        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, chips(100), chips(200), identityShuffler)
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
 
         hand.act(1, BettingAction.Call)
         hand.act(2, BettingAction.Call)
@@ -42,7 +42,7 @@ class HandSnapshotTest {
 
     @Test
     fun `600으로 레이즈한 뒤 복원해도 다음 최소 레이즈는 1000이다`() {
-        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, chips(100), chips(200), identityShuffler)
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
 
         hand.act(1, BettingAction.RaiseTo(chips(600)))
         assertEquals(2, hand.toActSeatNo)
@@ -59,7 +59,7 @@ class HandSnapshotTest {
 
     @Test
     fun `짧은 올인 뒤 복원하면 이미 행동한 좌석은 여전히 레이즈할 수 없다`() {
-        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 900), buttonSeatNo = 1, chips(100), chips(200), identityShuffler)
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 900), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
 
         hand.act(1, BettingAction.RaiseTo(chips(600))) // 풀 레이즈: 200 -> 600, 증분 400
         hand.act(2, BettingAction.Call)
@@ -82,7 +82,7 @@ class HandSnapshotTest {
 
     @Test
     fun `폴드 상태·보드·홀카드가 복원 후에도 유지되고 포스트플랍 중간 상태도 복원된다`() {
-        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, chips(100), chips(200), identityShuffler)
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
 
         hand.act(1, BettingAction.Fold)
         hand.act(2, BettingAction.Call)
@@ -111,7 +111,7 @@ class HandSnapshotTest {
 
     @Test
     fun `복원된 덱은 이미 딜된 카드를 포함하지 않고 남은 장수가 맞는다`() {
-        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, chips(100), chips(200), identityShuffler)
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
         hand.act(1, BettingAction.Call)
         hand.act(2, BettingAction.Call)
 
@@ -128,7 +128,7 @@ class HandSnapshotTest {
 
     @Test
     fun `복원 후 핸드를 끝까지 진행해도 시작 스택 총합과 최종 스택 총합이 같다`() {
-        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, chips(100), chips(200), identityShuffler)
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
 
         hand.act(1, BettingAction.Call)
         hand.act(2, BettingAction.Call)
@@ -152,8 +152,8 @@ class HandSnapshotTest {
 
     @Test
     fun `같은 고정 덱에 같은 액션을 먹여도 중간에 스냅샷ㆍ복원을 거친 쪽과 안 거친 쪽의 최종 스택이 같다`() {
-        val handA = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, chips(100), chips(200), identityShuffler)
-        var handB = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, chips(100), chips(200), identityShuffler)
+        val handA = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
+        var handB = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
 
         handA.act(1, BettingAction.Call); handB.act(1, BettingAction.Call)
         handA.act(2, BettingAction.Call); handB.act(2, BettingAction.Call)

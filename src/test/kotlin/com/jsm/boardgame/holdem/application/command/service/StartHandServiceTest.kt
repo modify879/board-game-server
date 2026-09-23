@@ -27,6 +27,8 @@ private class StartHandFakeTableRepository : HoldemTableRepository {
     override fun findByUserId(userId: Long): HoldemTable? =
         store.values.firstOrNull { it.seatOf(userId) != null }?.let { copyOf(it) }
 
+    override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
+
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: TableId(nextId++)
         val saved = copyOf(table, id)
@@ -43,6 +45,8 @@ private class StartHandFakeTableRepository : HoldemTableRepository {
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
             version = table.version,
+            smallBlindSeatNo = table.smallBlindSeatNo,
+            bigBlindSeatNo = table.bigBlindSeatNo,
         )
 }
 
@@ -75,13 +79,15 @@ class StartHandServiceTest {
     }
 
     @Test
-    fun `핸드를 시작하면 버튼이 다음 점유 좌석으로 이동하고 핸드가 저장된다`() {
+    fun `핸드를 시작하면 첫 핸드는 가장 작은 참가 좌석이 BB 가 되고 핸드가 저장된다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
 
         service.start(StartHandCommand(tableId.value))
 
         val savedTable = tables.findById(tableId)!!
-        assertEquals(1, savedTable.buttonSeatNo)
+        assertEquals(2, savedTable.buttonSeatNo)
+        assertEquals(3, savedTable.smallBlindSeatNo)
+        assertEquals(1, savedTable.bigBlindSeatNo)
         val hand = handStore.find(tableId)
         assertNotNull(hand)
         assertEquals(false, hand.isFinished)
@@ -94,7 +100,9 @@ class StartHandServiceTest {
         table.moveButtonToNextOccupiedSeat()
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
-            table.buttonSeatNo!!,
+            buttonSeatNo = table.buttonSeatNo!!,
+            smallBlindSeatNo = table.buttonSeatNo!!,
+            bigBlindSeatNo = 2,
             table.smallBlind,
             table.bigBlind,
             identityShuffler,
@@ -129,19 +137,23 @@ class StartHandServiceTest {
     }
 
     @Test
-    fun `버튼이 0칩 좌석에 놓이면 참가 좌석으로 재배치된다`() {
-        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+    fun `직전 SB 좌석이 빈 채로 다음 핸드를 시작하면 버튼이 그 좌석 번호에 그대로 남는다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L, 4 to 10_000L)
+
+        service.start(StartHandCommand(tableId.value)) // 1핸드(첫 핸드): BB=1, SB=4, 버튼=3
+        handStore.remove(tableId) // 정산 없이 다음 핸드로 넘어가는 상황을 흉내낸다
+
         var table = tables.findById(tableId)!!
-        table.applyStacks(mapOf(2 to Chips.ZERO))
-        table.moveButtonToNextOccupiedSeat() // null -> 1
+        table.applyStacks(mapOf(4 to Chips.ZERO)) // 직전 SB(4) 좌석이 이번 핸드엔 없다
         tables.save(table)
 
-        service.start(StartHandCommand(tableId.value))
+        service.start(StartHandCommand(tableId.value)) // 2핸드: 직전 SB(4)가 다음 버튼이 되는데, 비어 있어도 그대로(dead button)
 
         val savedTable = tables.findById(tableId)!!
-        assertEquals(3, savedTable.buttonSeatNo)
+        assertEquals(4, savedTable.buttonSeatNo)
         val hand = handStore.find(tableId)!!
-        assertEquals(3, hand.buttonSeatNo)
+        assertEquals(4, hand.buttonSeatNo)
+        assertFailsWith<NoSuchElementException> { hand.stackOf(4) } // 4번은 이번 핸드에 없다
     }
 
     @Test

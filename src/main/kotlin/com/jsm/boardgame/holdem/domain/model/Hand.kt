@@ -190,24 +190,28 @@ class Hand private constructor(
         currentRound = null
     }
 
-    /** 버튼 왼쪽부터 시계 방향으로 좌석 번호 오름차순 순환 — 팟 분배 시 나머지 칩을 돌리는 순서. */
+    /** 버튼 다음 참가 좌석부터 시계 방향으로 좌석 번호 오름차순 순환 — 팟 분배 시 나머지 칩을 돌리는 순서.
+     * 버튼이 참가자가 아니어도(dead button) 다음으로 큰 참가 좌석부터 시작해 정상 동작한다. */
     private fun seatOrderFromButton(): List<Int> {
-        val buttonIdx = seatNos.indexOf(buttonSeatNo)
-        return List(seatNos.size) { i -> seatNos[(buttonIdx + 1 + i) % seatNos.size] }
+        val startSeatNo = seatNos.firstOrNull { it > buttonSeatNo } ?: seatNos.first()
+        val startIdx = seatNos.indexOf(startSeatNo)
+        return List(seatNos.size) { i -> seatNos[(startIdx + i) % seatNos.size] }
     }
 
     companion object {
         fun start(
             stacks: Map<Int, Chips>,
             buttonSeatNo: Int,
+            smallBlindSeatNo: Int?,
+            bigBlindSeatNo: Int,
             smallBlind: Chips,
             bigBlind: Chips,
             shuffler: Shuffler,
         ): Hand {
-            if (stacks.size < 2 || buttonSeatNo !in stacks) {
+            if (stacks.size < 2 || bigBlindSeatNo !in stacks) {
                 throw IllegalHandStateException(
                     HoldemErrorCode.NOT_ENOUGH_PLAYERS,
-                    "참가자가 2명 이상이어야 하고 버튼 좌석이 참가자여야 합니다: seats=${stacks.keys}, buttonSeatNo=$buttonSeatNo",
+                    "참가자가 2명 이상이어야 하고 빅 블라인드 좌석이 참가자여야 합니다: seats=${stacks.keys}, bigBlindSeatNo=$bigBlindSeatNo",
                 )
             }
 
@@ -218,28 +222,24 @@ class Hand private constructor(
             val holeCards = seatNos.associateWith { mutableListOf<Card>() }
             repeat(2) { seatNos.forEach { seatNo -> holeCards.getValue(seatNo).add(deck.draw()) } }
 
-            fun nextSeatNo(from: Int): Int = seatNos[(seatNos.indexOf(from) + 1) % seatNos.size]
+            // 시계 방향(좌석 번호 오름차순, 순환)으로 다음 참가 좌석. from 이 참가자가 아니어도(dead button) 동작한다.
+            fun nextSeatNo(from: Int): Int = seatNos.firstOrNull { it > from } ?: seatNos.first()
 
             val isHeadsUp = seatNos.size == 2
-            val sbSeatNo: Int
-            val bbSeatNo: Int
             val preflopFirstToActSeatNo: Int
             val postflopFirstToActSeatNo: Int
             if (isHeadsUp) {
-                // 헤즈업 예외: 버튼이 SB 를 겸한다. 프리플랍은 버튼 먼저, 포스트플랍은 버튼이 나중.
-                sbSeatNo = buttonSeatNo
-                bbSeatNo = nextSeatNo(buttonSeatNo)
-                preflopFirstToActSeatNo = sbSeatNo
-                postflopFirstToActSeatNo = bbSeatNo
+                // 헤즈업 예외: 버튼이 SB 를 겸한다(포지션은 HoldemTable.advanceBlinds 가 이미 정했다).
+                // 프리플랍은 버튼 먼저, 포스트플랍은 버튼이 나중.
+                preflopFirstToActSeatNo = buttonSeatNo
+                postflopFirstToActSeatNo = bigBlindSeatNo
             } else {
-                sbSeatNo = nextSeatNo(buttonSeatNo)
-                bbSeatNo = nextSeatNo(sbSeatNo)
-                preflopFirstToActSeatNo = nextSeatNo(bbSeatNo)
+                preflopFirstToActSeatNo = nextSeatNo(bigBlindSeatNo)
                 postflopFirstToActSeatNo = nextSeatNo(buttonSeatNo)
             }
 
             val bettingSeats = seatNos.map { seatNo -> BettingSeat(seatNo, stacks.getValue(seatNo), Chips.ZERO, SeatStatus.ACTIVE) }
-            val preflopRound = BettingRound.preflop(bettingSeats, smallBlind, bigBlind, sbSeatNo, bbSeatNo, preflopFirstToActSeatNo)
+            val preflopRound = BettingRound.preflop(bettingSeats, smallBlind, bigBlind, smallBlindSeatNo, bigBlindSeatNo, preflopFirstToActSeatNo)
 
             val hand = Hand(
                 buttonSeatNo = buttonSeatNo,
