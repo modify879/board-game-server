@@ -4,4 +4,4 @@ interface SitDownUseCase {
     fun sitDown(command: SitDownCommand)
 }
 
-data class SitDownCommand(val tableId: Long, val userId: Long, val seatNo: Int, val buyIn: Long)
+data class SitDownCommand(val tableId: Long, val userId: Long, val seatNo: Int, val buyIn: Long, val postBlindImmediately: Boolean = false)

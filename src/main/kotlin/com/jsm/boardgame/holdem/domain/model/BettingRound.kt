@@ -223,7 +223,14 @@ class BettingRound private constructor(
 
         /** 프리플랍. 블라인드를 여기서 포스팅한다. [sbSeatNo] 가 null 이면 아무도 스몰 블라인드를 내지 않는다
          * (dead small blind) — 그래도 currentBet 은 항상 full bigBlind 다. 블라인드가 스택보다 크면
-         * 스택 전부를 내고 ALL_IN 이 되지만 currentBet 은 항상 full bigBlind 다. */
+         * 스택 전부를 내고 ALL_IN 이 되지만 currentBet 은 항상 full bigBlind 다.
+         *
+         * [extraPostSeatNos] 는 착석 시 "BB 즉시 포스팅"을 고른 좌석 — 첫 핸드에 한 번, BB 만큼 추가로
+         * 라이브 벳으로 낸다(committed 에 반영, 스택에서 차감). 아직 행동한 적이 없으므로 BB 처럼
+         * 옵션을 갖는다 — actedSinceLastFullRaise 에 넣지 않는다(생성 시점엔 항상 비어 있으므로 별도 처리 불필요).
+         * 단순화: 실제 포커룸은 포스팅 금액의 일부를 죽은 돈(dead)으로 처리하기도 하지만, 우리는 전부
+         * live 로 둔다 — 포스팅한 사람도 그 핸드에서 행동할 권리(체크/레이즈)를 그대로 갖는 편이 구현이
+         * 간단하고, 사이드팟 계산도 "커밋된 돈은 전부 살아있다"는 기존 불변식 하나로 처리된다. */
         fun preflop(
             seats: List<BettingSeat>,
             smallBlind: Chips,
@@ -231,6 +238,7 @@ class BettingRound private constructor(
             sbSeatNo: Int?,
             bbSeatNo: Int,
             firstToActSeatNo: Int,
+            extraPostSeatNos: Set<Int> = emptySet(),
         ): BettingRound {
             val sorted = seats.sortedBy { it.seatNo }
             if (sbSeatNo != null) {
@@ -239,6 +247,11 @@ class BettingRound private constructor(
             }
             val bbSeat = sorted.first { it.seatNo == bbSeatNo }
             bbSeat.commit(Chips.min(bigBlind, bbSeat.stack))
+
+            for (seatNo in extraPostSeatNos) {
+                val seat = sorted.first { it.seatNo == seatNo }
+                seat.commit(Chips.min(bigBlind, seat.stack))
+            }
 
             return BettingRound(
                 seats = sorted,

@@ -39,7 +39,7 @@ class HoldemTable private constructor(
 
     private val seats: MutableMap<Int, Seat> = seats.toMutableMap()
 
-    fun sitDown(seatNo: Int, userId: Long, buyIn: Chips): Seat {
+    fun sitDown(seatNo: Int, userId: Long, buyIn: Chips, postBlindImmediately: Boolean = false): Seat {
         if (seatNo !in 1..MAX_SEATS) {
             throw SeatNoOutOfRangeException("좌석 번호는 1..$MAX_SEATS 여야 합니다: $seatNo")
         }
@@ -55,7 +55,7 @@ class HoldemTable private constructor(
             throw BuyInOutOfRangeException("바이인은 $minBuyIn..$maxBuyIn 범위여야 합니다: $buyIn")
         }
 
-        val seat = Seat.of(seatNo, userId, buyIn)
+        val seat = Seat.of(seatNo, userId, buyIn, postBlindImmediately)
         seats[seatNo] = seat
         return seat
     }
@@ -69,6 +69,16 @@ class HoldemTable private constructor(
     fun markPresence(userId: Long, presence: SeatPresence) {
         val seat = seatOf(userId) ?: throw NotSeatedException("이 테이블에 앉아 있지 않은 사용자입니다: userId=$userId")
         seat.applyPresence(presence)
+    }
+
+    /** BB 가 이 좌석에 자연스럽게 도달했을 때 StartHandService 가 부른다. 대기 중이 아니었으면 아무 일도 없다. */
+    internal fun clearAwaitingBigBlind(seatNo: Int) {
+        seats[seatNo]?.clearAwaitingBigBlind()
+    }
+
+    /** 즉시 포스팅을 빚진 좌석이 처음 핸드에 참가할 때 StartHandService 가 부른다. */
+    internal fun consumeImmediatePost(seatNo: Int) {
+        seats[seatNo]?.consumeImmediatePost()
     }
 
     fun seatOf(userId: Long): Seat? = seats.values.find { it.userId == userId }

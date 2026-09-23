@@ -17,6 +17,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.test.assertFalse
 
 private class StartHandFakeTableRepository : HoldemTableRepository {
     private val store = mutableMapOf<Long, HoldemTable>()
@@ -76,6 +78,13 @@ class StartHandServiceTest {
         }
         table = tables.save(table)
         return table.id!!
+    }
+
+    /** BB 즉시 포스팅을 특정 좌석에만 골라 앉힐 때 쓴다. */
+    private fun sitDownChoosing(tableId: TableId, seatNo: Int, buyIn: Long, postBlindImmediately: Boolean) {
+        val table = tables.findById(tableId)!!
+        table.sitDown(seatNo, userId = seatNo.toLong(), buyIn = Chips.of(buyIn), postBlindImmediately = postBlindImmediately)
+        tables.save(table)
     }
 
     @Test
@@ -169,5 +178,219 @@ class StartHandServiceTest {
         val savedTable = tables.findById(tableId)!!
         val total = savedTable.seatAt(1)!!.stack + savedTable.seatAt(2)!!.stack
         assertEquals(Chips.of(200), total)
+    }
+
+    @Test
+    fun `테이블의 첫 핸드는 새로 앉은 좌석들이 모두 대기(기본값)를 골라도 정상적으로 시작된다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+
+        service.start(StartHandCommand(tableId.value))
+
+        val hand = handStore.find(tableId)!!
+        assertEquals(Chips.of(10_000) - HoldemTable.BIG_BLIND, hand.stackOf(1))
+        assertEquals(Chips.of(10_000), hand.stackOf(2))
+        assertEquals(Chips.of(10_000) - HoldemTable.SMALL_BLIND, hand.stackOf(3))
+
+        val savedTable = tables.findById(tableId)!!
+        assertFalse(savedTable.seatAt(1)!!.awaitingBigBlind)
+        assertFalse(savedTable.seatAt(2)!!.awaitingBigBlind)
+        assertFalse(savedTable.seatAt(3)!!.awaitingBigBlind)
+    }
+
+    @Test
+    fun `대기를 선택하면 BB 가 자기 자리에 올 때까지 새 좌석은 핸드에 참가하지 않는다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+        service.start(StartHandCommand(tableId.value)) // 1핸드: BB=1
+        handStore.remove(tableId)
+
+        sitDownChoosing(tableId, seatNo = 4, buyIn = 10_000L, postBlindImmediately = false)
+
+        service.start(StartHandCommand(tableId.value)) // 2핸드: BB=2 (4 아님)
+
+        val savedTable = tables.findById(tableId)!!
+        assertEquals(2, savedTable.bigBlindSeatNo)
+        val hand = handStore.find(tableId)!!
+        assertFailsWith<NoSuchElementException> { hand.stackOf(4) }
+        assertTrue(tables.findById(tableId)!!.seatAt(4)!!.awaitingBigBlind)
+    }
+
+    @Test
+    fun `대기 중인 좌석에 BB 가 도달하면 참가하고 대기 플래그가 풀린다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+        service.start(StartHandCommand(tableId.value)) // 1핸드: BB=1
+        handStore.remove(tableId)
+
+        sitDownChoosing(tableId, seatNo = 4, buyIn = 10_000L, postBlindImmediately = false)
+
+        service.start(StartHandCommand(tableId.value)) // 2핸드: BB=2
+        handStore.remove(tableId)
+        service.start(StartHandCommand(tableId.value)) // 3핸드: BB=3
+        handStore.remove(tableId)
+        service.start(StartHandCommand(tableId.value)) // 4핸드: BB=4 -> 대기 풀림
+
+        val savedTable = tables.findById(tableId)!!
+        assertEquals(4, savedTable.bigBlindSeatNo)
+        val hand = handStore.find(tableId)!!
+        assertEquals(Chips.of(10_000) - HoldemTable.BIG_BLIND, hand.stackOf(4))
+        assertFalse(tables.findById(tableId)!!.seatAt(4)!!.awaitingBigBlind)
+    }
+
+    @Test
+    fun `즉시 포스팅을 선택하면 다음 핸드에 바로 참가하고 BB 만큼 추가로 포스팅한다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+        service.start(StartHandCommand(tableId.value)) // 1핸드: BB=1
+        handStore.remove(tableId)
+
+        sitDownChoosing(tableId, seatNo = 4, buyIn = 10_000L, postBlindImmediately = true)
+
+        service.start(StartHandCommand(tableId.value)) // 2핸드: BB=2, 4는 즉시 참가
+
+        val savedTable = tables.findById(tableId)!!
+        assertEquals(2, savedTable.bigBlindSeatNo)
+        val hand = handStore.find(tableId)!!
+        assertEquals(Chips.of(10_000) - HoldemTable.BIG_BLIND, hand.stackOf(4))
+        assertFalse(tables.findById(tableId)!!.seatAt(4)!!.owesImmediatePost)
+    }
+
+    @Test
+    fun `즉시 포스팅은 한 번만 부과된다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+        service.start(StartHandCommand(tableId.value)) // 1핸드: BB=1
+        handStore.remove(tableId)
+
+        sitDownChoosing(tableId, seatNo = 4, buyIn = 10_000L, postBlindImmediately = true)
+
+        service.start(StartHandCommand(tableId.value)) // 2핸드: BB=2, 4는 진입료 납부
+        handStore.remove(tableId)
+
+        service.start(StartHandCommand(tableId.value)) // 3핸드: BB=3, 4는 이번엔 SB/BB 아님
+
+        val hand = handStore.find(tableId)!!
+        assertEquals(3, tables.findById(tableId)!!.bigBlindSeatNo)
+        assertEquals(Chips.of(10_000), hand.stackOf(4))
+    }
+
+    @Test
+    fun `핵심 공정성 — 대기를 선택해도 한 바퀴 동안 낸 블라인드 총액이 기존 참가자보다 적지 않다`() {
+        val buyIn = 10_000L
+        val tableId = tableWithSeats(1 to buyIn, 2 to buyIn, 3 to buyIn)
+        service.start(StartHandCommand(tableId.value)) // 회전을 고정하는 1핸드(공정성 집계에선 뺀다)
+        handStore.remove(tableId)
+
+        sitDownChoosing(tableId, seatNo = 4, buyIn = buyIn, postBlindImmediately = false)
+
+        var seat1Total = Chips.ZERO
+        var seat4Total = Chips.ZERO
+        repeat(3) {
+            service.start(StartHandCommand(tableId.value))
+            val hand = handStore.find(tableId)!!
+            seat1Total += runCatching { Chips.of(buyIn) - hand.stackOf(1) }.getOrDefault(Chips.ZERO)
+            seat4Total += runCatching { Chips.of(buyIn) - hand.stackOf(4) }.getOrDefault(Chips.ZERO)
+            handStore.remove(tableId)
+        }
+
+        assertTrue(seat4Total >= seat1Total)
+    }
+
+    @Test
+    fun `핵심 공정성 — 즉시 포스팅을 선택하면 한 바퀴 동안 낸 블라인드 총액이 기존 참가자보다 적지 않다`() {
+        val buyIn = 10_000L
+        val tableId = tableWithSeats(1 to buyIn, 2 to buyIn, 3 to buyIn)
+        service.start(StartHandCommand(tableId.value))
+        handStore.remove(tableId)
+
+        sitDownChoosing(tableId, seatNo = 4, buyIn = buyIn, postBlindImmediately = true)
+
+        var seat1Total = Chips.ZERO
+        var seat4Total = Chips.ZERO
+        repeat(3) {
+            service.start(StartHandCommand(tableId.value))
+            val hand = handStore.find(tableId)!!
+            seat1Total += runCatching { Chips.of(buyIn) - hand.stackOf(1) }.getOrDefault(Chips.ZERO)
+            seat4Total += runCatching { Chips.of(buyIn) - hand.stackOf(4) }.getOrDefault(Chips.ZERO)
+            handStore.remove(tableId)
+        }
+
+        assertTrue(seat4Total >= seat1Total)
+    }
+
+    @Test
+    fun `비었다가 다시 찬 테이블은 대기 좌석만 있어도 예외 없이 핸드가 시작되고 둘 다 참가한다`() {
+        val tableId = tableWithSeats(5 to 10_000L, 6 to 10_000L, 7 to 10_000L)
+        service.start(StartHandCommand(tableId.value)) // bigBlindSeatNo 를 채워둔다(첫 핸드는 전원 참가 완화가 적용된다)
+        handStore.remove(tableId)
+
+        var table = tables.findById(tableId)!!
+        table.standUp(5)
+        table.standUp(6)
+        table.standUp(7)
+        tables.save(table)
+
+        sitDownChoosing(tableId, seatNo = 1, buyIn = 10_000L, postBlindImmediately = false)
+        sitDownChoosing(tableId, seatNo = 2, buyIn = 10_000L, postBlindImmediately = false)
+
+        service.start(StartHandCommand(tableId.value))
+
+        val hand = handStore.find(tableId)!!
+        assertEquals(Chips.of(10_000) - HoldemTable.SMALL_BLIND, hand.stackOf(1))
+        assertEquals(Chips.of(10_000) - HoldemTable.BIG_BLIND, hand.stackOf(2))
+
+        val savedTable = tables.findById(tableId)!!
+        assertFalse(savedTable.seatAt(1)!!.awaitingBigBlind)
+        assertFalse(savedTable.seatAt(2)!!.awaitingBigBlind)
+    }
+
+    @Test
+    fun `정규 참가자가 파산해 대기자만 남으면 예외 없이 핸드가 시작되고 대기 플래그가 풀린다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        service.start(StartHandCommand(tableId.value)) // 1핸드: 1·2 정상 참가, 대기 없음
+        handStore.remove(tableId)
+
+        sitDownChoosing(tableId, seatNo = 3, buyIn = 10_000L, postBlindImmediately = false) // 3은 대기
+
+        var table = tables.findById(tableId)!!
+        table.applyStacks(mapOf(2 to Chips.ZERO)) // 정규 참가자 2가 파산해 후보에서 빠진다
+        tables.save(table)
+
+        service.start(StartHandCommand(tableId.value)) // 후보={1,3}, 대기 제외 참가자={1} < 2 → 완화
+
+        val hand = handStore.find(tableId)!!
+        assertFailsWith<NoSuchElementException> { hand.stackOf(2) }
+        assertNotNull(runCatching { hand.stackOf(1) }.getOrNull())
+        assertNotNull(runCatching { hand.stackOf(3) }.getOrNull())
+
+        val savedTable = tables.findById(tableId)!!
+        assertFalse(savedTable.seatAt(3)!!.awaitingBigBlind)
+    }
+
+    @Test
+    fun `참가자가 이미 2명 이상이면 대기 좌석은 완화 없이 그대로 대기한다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+        service.start(StartHandCommand(tableId.value)) // 1핸드: BB=1
+        handStore.remove(tableId)
+
+        sitDownChoosing(tableId, seatNo = 4, buyIn = 10_000L, postBlindImmediately = false)
+
+        service.start(StartHandCommand(tableId.value)) // 2핸드: 참가자={1,2,3}(3명) — 완화가 필요 없다
+
+        val hand = handStore.find(tableId)!!
+        assertFailsWith<NoSuchElementException> { hand.stackOf(4) }
+        assertTrue(tables.findById(tableId)!!.seatAt(4)!!.awaitingBigBlind)
+    }
+
+    @Test
+    fun `스택 총합은 보존된다`() {
+        val buyIn = 10_000L
+        val tableId = tableWithSeats(1 to buyIn, 2 to buyIn, 3 to buyIn)
+        service.start(StartHandCommand(tableId.value))
+        handStore.remove(tableId)
+        sitDownChoosing(tableId, seatNo = 4, buyIn = buyIn, postBlindImmediately = true)
+
+        service.start(StartHandCommand(tableId.value))
+
+        val hand = handStore.find(tableId)!!
+        val participants = listOf(1, 2, 3, 4)
+        val stacksTotal = participants.fold(Chips.ZERO) { acc, seatNo -> acc + hand.stackOf(seatNo) }
+        assertEquals(Chips.of(buyIn * participants.size), stacksTotal + hand.potTotal())
     }
 }
