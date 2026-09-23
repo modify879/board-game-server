@@ -12,6 +12,7 @@ import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.messaging.support.MessageBuilder
 import org.springframework.scheduling.TaskScheduler
@@ -103,12 +104,22 @@ private class ConnectionTimerFakePrincipal(private val id: Long) : Principal {
     override fun getName(): String = id.toString()
 }
 
+private class ConnectionTimerFakeHoldemTableRepository : HoldemTableRepository {
+    val seatedUserIds = mutableListOf<Long>()
+
+    override fun findById(id: TableId): HoldemTable? = null
+    override fun findByUserId(userId: Long): HoldemTable? = null
+    override fun save(table: HoldemTable): HoldemTable = table
+    override fun findAllSeatedUserIds(): List<Long> = seatedUserIds
+}
+
 class ConnectionTimerTest {
 
     private val fixedInstant = Instant.parse("2026-01-01T00:00:00Z")
     private val clock = Clock.fixed(fixedInstant, ZoneOffset.UTC)
     private val identityShuffler = Shuffler { it }
     private val fakeMessage = MessageBuilder.withPayload(ByteArray(0)).build()
+    private val tables = ConnectionTimerFakeHoldemTableRepository()
 
     private fun disconnectEvent(userId: Long?) = SessionDisconnectEvent(
         this,
@@ -126,12 +137,15 @@ class ConnectionTimerTest {
         table.sitDown(1, 1000L, Chips.of(10_000))
         table.sitDown(2, 2000L, Chips.of(10_000))
         table.moveButtonToNextOccupiedSeat()
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
         return Hand.start(
-            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
-            table.buttonSeatNo!!,
-            table.smallBlind,
-            table.bigBlind,
-            identityShuffler,
+            stacks = stacks,
+            buttonSeatNo = table.buttonSeatNo!!,
+            smallBlindSeatNo = table.buttonSeatNo,
+            bigBlindSeatNo = stacks.keys.single { it != table.buttonSeatNo },
+            smallBlind = table.smallBlind,
+            bigBlind = table.bigBlind,
+            shuffler = identityShuffler,
         )
     }
 
@@ -141,12 +155,15 @@ class ConnectionTimerTest {
         table.sitDown(1, 1000L, Chips.of(8_000))
         table.sitDown(2, 2000L, Chips.of(8_000))
         table.moveButtonToNextOccupiedSeat()
+        val stacks = mapOf(1 to Chips.of(100), 2 to Chips.of(100))
         return Hand.start(
-            mapOf(1 to Chips.of(100), 2 to Chips.of(100)),
-            table.buttonSeatNo!!,
-            table.smallBlind,
-            table.bigBlind,
-            identityShuffler,
+            stacks = stacks,
+            buttonSeatNo = table.buttonSeatNo!!,
+            smallBlindSeatNo = table.buttonSeatNo,
+            bigBlindSeatNo = stacks.keys.single { it != table.buttonSeatNo },
+            smallBlind = table.smallBlind,
+            bigBlind = table.bigBlind,
+            shuffler = identityShuffler,
         )
     }
 
@@ -156,7 +173,7 @@ class ConnectionTimerTest {
         val presenceUseCase = ConnectionTimerFakeUpdateSeatPresenceUseCase()
         val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
         val standUpUseCase = ConnectionTimerFakeStandUpUseCase()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase)
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase, tables)
 
         timer.onSessionDisconnect(disconnectEvent(42L))
 
@@ -173,7 +190,7 @@ class ConnectionTimerTest {
         val presenceUseCase = ConnectionTimerFakeUpdateSeatPresenceUseCase()
         val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
         val standUpUseCase = ConnectionTimerFakeStandUpUseCase()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase)
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase, tables)
 
         timer.onSessionDisconnect(disconnectEvent(42L))
         val scheduledExpiry = scheduler.scheduledCalls[0]
@@ -193,7 +210,7 @@ class ConnectionTimerTest {
         val presenceUseCase = ConnectionTimerFakeUpdateSeatPresenceUseCase()
         val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
         val standUpUseCase = ConnectionTimerFakeStandUpUseCase()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase)
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase, tables)
 
         timer.onSessionDisconnect(disconnectEvent(42L))
         scheduler.scheduledCalls[0].task.run()
@@ -214,7 +231,7 @@ class ConnectionTimerTest {
         val tableId = TableId(7L)
         val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = tableId)
         val standUpUseCase = ConnectionTimerFakeStandUpUseCase()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase)
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase, tables)
 
         timer.onSessionDisconnect(disconnectEvent(42L))
         scheduler.scheduledCalls[0].task.run()
@@ -229,7 +246,7 @@ class ConnectionTimerTest {
         val tableId = TableId(7L)
         val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = tableId)
         val standUpUseCase = ConnectionTimerFakeStandUpUseCase()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase)
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase, tables)
 
         timer.onSessionDisconnect(disconnectEvent(42L))
         scheduler.scheduledCalls[0].task.run() // 핸드 진행 중 -> 예약만 남는다
@@ -248,7 +265,7 @@ class ConnectionTimerTest {
         val tableId = TableId(7L)
         val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = tableId)
         val standUpUseCase = ConnectionTimerFakeStandUpUseCase()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase)
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase, tables)
 
         timer.onSessionDisconnect(disconnectEvent(42L))
         scheduler.scheduledCalls[0].task.run() // 핸드 진행 중 -> 예약만 남는다
@@ -265,7 +282,7 @@ class ConnectionTimerTest {
         val presenceUseCase = ConnectionTimerFakeUpdateSeatPresenceUseCase()
         val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
         val standUpUseCase = ConnectionTimerFakeStandUpUseCase()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase)
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase, tables)
 
         timer.onSessionDisconnect(disconnectEvent(null))
 
@@ -279,7 +296,7 @@ class ConnectionTimerTest {
         val presenceUseCase = ConnectionTimerFakeUpdateSeatPresenceUseCase()
         val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
         val standUpUseCase = ConnectionTimerFakeStandUpUseCase()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase)
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase, tables)
 
         timer.onSessionDisconnect(disconnectEvent(42L))
         val stale = scheduler.scheduledCalls[0]
@@ -291,5 +308,90 @@ class ConnectionTimerTest {
 
         fresh.task.run()
         assertEquals(1, expireUseCase.calls.size)
+    }
+
+    @Test
+    fun `유예 중인 사용자는 연결이 끊겨도 감시가 걸리지 않는다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        val presenceUseCase = ConnectionTimerFakeUpdateSeatPresenceUseCase()
+        val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
+        val standUpUseCase = ConnectionTimerFakeStandUpUseCase()
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase, ConnectionTimerFakeHoldemTableRepository())
+
+        timer.suspendWatch(setOf(42L))
+        timer.onSessionDisconnect(disconnectEvent(42L))
+
+        assertEquals(0, presenceUseCase.calls.size)
+        assertEquals(0, scheduler.scheduledCalls.size)
+    }
+
+    @Test
+    fun `부팅 시 앉아 있던 사용자 전원에게 연결 감시를 건다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        val presenceUseCase = ConnectionTimerFakeUpdateSeatPresenceUseCase()
+        val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
+        val standUpUseCase = ConnectionTimerFakeStandUpUseCase()
+        val bootTables = ConnectionTimerFakeHoldemTableRepository().apply { seatedUserIds += listOf(11L, 22L) }
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase, bootTables)
+
+        timer.onApplicationReady()
+
+        assertEquals(2, presenceUseCase.calls.size)
+        assertTrue(presenceUseCase.calls.all { it.presence == SeatPresence.DISCONNECTED.name })
+        assertEquals(setOf(11L, 22L), presenceUseCase.calls.map { it.userId }.toSet())
+        assertEquals(2, scheduler.scheduledCalls.size)
+    }
+
+    @Test
+    fun `부팅 후 아무도 접속하지 않으면 만료되어 퇴장 처리로 이어진다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        val presenceUseCase = ConnectionTimerFakeUpdateSeatPresenceUseCase()
+        val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
+        val standUpUseCase = ConnectionTimerFakeStandUpUseCase()
+        val bootTables = ConnectionTimerFakeHoldemTableRepository().apply { seatedUserIds += 99L }
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase, bootTables)
+
+        timer.onApplicationReady()
+        scheduler.scheduledCalls[0].task.run()
+
+        assertEquals(1, expireUseCase.calls.size)
+        assertEquals(99L, expireUseCase.calls[0].userId)
+    }
+
+    @Test
+    fun `부팅 후 접속한 사용자는 감시가 취소되고 SEATED 로 돌아온다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        val presenceUseCase = ConnectionTimerFakeUpdateSeatPresenceUseCase()
+        val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
+        val standUpUseCase = ConnectionTimerFakeStandUpUseCase()
+        val bootTables = ConnectionTimerFakeHoldemTableRepository().apply { seatedUserIds += 42L }
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase, bootTables)
+
+        timer.onApplicationReady()
+        val scheduledExpiry = scheduler.scheduledCalls[0]
+        timer.onSessionConnected(connectedEvent(42L))
+
+        assertTrue(scheduledExpiry.future.cancelled)
+        assertEquals(SeatPresence.SEATED.name, presenceUseCase.calls.last().presence)
+
+        scheduledExpiry.task.run()
+        assertEquals(0, expireUseCase.calls.size)
+    }
+
+    @Test
+    fun `복구 유예 중인 사용자는 부팅 시 감시 대상에서 빠진다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        val presenceUseCase = ConnectionTimerFakeUpdateSeatPresenceUseCase()
+        val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
+        val standUpUseCase = ConnectionTimerFakeStandUpUseCase()
+        val bootTables = ConnectionTimerFakeHoldemTableRepository().apply { seatedUserIds += listOf(1L, 2L) }
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase, bootTables)
+
+        timer.suspendWatch(setOf(1L))
+        timer.onApplicationReady()
+
+        assertEquals(1, presenceUseCase.calls.size)
+        assertEquals(2L, presenceUseCase.calls[0].userId)
+        assertEquals(1, scheduler.scheduledCalls.size)
     }
 }

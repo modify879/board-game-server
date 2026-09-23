@@ -72,6 +72,24 @@ class BettingRound private constructor(
         toAct = if (isRoundComplete()) null else firstActiveSeatNoFrom(firstToActSeatNo)
     }
 
+    /**
+     * 영속 복원 전용 — 검증하지 않는다. actedSinceLastFullRaise·toAct 을 여기서 다시 계산하지 않고
+     * 스냅샷 값을 그대로 되돌린다. 그렇지 않으면 BB 옵션이 사라지거나 이미 행동한 좌석이
+     * 다시 레이즈할 수 있게 된다.
+     */
+    private constructor(
+        seats: List<BettingSeat>,
+        currentBet: Chips,
+        lastRaiseSize: Chips,
+        lastFullLevel: Chips,
+        actedSinceLastFullRaise: Set<Int>,
+        toAct: Int?,
+    ) : this(seats, currentBet, lastRaiseSize, lastFullLevel, toAct ?: seats.firstOrNull()?.seatNo ?: 0) {
+        this.actedSinceLastFullRaise.clear()
+        this.actedSinceLastFullRaise.addAll(actedSinceLastFullRaise)
+        this.toAct = toAct
+    }
+
     val minRaiseTo: Chips get() = currentBet + lastRaiseSize
     val toActSeatNo: Int? get() = toAct
     val isComplete: Boolean get() = toAct == null
@@ -82,6 +100,19 @@ class BettingRound private constructor(
     }
 
     fun canRaise(seatNo: Int): Boolean = seatNo !in actedSinceLastFullRaise
+
+    /**
+     * 진행 중 라운드 상태를 그대로 뽑는다. actedSinceLastFullRaise·toAct 까지 담아야
+     * 복원 후에도 BB 옵션·짧은 올인 재오픈 금지가 깨지지 않는다.
+     */
+    fun snapshot(): HandSnapshot.BettingRoundSnapshot = HandSnapshot.BettingRoundSnapshot(
+        seats = seats.map { HandSnapshot.BettingSeatSnapshot(it.seatNo, it.stack, it.committed, it.status) },
+        currentBet = currentBet,
+        lastRaiseSize = lastRaiseSize,
+        lastFullLevel = lastFullLevel,
+        actedSinceLastFullRaise = actedSinceLastFullRaise.toSet(),
+        toActSeatNo = toAct,
+    )
 
     fun act(seatNo: Int, action: BettingAction) {
         if (isComplete) {
@@ -190,19 +221,23 @@ class BettingRound private constructor(
                 firstToActSeatNo = firstToActSeatNo,
             )
 
-        /** 프리플랍. 블라인드를 여기서 포스팅한다. 블라인드가 스택보다 크면 스택 전부를 내고 ALL_IN 이 되지만 currentBet 은 항상 full bigBlind 다. */
+        /** 프리플랍. 블라인드를 여기서 포스팅한다. [sbSeatNo] 가 null 이면 아무도 스몰 블라인드를 내지 않는다
+         * (dead small blind) — 그래도 currentBet 은 항상 full bigBlind 다. 블라인드가 스택보다 크면
+         * 스택 전부를 내고 ALL_IN 이 되지만 currentBet 은 항상 full bigBlind 다. */
         fun preflop(
             seats: List<BettingSeat>,
             smallBlind: Chips,
             bigBlind: Chips,
-            sbSeatNo: Int,
+            sbSeatNo: Int?,
             bbSeatNo: Int,
             firstToActSeatNo: Int,
         ): BettingRound {
             val sorted = seats.sortedBy { it.seatNo }
-            val sbSeat = sorted.first { it.seatNo == sbSeatNo }
+            if (sbSeatNo != null) {
+                val sbSeat = sorted.first { it.seatNo == sbSeatNo }
+                sbSeat.commit(Chips.min(smallBlind, sbSeat.stack))
+            }
             val bbSeat = sorted.first { it.seatNo == bbSeatNo }
-            sbSeat.commit(Chips.min(smallBlind, sbSeat.stack))
             bbSeat.commit(Chips.min(bigBlind, bbSeat.stack))
 
             return BettingRound(
@@ -213,5 +248,24 @@ class BettingRound private constructor(
                 firstToActSeatNo = firstToActSeatNo,
             )
         }
+
+        /**
+         * 영속 복원 전용 — 검증하지 않는다. `open`/`preflop` 은 새 라운드를 여는 경로라 그대로 둔다.
+         */
+        fun reconstitute(
+            seats: List<BettingSeat>,
+            currentBet: Chips,
+            lastRaiseSize: Chips,
+            lastFullLevel: Chips,
+            actedSinceLastFullRaise: Set<Int>,
+            toActSeatNo: Int?,
+        ): BettingRound = BettingRound(
+            seats.sortedBy { it.seatNo },
+            currentBet,
+            lastRaiseSize,
+            lastFullLevel,
+            actedSinceLastFullRaise,
+            toActSeatNo,
+        )
     }
 }

@@ -17,6 +17,8 @@ private class UpdateSeatPresenceFakeHoldemTableRepository : HoldemTableRepositor
 
     override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
+    override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
+
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: run { sequence += 1; TableId(sequence) }
         val saved = HoldemTable.reconstitute(

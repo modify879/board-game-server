@@ -26,6 +26,10 @@ class HoldemTableJpaEntity(
     var bigBlind: Long,
     @Column(name = "button_seat_no")
     var buttonSeatNo: Int?,
+    @Column(name = "small_blind_seat_no")
+    var smallBlindSeatNo: Int?,
+    @Column(name = "big_blind_seat_no")
+    var bigBlindSeatNo: Int?,
     @Version
     @Column(name = "version", nullable = false)
     var version: Long = 0,
@@ -42,6 +46,8 @@ fun HoldemTableJpaEntity.toDomain(seats: List<HoldemSeatJpaEntity>): HoldemTable
         buttonSeatNo = buttonSeatNo,
         seats = seats.associate { it.seatNo to it.toDomain() },
         version = version,
+        smallBlindSeatNo = smallBlindSeatNo,
+        bigBlindSeatNo = bigBlindSeatNo,
     )
 
 fun HoldemTable.toJpaEntity(): HoldemTableJpaEntity =
@@ -51,5 +57,7 @@ fun HoldemTable.toJpaEntity(): HoldemTableJpaEntity =
         smallBlind = smallBlind.amount,
         bigBlind = bigBlind.amount,
         buttonSeatNo = buttonSeatNo,
+        smallBlindSeatNo = smallBlindSeatNo,
+        bigBlindSeatNo = bigBlindSeatNo,
         version = version,
     )

@@ -38,6 +38,10 @@ out/
 
 ### Claude Code ###
 .claude/
+# CLAUDE.md 에서 참조하는 규칙 스코프 파일이므로 저장소에 함께 있어야 한다
+!.claude/
+.claude/*
+!.claude/rules/
 .claude.local.md
 
 ### Kotlin ###

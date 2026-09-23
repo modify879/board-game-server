@@ -60,6 +60,8 @@ class HoldemViewAssemblerTest {
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
             table.buttonSeatNo!!,
+            smallBlindSeatNo = 1,
+            bigBlindSeatNo = 2,
             table.smallBlind,
             table.bigBlind,
             identityShuffler,
@@ -80,6 +82,8 @@ class HoldemViewAssemblerTest {
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)),
             table.buttonSeatNo!!,
+            smallBlindSeatNo = 2,
+            bigBlindSeatNo = 3,
             table.smallBlind,
             table.bigBlind,
             identityShuffler,
@@ -102,6 +106,8 @@ class HoldemViewAssemblerTest {
         val hand = Hand.start(
             mapOf(1 to Chips.of(100), 2 to Chips.of(100)),
             table.buttonSeatNo!!,
+            smallBlindSeatNo = 1,
+            bigBlindSeatNo = 2,
             table.smallBlind,
             table.bigBlind,
             identityShuffler,

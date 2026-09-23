@@ -28,5 +28,18 @@ class Deck private constructor(private val cards: List<Card>) {
             }
             return Deck(cards)
         }
+
+        /**
+         * 영속 복원 전용. 덱 자체를 저장하지 않는다 — 저장하면 진행 중인 판의 미래 카드를
+         * DB 접근자가 알게 된다. 이미 딜된 카드(홀카드+보드)를 뺀 나머지만 다시 섞어 새 덱을 만든다.
+         * 아직 아무도 본 적 없는 카드라 어떤 순열이든 통계적으로 동일하다.
+         */
+        fun reconstitute(shuffler: Shuffler, remainingCards: List<Card>): Deck {
+            val cards = shuffler.shuffle(remainingCards)
+            if (cards.size != remainingCards.size || cards.toSet().size != remainingCards.size) {
+                error("셔플러가 ${remainingCards.size}장의 서로 다른 카드를 돌려주지 않았다: size=${cards.size}")
+            }
+            return Deck(cards)
+        }
     }
 }

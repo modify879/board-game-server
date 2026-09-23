@@ -29,6 +29,8 @@ class Hand private constructor(
     private val holeCards: Map<Int, List<Card>>,
     private val deck: Deck,
     private val postflopFirstToActSeatNo: Int,
+    /** 핸드 시작 시점 스택. 취소·환불이 이 값으로 되돌리는 것만으로 끝나도록 따로 둔다. */
+    private val startingStacks: Map<Int, Chips>,
     private val stacks: MutableMap<Int, Chips>,
     private val statuses: MutableMap<Int, SeatStatus>,
     private val totalContributed: MutableMap<Int, Chips>,
@@ -68,6 +70,26 @@ class Hand private constructor(
         val inFlight = currentRound?.seats?.fold(Chips.ZERO) { acc, s -> acc + s.committed } ?: Chips.ZERO
         return accumulated + inFlight
     }
+
+    /**
+     * 진행 중 핸드의 상태 스냅샷. 덱과 팟은 담지 않는다 — 덱은 저장하면 진행 중인 판의 미래 카드를
+     * DB 접근자가 알게 되고(규칙 6), 팟은 좌석별 총 투입액에서 유도되므로 따로 저장하면 두 곳이
+     * 어긋날 수 있다. 복원은 [Companion.reconstitute] 를 거친다.
+     */
+    fun snapshot(): HandSnapshot = HandSnapshot(
+        buttonSeatNo = buttonSeatNo,
+        bigBlind = bigBlind,
+        seatNos = seatNos,
+        street = street,
+        board = board,
+        holeCards = holeCards.mapValues { it.value.toList() },
+        postflopFirstToActSeatNo = postflopFirstToActSeatNo,
+        startingStacks = startingStacks.toMap(),
+        stacks = stacks.toMap(),
+        statuses = statuses.toMap(),
+        totalContributed = totalContributed.toMap(),
+        currentRound = currentRound?.snapshot(),
+    )
 
     fun act(seatNo: Int, action: BettingAction) {
         val round = currentRound
@@ -168,24 +190,28 @@ class Hand private constructor(
         currentRound = null
     }
 
-    /** 버튼 왼쪽부터 시계 방향으로 좌석 번호 오름차순 순환 — 팟 분배 시 나머지 칩을 돌리는 순서. */
+    /** 버튼 다음 참가 좌석부터 시계 방향으로 좌석 번호 오름차순 순환 — 팟 분배 시 나머지 칩을 돌리는 순서.
+     * 버튼이 참가자가 아니어도(dead button) 다음으로 큰 참가 좌석부터 시작해 정상 동작한다. */
     private fun seatOrderFromButton(): List<Int> {
-        val buttonIdx = seatNos.indexOf(buttonSeatNo)
-        return List(seatNos.size) { i -> seatNos[(buttonIdx + 1 + i) % seatNos.size] }
+        val startSeatNo = seatNos.firstOrNull { it > buttonSeatNo } ?: seatNos.first()
+        val startIdx = seatNos.indexOf(startSeatNo)
+        return List(seatNos.size) { i -> seatNos[(startIdx + i) % seatNos.size] }
     }
 
     companion object {
         fun start(
             stacks: Map<Int, Chips>,
             buttonSeatNo: Int,
+            smallBlindSeatNo: Int?,
+            bigBlindSeatNo: Int,
             smallBlind: Chips,
             bigBlind: Chips,
             shuffler: Shuffler,
         ): Hand {
-            if (stacks.size < 2 || buttonSeatNo !in stacks) {
+            if (stacks.size < 2 || bigBlindSeatNo !in stacks) {
                 throw IllegalHandStateException(
                     HoldemErrorCode.NOT_ENOUGH_PLAYERS,
-                    "참가자가 2명 이상이어야 하고 버튼 좌석이 참가자여야 합니다: seats=${stacks.keys}, buttonSeatNo=$buttonSeatNo",
+                    "참가자가 2명 이상이어야 하고 빅 블라인드 좌석이 참가자여야 합니다: seats=${stacks.keys}, bigBlindSeatNo=$bigBlindSeatNo",
                 )
             }
 
@@ -196,28 +222,24 @@ class Hand private constructor(
             val holeCards = seatNos.associateWith { mutableListOf<Card>() }
             repeat(2) { seatNos.forEach { seatNo -> holeCards.getValue(seatNo).add(deck.draw()) } }
 
-            fun nextSeatNo(from: Int): Int = seatNos[(seatNos.indexOf(from) + 1) % seatNos.size]
+            // 시계 방향(좌석 번호 오름차순, 순환)으로 다음 참가 좌석. from 이 참가자가 아니어도(dead button) 동작한다.
+            fun nextSeatNo(from: Int): Int = seatNos.firstOrNull { it > from } ?: seatNos.first()
 
             val isHeadsUp = seatNos.size == 2
-            val sbSeatNo: Int
-            val bbSeatNo: Int
             val preflopFirstToActSeatNo: Int
             val postflopFirstToActSeatNo: Int
             if (isHeadsUp) {
-                // 헤즈업 예외: 버튼이 SB 를 겸한다. 프리플랍은 버튼 먼저, 포스트플랍은 버튼이 나중.
-                sbSeatNo = buttonSeatNo
-                bbSeatNo = nextSeatNo(buttonSeatNo)
-                preflopFirstToActSeatNo = sbSeatNo
-                postflopFirstToActSeatNo = bbSeatNo
+                // 헤즈업 예외: 버튼이 SB 를 겸한다(포지션은 HoldemTable.advanceBlinds 가 이미 정했다).
+                // 프리플랍은 버튼 먼저, 포스트플랍은 버튼이 나중.
+                preflopFirstToActSeatNo = buttonSeatNo
+                postflopFirstToActSeatNo = bigBlindSeatNo
             } else {
-                sbSeatNo = nextSeatNo(buttonSeatNo)
-                bbSeatNo = nextSeatNo(sbSeatNo)
-                preflopFirstToActSeatNo = nextSeatNo(bbSeatNo)
+                preflopFirstToActSeatNo = nextSeatNo(bigBlindSeatNo)
                 postflopFirstToActSeatNo = nextSeatNo(buttonSeatNo)
             }
 
             val bettingSeats = seatNos.map { seatNo -> BettingSeat(seatNo, stacks.getValue(seatNo), Chips.ZERO, SeatStatus.ACTIVE) }
-            val preflopRound = BettingRound.preflop(bettingSeats, smallBlind, bigBlind, sbSeatNo, bbSeatNo, preflopFirstToActSeatNo)
+            val preflopRound = BettingRound.preflop(bettingSeats, smallBlind, bigBlind, smallBlindSeatNo, bigBlindSeatNo, preflopFirstToActSeatNo)
 
             val hand = Hand(
                 buttonSeatNo = buttonSeatNo,
@@ -226,6 +248,7 @@ class Hand private constructor(
                 holeCards = holeCards,
                 deck = deck,
                 postflopFirstToActSeatNo = postflopFirstToActSeatNo,
+                startingStacks = stacks,
                 stacks = stacks.toMutableMap(),
                 statuses = seatNos.associateWith { SeatStatus.ACTIVE }.toMutableMap(),
                 totalContributed = seatNos.associateWith { Chips.ZERO }.toMutableMap(),
@@ -236,6 +259,47 @@ class Hand private constructor(
             if (preflopRound.isComplete) {
                 hand.onRoundComplete(preflopRound)
             }
+            return hand
+        }
+
+        /**
+         * 영속 복원 전용 — 검증하지 않는다(매퍼 규약: `reconstitute()` 는 검증하지 않는다).
+         * 진행 중(라운드가 열려 있는) 핸드만 대상이다 — 이미 끝난 핸드는 정산이 끝나 복구할 상태가
+         * 없어 애초에 저장 대상이 아니다.
+         * 덱은 스냅샷에 없다 — 이미 딜된 카드(홀카드+보드)를 뺀 나머지를 [shuffler] 로 새로 섞어
+         * 다시 만든다. 아직 아무도 본 적 없는 카드라 어떤 순열이든 통계적으로 동일하다.
+         */
+        fun reconstitute(snapshot: HandSnapshot, shuffler: Shuffler): Hand {
+            val dealtCards = snapshot.holeCards.values.flatten() + snapshot.board
+            val remainingCards = Deck.FULL - dealtCards
+            val deck = Deck.reconstitute(shuffler, remainingCards)
+
+            val currentRound = snapshot.currentRound?.let { round ->
+                BettingRound.reconstitute(
+                    seats = round.seats.map { BettingSeat(it.seatNo, it.stack, it.committed, it.status) },
+                    currentBet = round.currentBet,
+                    lastRaiseSize = round.lastRaiseSize,
+                    lastFullLevel = round.lastFullLevel,
+                    actedSinceLastFullRaise = round.actedSinceLastFullRaise,
+                    toActSeatNo = round.toActSeatNo,
+                )
+            }
+
+            val hand = Hand(
+                buttonSeatNo = snapshot.buttonSeatNo,
+                bigBlind = snapshot.bigBlind,
+                seatNos = snapshot.seatNos,
+                holeCards = snapshot.holeCards,
+                deck = deck,
+                postflopFirstToActSeatNo = snapshot.postflopFirstToActSeatNo,
+                startingStacks = snapshot.startingStacks,
+                stacks = snapshot.stacks.toMutableMap(),
+                statuses = snapshot.statuses.toMutableMap(),
+                totalContributed = snapshot.totalContributed.toMutableMap(),
+                currentRound = currentRound,
+            )
+            hand.street = snapshot.street
+            hand.boardCards.addAll(snapshot.board)
             return hand
         }
     }

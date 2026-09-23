@@ -28,6 +28,7 @@ private class MySeatQueryFakeHandStore : HandStore {
     override fun find(tableId: TableId): Hand? = store[tableId.value]
     override fun save(tableId: TableId, hand: Hand) { store[tableId.value] = hand }
     override fun remove(tableId: TableId) { store.remove(tableId.value) }
+    override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
 }
 
 class MySeatQueryServiceTest {
@@ -37,7 +38,7 @@ class MySeatQueryServiceTest {
     private val service = MySeatQueryService(tableQuery, handStore)
 
     private fun sampleHand(): Hand =
-        Hand.start(mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)), 1, Chips.of(100), Chips.of(200), Shuffler { it })
+        Hand.start(mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)), 1, 1, 2, Chips.of(100), Chips.of(200), Shuffler { it })
 
     @Test
     fun `미착석이면 null 을 돌려준다`() {

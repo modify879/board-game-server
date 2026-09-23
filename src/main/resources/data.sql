@@ -26,3 +26,16 @@ do $$ begin
 exception when duplicate_object then null;
 end $$
 @@@
+-- state 에는 인덱스가 없다. fillfactor 를 낮춰 페이지에 여유를 남기면 UPDATE 가 HOT(index 재작성 없이
+-- 같은 페이지 안에서 갱신)으로 처리돼 인덱스 블로트가 생기지 않는다. 행 수 = 진행 중인 테이블 수라
+-- autovacuum 을 기본 스케일(테이블 크기 비례)이 아니라 고정 임계치로 걸어, 몇 행 안 되는 테이블도
+-- 죽은 튜플이 쌓이자마자 청소되게 한다.
+alter table holdem_hand_in_progress
+    set (fillfactor = 70, autovacuum_vacuum_scale_factor = 0, autovacuum_vacuum_threshold = 50)
+@@@
+do $$ begin
+    alter table holdem_hand_in_progress
+        add constraint fk_hand_in_progress_table foreign key (table_id) references holdem_tables(id);
+exception when duplicate_object then null;
+end $$
+@@@
