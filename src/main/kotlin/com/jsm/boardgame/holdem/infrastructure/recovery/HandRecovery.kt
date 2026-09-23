@@ -49,9 +49,8 @@ import java.util.concurrent.atomic.AtomicLong
  * 자체가 없으므로 "그 핸드는 없었던 것"이 이미 올바른 상태이고, 이 컴포넌트가 따로 처리할
  * 게 없다.
  *
- * ponytail: 단일 인스턴스 전제다. 인스턴스가 둘 이상이면 모두 같은 행을 복구하려 들어
- * [CancelHandUseCase]/[ResumeHandUseCase] 가 중복 호출된다 - 리더 선출이나 행 잠금이 필요해지면
- * 그때 다시 본다.
+ * **단일 인스턴스 배포를 전제한다.** 인스턴스가 여럿이면 모두가 같은 행을 복구하려 들어 취소·재개
+ * 유스케이스가 중복 호출된다. 다중 인스턴스로 가려면 리더 선출이나 행 잠금이 필요하다.
  */
 @Component
 class HandRecovery(
