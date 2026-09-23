@@ -23,4 +23,7 @@ object HoldemDestinations {
     /** 위 두 목적지 패턴에서 tableId 를 뽑는다. 홀덤 테이블 목적지가 아니면 null. */
     fun tableIdOf(destination: String): Long? =
         TABLE_ID_PATTERN.find(destination)?.groupValues?.get(1)?.toLongOrNull()
+
+    /** 목적지가 개인 큐(/user/queue/tables/{id})인지. 공개 토픽과 개인 큐를 인가 정책에서 가르는 데 쓴다. */
+    fun isPrivateQueue(destination: String): Boolean = destination.startsWith("/user/queue/")
 }

@@ -287,7 +287,7 @@ class HoldemStompIntegrationTest {
     }
 
     @Test
-    fun `다른 테이블에 앉은 사용자가 남의 topic 을 구독하면 거부되고 ACCESS_DENIED 를 응답한다`() {
+    fun `다른 테이블에 앉은 사용자도 남의 topic 을 구독할 수 있다`() {
         val target = seatNewUser()
         val other = seatNewUser()
         val (session, handler) = tryConnect(other.accessToken)
@@ -295,18 +295,31 @@ class HoldemStompIntegrationTest {
 
         session.subscribe(HoldemDestinations.publicTopicOf(target.tableId), noOpFrameHandler())
 
-        val errorHeaders = handler.errorFrames.poll(5, TimeUnit.SECONDS)
-        assertThat(errorHeaders?.getFirst("errorCode")).isEqualTo("ACCESS_DENIED")
+        assertThat(handler.errorFrames.poll(1, TimeUnit.SECONDS)).isNull()
+        assertThat(session.isConnected).isTrue()
     }
 
     @Test
-    fun `미착석 사용자가 topic 을 구독하면 거부되고 ACCESS_DENIED 를 응답한다`() {
+    fun `착석하지 않은 사용자(관전자)도 topic 을 구독할 수 있다`() {
         val target = seatNewUser()
-        val (_, unseatedAccessToken) = signUpAndLogin()
-        val (session, handler) = tryConnect(unseatedAccessToken)
+        val (_, spectatorToken) = signUpAndLogin()
+        val (session, handler) = tryConnect(spectatorToken)
         checkNotNull(session)
 
         session.subscribe(HoldemDestinations.publicTopicOf(target.tableId), noOpFrameHandler())
+
+        assertThat(handler.errorFrames.poll(1, TimeUnit.SECONDS)).isNull()
+        assertThat(session.isConnected).isTrue()
+    }
+
+    @Test
+    fun `관전자는 개인 큐를 구독할 수 없고 ACCESS_DENIED 를 응답한다`() {
+        val target = seatNewUser()
+        val (_, spectatorToken) = signUpAndLogin()
+        val (session, handler) = tryConnect(spectatorToken)
+        checkNotNull(session)
+
+        session.subscribe(HoldemDestinations.privateQueueOf(target.tableId), noOpFrameHandler())
 
         val errorHeaders = handler.errorFrames.poll(5, TimeUnit.SECONDS)
         assertThat(errorHeaders?.getFirst("errorCode")).isEqualTo("ACCESS_DENIED")
@@ -448,6 +461,49 @@ class HoldemStompIntegrationTest {
                 .doesNotContain("\"$card\"")
         }
 
+        sessionA.disconnect()
+        sessionB.disconnect()
+    }
+
+    @Test
+    fun `관전자는 구독 직후 공개 상태를 스냅샷으로 받고 그 원문에는 어느 좌석의 홀카드도 없다`() {
+        val pair = seatTwoUsersAtSameTable()
+        startHandRest(pair.a.accessToken, pair.tableId)
+
+        val (sessionA, _) = tryConnect(pair.a.accessToken)
+        checkNotNull(sessionA)
+        val (privateHandlerA, privateQueueA) = capturingFrameHandler()
+        sessionA.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandlerA)
+        val holeCardsA = JsonPath.read<List<String>>(privateQueueA.poll(5, TimeUnit.SECONDS), "$.holeCards")
+
+        val (sessionB, _) = tryConnect(pair.b.accessToken)
+        checkNotNull(sessionB)
+        val (privateHandlerB, privateQueueB) = capturingFrameHandler()
+        sessionB.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandlerB)
+        val holeCardsB = JsonPath.read<List<String>>(privateQueueB.poll(5, TimeUnit.SECONDS), "$.holeCards")
+
+        // 관전자 — 어느 테이블에도 앉아 있지 않다.
+        val (_, spectatorToken) = signUpAndLogin()
+        val (spectatorSession, spectatorHandler) = tryConnect(spectatorToken)
+        checkNotNull(spectatorSession)
+        val (publicHandler, publicQueue) = capturingFrameHandler()
+
+        spectatorSession.subscribe(HoldemDestinations.publicTopicOf(pair.tableId), publicHandler)
+
+        assertThat(spectatorHandler.errorFrames.poll(1, TimeUnit.SECONDS)).isNull()
+        val publicJson = publicQueue.poll(5, TimeUnit.SECONDS)
+        assertThat(publicJson).isNotNull()
+        assertThat(JsonPath.read<Boolean>(publicJson, "$.handInProgress")).isTrue()
+
+        for (card in holeCardsA + holeCardsB) {
+            // 카드 표기는 JSON 에서 항상 따옴표를 두른 문자열 값으로만 나온다. 따옴표 없이 찾으면
+            // toActSeatNo 같은 필드 이름의 부분 문자열에 걸려 오탐이 난다.
+            assertThat(publicJson)
+                .withFailMessage("카드 ${card}가 관전자의 공개 채널 원문에 노출됨")
+                .doesNotContain("\"$card\"")
+        }
+
+        spectatorSession.disconnect()
         sessionA.disconnect()
         sessionB.disconnect()
     }
