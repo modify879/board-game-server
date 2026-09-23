@@ -175,8 +175,6 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
   추가만 하고 아무것도 지우지 않으므로 컬럼 삭제·이름/타입 변경은 손으로 SQL 을 친다.
   Hibernate 가 못 만드는 제약(FK)은 `src/main/resources/data.sql` 의 멱등 DDL 로 건다.
   **`data.sql` 의 문장 구분자는 `;` 가 아니라 `@@@`** — 기본 분할기가 `do $$ ... $$` 안의 `;` 에서 자른다
-- 홀덤 캐시게임 좌석 운영 일부 — 새 참가자의 must-post BB 와 BB 자리 대기 규칙,
-  0칩 좌석 자동 sit-out. dead button 규칙은 구현됐다
 - ArchUnit 의존성 테스트 — 게임이 둘 이상 생기면 도입. 목표는 BuckPal 과 같은 3줄:
   `application.doesNotDependOn(adapters)` / `domainDoesNotDependOnAdapters()` / `adapters.dontDependOnEachOther()`
 - 클라이언트 single-flight(토큰 갱신 경합), 프로필 이미지 업로드, 닉네임·비밀번호 변경, 회원 탈퇴,
