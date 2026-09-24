@@ -3,6 +3,7 @@ package com.jsm.boardgame.holdem.infrastructure.timer
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
+import com.jsm.boardgame.holdem.domain.exception.ConcurrentTableUpdateException
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -65,9 +66,10 @@ private class TurnTimerFakeTaskScheduler : TaskScheduler {
         throw UnsupportedOperationException()
 }
 
-private class TurnTimerFakeExpireTurnUseCase : ExpireTurnUseCase {
+private class TurnTimerFakeExpireTurnUseCase(private val throwConcurrentUpdate: Boolean = false) : ExpireTurnUseCase {
     val calls = mutableListOf<ExpireTurnCommand>()
     override fun expire(command: ExpireTurnCommand) {
+        if (throwConcurrentUpdate) throw ConcurrentTableUpdateException("test")
         calls += command
     }
 }
@@ -161,5 +163,18 @@ class TurnTimerTest {
         fresh.task.run()
         assertEquals(1, useCase.calls.size)
         assertEquals(tableId.value, useCase.calls[0].tableId)
+    }
+
+    @Test
+    fun `유스케이스가 CONCURRENT_TABLE_UPDATE 로 실패해도 만료 작업은 예외를 던지지 않는다`() {
+        val scheduler = TurnTimerFakeTaskScheduler()
+        val useCase = TurnTimerFakeExpireTurnUseCase(throwConcurrentUpdate = true)
+        val timer = TurnTimer(scheduler, clock, useCase)
+        val hand = handWithToAct(1 to 10_000L, 2 to 10_000L)
+
+        timer.onHandBroadcastRequested(event(hand))
+        val scheduledTask = scheduler.scheduledCalls[0]
+
+        scheduledTask.task.run()
     }
 }

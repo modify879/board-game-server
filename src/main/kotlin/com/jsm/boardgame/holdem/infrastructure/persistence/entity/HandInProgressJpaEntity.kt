@@ -11,6 +11,7 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import jakarta.persistence.Version
 import org.springframework.data.jpa.repository.JpaRepository
 import java.time.Instant
 
@@ -36,6 +37,9 @@ class HandInProgressJpaEntity(
     var state: HandStateJson,
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant,
+    @Version
+    @Column(name = "version")
+    var version: Long? = null,
 )
 
 interface HandInProgressJpaRepository : JpaRepository<HandInProgressJpaEntity, Long>
