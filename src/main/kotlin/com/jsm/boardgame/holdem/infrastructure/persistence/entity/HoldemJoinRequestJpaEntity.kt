@@ -10,6 +10,7 @@ import jakarta.persistence.Id
 import jakarta.persistence.Table
 import jakarta.persistence.UniqueConstraint
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Query
 import java.time.Instant
 
 @Entity
@@ -40,6 +41,9 @@ class HoldemJoinRequestJpaEntity(
 interface HoldemJoinRequestJpaRepository : JpaRepository<HoldemJoinRequestJpaEntity, Long> {
     fun findAllByTableId(tableId: Long): List<HoldemJoinRequestJpaEntity>
     fun findByUserId(userId: Long): HoldemJoinRequestJpaEntity?
+
+    @Query("select distinct j.tableId from HoldemJoinRequestJpaEntity j")
+    fun findAllDistinctTableIds(): List<Long>
 }
 
 fun HoldemJoinRequestJpaEntity.toDomain(): JoinRequest =

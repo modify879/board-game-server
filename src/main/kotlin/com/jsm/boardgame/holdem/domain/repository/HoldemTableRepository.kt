@@ -27,5 +27,12 @@ interface HoldemTableRepository {
      */
     fun findAllPendingNextHandTableIds(): List<TableId>
 
+    /**
+     * 대기 중인 참가 요청이 있는 모든 테이블 id. 재시작 시 처리되지 않은 참가 요청을 다시 처리하는
+     * 스윕 대상(HandRecovery). 기본값으로 빈 목록을 주지 않는다 — 구현을 빠뜨린 걸 컴파일러가 잡아야
+     * 스윕이 조용히 무력화되지 않는다.
+     */
+    fun findAllTableIdsWithPendingJoinRequests(): List<TableId>
+
     fun save(table: HoldemTable): HoldemTable
 }

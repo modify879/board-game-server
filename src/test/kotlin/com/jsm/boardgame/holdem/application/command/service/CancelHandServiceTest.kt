@@ -30,6 +30,8 @@ private class CancelHandFakeTableRepository : HoldemTableRepository {
     override fun findAllPendingNextHandTableIds(): List<TableId> =
         store.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
 
+    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
+
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: TableId(nextId++)
         val saved = copyOf(table, id)

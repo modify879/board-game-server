@@ -32,6 +32,7 @@ class StartScheduledHandService(
         // 재무장된 새 타이머와 경합해 먼저 도착한 stale 실행을 조용히 거른다.
         if (Instant.now(clock).isBefore(nextHandAt)) return
 
+        // 이 시각에 아직 남아 있는 참가 요청은 이번 핸드에 딜인되지 않는다 — HandStarter.start 는 점유 좌석만 딜인하고 참가 요청은 건드리지 않는다. 핸드가 끝난 뒤 처리된다(작은 경합 창, 허용 가능한 수준).
         if (!handStarter.start(tableId, table)) {
             table.clearNextHand()
             tables.save(table)

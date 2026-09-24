@@ -238,4 +238,25 @@ class HoldemTableRepositoryAdapterIntegrationTest {
         }
         assertEquals(HoldemErrorCode.ALREADY_SEATED, e.errorCode)
     }
+
+    @Test
+    fun `대기 중인 참가 요청이 있는 테이블만 findAllTableIdsWithPendingJoinRequests 에 나타난다`() {
+        val seatedUserPending = uniqueUserId()
+        val requesterId = uniqueUserId()
+        val tablePending = HoldemTable.create("t14")
+        tablePending.sitDown(1, seatedUserPending, buyIn)
+        val savedPending = tables.save(tablePending)
+        savedPending.requestJoin(userId = requesterId, seatNo = 2, buyIn = buyIn, postBlindImmediately = false, requestedAt = Instant.now().truncatedTo(ChronoUnit.MICROS))
+        tables.save(savedPending)
+
+        val seatedUserNoPending = uniqueUserId()
+        val tableNoPending = HoldemTable.create("t15")
+        tableNoPending.sitDown(1, seatedUserNoPending, buyIn)
+        tables.save(tableNoPending)
+
+        val tableIds = tables.findAllTableIdsWithPendingJoinRequests()
+
+        assertTrue(tableIds.contains(savedPending.id))
+        assertTrue(!tableIds.contains(tableNoPending.id))
+    }
 }

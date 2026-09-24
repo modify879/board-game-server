@@ -5,7 +5,6 @@ import com.jsm.boardgame.holdem.application.exception.HandNotFoundException
 import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
 import com.jsm.boardgame.holdem.application.exception.UnknownActionException
 import com.jsm.boardgame.holdem.application.port.HandStore
-import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.exception.IllegalBettingActionException
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
@@ -40,6 +39,7 @@ private class PlayActionFakeTableRepository : HoldemTableRepository {
 
     override fun findAllPendingNextHandTableIds(): List<TableId> =
         store.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
+    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: TableId(nextId++)
@@ -70,11 +70,6 @@ private class PlayActionFakeHandStore : HandStore {
     override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
 }
 
-private class PlayActionFakeWalletTransfer : WalletTransfer {
-    override fun toGame(userId: Long, amount: Long, tableId: Long, memo: String?) {}
-    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {}
-}
-
 class PlayActionServiceTest {
 
     private val tables = PlayActionFakeTableRepository()
@@ -83,8 +78,7 @@ class PlayActionServiceTest {
     private val eventPublisher = ApplicationEventPublisher { }
     private val clock: Clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
     private val nextHandDelay: Duration = Duration.ofSeconds(5)
-    private val walletTransfer = PlayActionFakeWalletTransfer()
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, walletTransfer, nextHandDelay)
+    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
     private val service = PlayActionService(tables, handStore, handSettler, eventPublisher)
 
     /** userId = seatNo * 1000 으로 대응시킨다. */

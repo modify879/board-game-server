@@ -128,7 +128,7 @@ class HoldemApiIntegrationTest {
         ledgerEntryRepository.save(entry)
     }
 
-    private fun balanceOf(userId: Long): Long = walletRepository.findByUserId(userId)!!.balance.amount
+    private fun balanceOf(userId: Long): Long = walletRepository.findByUserId(userId)?.balance?.amount ?: 0L
 
     private fun createTable(accessToken: String, name: String = "t-${UUID.randomUUID().toString().take(8)}"): Long {
         val result = authPost("/api/holdem/tables", accessToken, """{"name":"$name"}""")
@@ -378,6 +378,46 @@ class HoldemApiIntegrationTest {
         authDelete("/api/holdem/tables/$tableId/seats/request", accessToken)
             .andExpect(status().isNotFound)
             .andExpect(jsonPath("$.errorCode").value("JOIN_REQUEST_NOT_FOUND"))
+    }
+
+    @Test
+    fun `핸드 도중 잔액 부족한 참가 요청이 있어도 폴드로 핸드는 정산된다`() {
+        val ctx = seatedWithHandInProgress()
+        val (spectatorId, spectatorToken) = signUpAndLogin() // 잔액 0 — fundWallet 호출 없음
+        sitDown(spectatorToken, ctx.tableId, 5, 10_000)
+            .andExpect(status().isAccepted)
+
+        authPost("/api/holdem/tables/${ctx.tableId}/hands/actions", ctx.accessToken, """{"action":"FOLD"}""")
+            .andExpect(status().isNoContent)
+
+        authGet("/api/holdem/me/seat", ctx.accessToken)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.handInProgress").value(false))
+
+        val savedTable = holdemTableRepository.findById(TableId(ctx.tableId))!!
+        assertThat(savedTable.pendingJoinRequests()).isEmpty()
+        assertThat(savedTable.seatAt(5)).isNull()
+        assertThat(balanceOf(spectatorId)).isEqualTo(0L)
+    }
+
+    @Test
+    fun `핸드 정산 뒤 잔액이 충분한 참가 요청은 좌석에 앉고 바이인만큼 지갑이 차감된다`() {
+        val ctx = seatedWithHandInProgress()
+        val (requesterId, requesterToken) = signUpAndLogin()
+        fundWallet(requesterId, 15_000)
+        sitDown(requesterToken, ctx.tableId, 5, 10_000)
+            .andExpect(status().isAccepted)
+
+        authPost("/api/holdem/tables/${ctx.tableId}/hands/actions", ctx.accessToken, """{"action":"FOLD"}""")
+            .andExpect(status().isNoContent)
+
+        authGet("/api/holdem/me/seat", ctx.accessToken)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.handInProgress").value(false))
+
+        val savedTable = holdemTableRepository.findById(TableId(ctx.tableId))!!
+        assertThat(savedTable.seatAt(5)?.userId).isEqualTo(requesterId)
+        assertThat(balanceOf(requesterId)).isEqualTo(5_000L)
     }
 
     // ---------- 그 외 오류 ----------

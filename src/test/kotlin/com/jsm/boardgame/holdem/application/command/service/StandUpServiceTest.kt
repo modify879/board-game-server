@@ -39,6 +39,7 @@ private class StandUpFakeHoldemTableRepository : HoldemTableRepository {
 
     override fun findAllPendingNextHandTableIds(): List<TableId> =
         stored.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
+    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: run { sequence += 1; TableId(sequence) }
@@ -88,7 +89,7 @@ class StandUpServiceTest {
     private val eventPublisher = ApplicationEventPublisher { }
     private val clock: Clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
     private val nextHandDelay: Duration = Duration.ofSeconds(5)
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, walletTransfer, nextHandDelay)
+    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
     private val handStarter = HandStarter(tables, handStore, Shuffler { it }, handSettler, eventPublisher, clock, nextHandDelay)
     private val service = StandUpService(tables, handStore, walletTransfer, handStarter)
 

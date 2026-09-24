@@ -52,6 +52,9 @@ class HoldemTableRepositoryAdapter(
     override fun findAllPendingNextHandTableIds(): List<TableId> =
         tableJpa.findAllByNextHandAtIsNotNull().map { TableId(it.id) }
 
+    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> =
+        joinRequestJpa.findAllDistinctTableIds().map { TableId(it) }
+
     override fun save(table: HoldemTable): HoldemTable {
         val savedTable = try {
             tableJpa.saveAndFlush(table.toJpaEntity())

@@ -2,7 +2,6 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.port.HandStore
-import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -30,6 +29,7 @@ private class StartScheduledHandFakeTableRepository : HoldemTableRepository {
     override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
     override fun findAllPendingNextHandTableIds(): List<TableId> =
         stored.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
+    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: run { sequence += 1; TableId(sequence) }
@@ -59,11 +59,6 @@ private class StartScheduledHandFakeHandStore : HandStore {
     override fun findAllInProgress(): List<TableId> = stored.keys.map { TableId(it) }
 }
 
-private class StartScheduledHandFakeWalletTransfer : WalletTransfer {
-    override fun toGame(userId: Long, amount: Long, tableId: Long, memo: String?) {}
-    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {}
-}
-
 class StartScheduledHandServiceTest {
 
     private val tables = StartScheduledHandFakeTableRepository()
@@ -72,8 +67,7 @@ class StartScheduledHandServiceTest {
     private val eventPublisher = ApplicationEventPublisher { }
     private val clock: Clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
     private val nextHandDelay: Duration = Duration.ofSeconds(5)
-    private val walletTransfer = StartScheduledHandFakeWalletTransfer()
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, walletTransfer, nextHandDelay)
+    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
     private val handStarter = HandStarter(tables, handStore, identityShuffler, handSettler, eventPublisher, clock, nextHandDelay)
     private val service = StartScheduledHandService(tables, handStore, handStarter, clock)
 

@@ -30,6 +30,8 @@ private class CancelJoinRequestFakeTableRepository : HoldemTableRepository {
     override fun findAllPendingNextHandTableIds(): List<TableId> =
         stored.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
 
+    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
+
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: run { sequence += 1; TableId(sequence) }
         val saved = HoldemTable.reconstitute(
