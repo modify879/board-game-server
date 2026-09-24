@@ -1,6 +1,8 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
 import com.jayway.jsonpath.JsonPath
+import com.jsm.boardgame.common.web.StompSessionRegistry
+import com.jsm.boardgame.common.web.StompSessionRevalidator
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.infrastructure.security.config.JwtProperties
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
@@ -61,6 +63,12 @@ class HoldemStompIntegrationTest {
 
     @Autowired
     private lateinit var jwtProperties: JwtProperties
+
+    @Autowired
+    private lateinit var stompSessionRegistry: StompSessionRegistry
+
+    @Autowired
+    private lateinit var stompSessionRevalidator: StompSessionRevalidator
 
     @LocalServerPort
     private var port: Int = 0
@@ -530,5 +538,53 @@ class HoldemStompIntegrationTest {
         spectatorSession.disconnect()
         sessionA.disconnect()
         sessionB.disconnect()
+    }
+
+    // ---------- 세션 재검증 스윕 ----------
+
+    @Test
+    fun `로그아웃한 토큰으로 연결된 세션은 재검증 스윕에서 끊긴다`() {
+        val (_, accessToken) = signUpAndLogin()
+        val (session, _) = tryConnect(accessToken)
+        checkNotNull(session)
+        assertThat(session.isConnected).isTrue()
+
+        authPost("/api/auth/logout", accessToken).andExpect(status().isNoContent)
+
+        stompSessionRevalidator.sweep()
+
+        val deadline = System.currentTimeMillis() + 3_000
+        while (session.isConnected && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50)
+        }
+        assertThat(session.isConnected).isFalse()
+    }
+
+    @Test
+    fun `유효한 토큰의 세션은 재검증 스윕 후에도 연결이 유지된다`() {
+        val (_, accessToken) = signUpAndLogin()
+        val (session, _) = tryConnect(accessToken)
+        checkNotNull(session)
+
+        stompSessionRevalidator.sweep()
+
+        Thread.sleep(200)
+        assertThat(session.isConnected).isTrue()
+        session.disconnect()
+    }
+
+    @Test
+    fun `STOMP 세션 id 는 WebSocketSession id 와 같아 재검증 스윕이 소켓을 찾을 수 있다`() {
+        val (_, accessToken) = signUpAndLogin()
+        val (session, _) = tryConnect(accessToken)
+        checkNotNull(session)
+
+        val tokenSessionIds = stompSessionRegistry.tokenSnapshot().keys
+        val webSocketSessionIds = stompSessionRegistry.sessionIds()
+
+        assertThat(tokenSessionIds).isNotEmpty()
+        assertThat(webSocketSessionIds).containsAll(tokenSessionIds)
+
+        session.disconnect()
     }
 }
