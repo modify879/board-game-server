@@ -17,9 +17,11 @@ enum class UserErrorCode(override val kind: ErrorKind) : ErrorCode {
     USER_NOT_FOUND(ErrorKind.NOT_FOUND),
     USER_ROLE_INVALID(ErrorKind.INVALID),
 
-    // 인증. 아이디 없음과 비밀번호 틀림을 구분하지 않는다 (계정 열거 방지).
+    // 인증. 아이디 없음과 비밀번호 틀림을 구분하지 않는다 (계정 열거 방지). ACCOUNT_LOCKED 는 예외다 —
+    // 없는 아이디는 잠기지 않으므로 잠금 응답이 계정 존재를 드러낸다(수용한 트레이드오프).
     LOGIN_FAILED(ErrorKind.UNAUTHORIZED),
     REFRESH_TOKEN_INVALID(ErrorKind.UNAUTHORIZED),
+    ACCOUNT_LOCKED(ErrorKind.UNAUTHORIZED),
     ;
 
     override val code: String get() = name

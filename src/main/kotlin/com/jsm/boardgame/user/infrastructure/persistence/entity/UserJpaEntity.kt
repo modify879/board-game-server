@@ -16,6 +16,7 @@ import jakarta.persistence.Id
 import jakarta.persistence.Table
 import jakarta.persistence.UniqueConstraint
 import org.springframework.data.jpa.repository.JpaRepository
+import java.time.Instant
 
 @Entity
 @Table(
@@ -44,6 +45,9 @@ class UserJpaEntity(
     // ddl-auto: update 로 기존 행이 있는 개발 DB 에 NOT NULL 컬럼을 추가할 때 실패하지 않도록 default 를 둔다.
     @Column(name = "role", columnDefinition = "text default 'USER'", nullable = false)
     var role: String,
+
+    @Column(name = "locked_at", columnDefinition = "timestamptz")
+    var lockedAt: Instant?,
 )
 
 // KotlinJdslJpqlExecutor 를 상속하면 Kotlin JDSL 이 findAll/findPage 등의 실행기를
@@ -68,6 +72,7 @@ fun UserJpaEntity.toDomain(): User =
         nickname = Nickname.reconstitute(nickname),
         profileImageKey = profileImageKey?.let(ProfileImageKey::reconstitute),
         role = UserRole.valueOf(role),
+        lockedAt = lockedAt,
     )
 
 fun User.toJpaEntity(): UserJpaEntity =
@@ -78,4 +83,5 @@ fun User.toJpaEntity(): UserJpaEntity =
         nickname = nickname.value,
         profileImageKey = profileImageKey?.value,
         role = role.name,
+        lockedAt = lockedAt,
     )

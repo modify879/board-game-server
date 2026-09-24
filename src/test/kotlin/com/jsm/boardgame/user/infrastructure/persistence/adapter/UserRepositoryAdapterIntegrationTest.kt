@@ -9,6 +9,7 @@ import com.jsm.boardgame.user.domain.exception.UserErrorCode
 import com.jsm.boardgame.user.domain.model.Nickname
 import com.jsm.boardgame.user.domain.model.PasswordHash
 import com.jsm.boardgame.user.domain.model.User
+import com.jsm.boardgame.user.domain.model.UserRole
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Autowired
@@ -89,6 +90,7 @@ class UserRepositoryAdapterIntegrationTest {
                 nickname = invalidNickname,
                 profileImageKey = null,
                 role = "USER",
+                lockedAt = null,
             ),
         )
 

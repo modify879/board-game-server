@@ -2,6 +2,8 @@ package com.jsm.boardgame.user.presentation.rest
 
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.user.domain.model.Username
+import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -33,6 +35,9 @@ class AuthApiIntegrationTest {
 
     @Autowired
     private lateinit var mockMvc: MockMvc
+
+    @Autowired
+    private lateinit var userRepository: UserRepository
 
     private fun uniqueUsername(): String =
         "u" + UUID.randomUUID().toString().replace("-", "").take(9).lowercase()
@@ -140,6 +145,36 @@ class AuthApiIntegrationTest {
             JsonPath.read<String>(unknownUsernameResult.response.contentAsString, "$.errorCode")
 
         assertThat(unknownUsernameErrorCode).isEqualTo(wrongPasswordErrorCode)
+    }
+
+    @Test
+    fun `로그인 5회 실패로 영구 잠기면 로그인 리프레시 모두 401 ACCOUNT_LOCKED 이고 DB 에 잠금이 남는다`() {
+        val username = uniqueUsername()
+        val password = "password123"
+        signUp(signUpBody(username = username, password = password)).andExpect(status().isCreated)
+
+        val preLockLogin = login(username, password).andExpect(status().isOk)
+        val preLockRefreshToken = refreshTokenOf(preLockLogin)
+
+        repeat(4) {
+            login(username, "wrongpassword")
+                .andExpect(status().isUnauthorized)
+                .andExpect(jsonPath("$.errorCode").value("LOGIN_FAILED"))
+        }
+
+        login(username, "wrongpassword")
+            .andExpect(status().isUnauthorized)
+            .andExpect(jsonPath("$.errorCode").value("ACCOUNT_LOCKED"))
+
+        login(username, password)
+            .andExpect(status().isUnauthorized)
+            .andExpect(jsonPath("$.errorCode").value("ACCOUNT_LOCKED"))
+
+        assertThat(userRepository.findByUsername(Username.of(username))!!.isLocked).isTrue()
+
+        refresh(preLockRefreshToken)
+            .andExpect(status().isUnauthorized)
+            .andExpect(jsonPath("$.errorCode").value("ACCOUNT_LOCKED"))
     }
 
     @Test

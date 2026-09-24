@@ -14,6 +14,13 @@ import com.jsm.boardgame.user.domain.exception.UserErrorCode
 class LoginFailedException(logMessage: String) : BusinessException(UserErrorCode.LOGIN_FAILED, logMessage)
 
 /**
+ * 로그인 실패가 짧은 시간 안에 누적되면 계정을 영구히 잠근다. `User.lockedAt`(DB)이 실제 잠금
+ * 상태이고, 이 예외는 그 상태를 401 로 드러낼 뿐이다. 관리자의 `POST /api/admin/users/{id}/unlock`
+ * 로만 풀린다.
+ */
+class AccountLockedException(logMessage: String) : BusinessException(UserErrorCode.ACCOUNT_LOCKED, logMessage)
+
+/**
  * 만료·위조·재사용을 모두 이 예외로 다룬다.
  * 재사용 탐지 사실을 응답으로 알리면 공격자가 탈취가 들켰는지 알게 되므로 로그로만 구분한다.
  */

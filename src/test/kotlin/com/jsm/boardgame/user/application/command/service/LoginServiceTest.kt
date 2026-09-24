@@ -5,7 +5,9 @@ import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
 import com.jsm.boardgame.user.application.port.IssuedTokens
+import com.jsm.boardgame.user.application.port.LoginAttemptLimiter
 import com.jsm.boardgame.user.application.port.RotationResult
+import com.jsm.boardgame.user.application.exception.AccountLockedException
 import com.jsm.boardgame.user.application.exception.LoginFailedException
 import com.jsm.boardgame.user.domain.exception.UserErrorCode
 import com.jsm.boardgame.user.domain.model.Nickname
@@ -55,6 +57,24 @@ private class LoginFakeUserRepository : UserRepository {
         )
         stored += user
         return user
+    }
+}
+
+private class LoginFakeLoginAttemptLimiter : LoginAttemptLimiter {
+    private val failureCounts = mutableMapOf<String, Int>()
+
+    override fun recordFailure(username: Username, maxFailures: Int, window: Duration): Boolean {
+        val count = (failureCounts[username.value] ?: 0) + 1
+        failureCounts[username.value] = count
+        if (count >= maxFailures) {
+            failureCounts.remove(username.value)
+            return true
+        }
+        return false
+    }
+
+    override fun reset(username: Username) {
+        failureCounts.remove(username.value)
     }
 }
 
@@ -128,7 +148,8 @@ class LoginServiceTest {
     private val passwordHasher = LoginFakePasswordHasher()
     private val tokenIssuer = LoginFakeAuthTokenIssuer()
     private val sessions = LoginInMemoryAuthSessionStore()
-    private val service = LoginService(users, passwordHasher, tokenIssuer, sessions, Duration.ofMinutes(30), Clock.systemUTC())
+    private val attemptLimiter = LoginFakeLoginAttemptLimiter()
+    private val service = LoginService(users, passwordHasher, tokenIssuer, sessions, attemptLimiter, Duration.ofMinutes(30), Clock.systemUTC())
 
     @Test
     fun `존재하지 않는 사용자명이면 LoginFailedException 이 발생한다`() {
@@ -178,5 +199,65 @@ class LoginServiceTest {
         assertTrue(tokens.accessToken.isNotBlank())
         assertTrue(tokens.refreshToken.isNotBlank())
         assertTrue(sessions.matchesRefreshToken(userId, tokens.refreshToken))
+    }
+
+    @Test
+    fun `비밀번호를 4번 틀리면 매번 LoginFailedException 이고 5번째는 AccountLockedException 이며 lockedAt 이 저장된다`() {
+        val userId = 1L
+        users.seed(id = userId, username = "user_01", rawPassword = "password1", nickname = "길동이")
+
+        repeat(4) {
+            val e = assertFailsWith<LoginFailedException> {
+                service.login(LoginCommand(username = "user_01", password = "wrong-password"))
+            }
+            assertEquals(UserErrorCode.LOGIN_FAILED, e.errorCode)
+        }
+
+        val locked = assertFailsWith<AccountLockedException> {
+            service.login(LoginCommand(username = "user_01", password = "wrong-password"))
+        }
+        assertEquals(UserErrorCode.ACCOUNT_LOCKED, locked.errorCode)
+        assertTrue(users.findByUsername(Username.of("user_01"))!!.isLocked)
+    }
+
+    @Test
+    fun `잠긴 계정은 올바른 비밀번호로도 AccountLockedException 이고 세션이 시작되지 않는다`() {
+        val userId = 1L
+        val user = users.seed(id = userId, username = "user_01", rawPassword = "password1", nickname = "길동이")
+        user.lock(Instant.now())
+        users.save(user)
+
+        val e = assertFailsWith<AccountLockedException> {
+            service.login(LoginCommand(username = "user_01", password = "password1"))
+        }
+        assertEquals(UserErrorCode.ACCOUNT_LOCKED, e.errorCode)
+        assertTrue(sessions.currentAccessTokenId(userId) == null)
+    }
+
+    @Test
+    fun `성공적으로 로그인하면 실패 카운터가 초기화된다`() {
+        users.seed(id = 1, username = "user_01", rawPassword = "password1", nickname = "길동이")
+        repeat(4) {
+            runCatching { service.login(LoginCommand(username = "user_01", password = "wrong-password")) }
+        }
+
+        service.login(LoginCommand(username = "user_01", password = "password1"))
+
+        repeat(4) {
+            val e = assertFailsWith<LoginFailedException> {
+                service.login(LoginCommand(username = "user_01", password = "wrong-password"))
+            }
+            assertEquals(UserErrorCode.LOGIN_FAILED, e.errorCode)
+        }
+    }
+
+    @Test
+    fun `존재하지 않는 사용자명은 몇 번을 시도해도 세지 않고 항상 LoginFailedException 이다`() {
+        repeat(10) {
+            val e = assertFailsWith<LoginFailedException> {
+                service.login(LoginCommand(username = "no_such_user", password = "password1"))
+            }
+            assertEquals(UserErrorCode.LOGIN_FAILED, e.errorCode)
+        }
     }
 }
