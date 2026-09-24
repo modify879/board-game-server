@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.ws.payload
 
 import com.jsm.boardgame.holdem.domain.model.BettingAction
+import com.jsm.boardgame.holdem.domain.model.Card
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -12,8 +13,18 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import tools.jackson.databind.json.JsonMapper
+import tools.jackson.module.kotlin.KotlinModule
 
 private val identityShuffler = Shuffler { it }
+
+private val objectMapper = JsonMapper.builder().addModule(KotlinModule.Builder().build()).build()
+
+/** [notation] 순서대로 카드를 앞에 두고, 나머지는 FULL 덱에서 중복 없이 채운다. 홀카드·보드를 통제하기 위한 고정 덱. */
+private fun fixedShuffler(vararg notation: String): Shuffler {
+    val ordered = notation.map { Card.of(it) }
+    return Shuffler { all -> ordered + all.filterNot { it in ordered } }
+}
 
 private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): HoldemTable {
     val table = HoldemTable.create("assembler-test")
@@ -36,6 +47,7 @@ class HoldemViewAssemblerTest {
         assertEquals(emptyList(), view.board)
         assertEquals(0L, view.pot)
         assertNull(view.toActSeatNo)
+        assertNull(view.result)
         assertEquals(2, view.seats.size)
         assertTrue(view.seats.all { it.status == "SITTING_OUT" })
         assertTrue(view.seats.all { it.presence == "SEATED" })
@@ -97,6 +109,7 @@ class HoldemViewAssemblerTest {
         assertTrue(view.handInProgress)
         assertEquals("FOLDED", view.seats.first { it.seatNo == toAct }.status)
         assertEquals(emptyList(), view.board) // 아직 프리플랍
+        assertNull(view.result) // 핸드가 아직 안 끝났다
     }
 
     @Test
@@ -119,5 +132,82 @@ class HoldemViewAssemblerTest {
         assertNull(view.toActSeatNo)
         assertTrue(view.seats.all { it.status == "ALL_IN" })
         assertEquals(5, view.board.size) // 리버까지 다 깔렸다
+    }
+
+    @Test
+    fun `쇼다운으로 끝난 핸드의 공개 뷰는 이긴 좌석의 족보 이름만 담고 진 좌석은 없다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        table.moveButtonToNextOccupiedSeat()
+        val shuffler = fixedShuffler("Ah", "Kh", "Ad", "Kd", "2s", "7d", "9c", "Tc", "Jh")
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
+            table.buttonSeatNo!!,
+            smallBlindSeatNo = 1,
+            bigBlindSeatNo = 2,
+            table.smallBlind,
+            table.bigBlind,
+            shuffler,
+        )
+        hand.act(1, BettingAction.Call)
+        hand.act(2, BettingAction.Check)
+        repeat(3) {
+            hand.act(2, BettingAction.Check)
+            hand.act(1, BettingAction.Check)
+        }
+
+        val view = publicViewOf(TableId(1), table, hand)
+
+        val result = view.result!!
+        assertEquals(listOf(PayoutPublicView(seatNo = 1, amount = 400, shownCategory = "PAIR")), result.payouts)
+    }
+
+    @Test
+    fun `폴드로 끝난 핸드의 공개 뷰는 이긴 좌석만 담고 족보는 비어 있다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        table.moveButtonToNextOccupiedSeat()
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
+            table.buttonSeatNo!!,
+            smallBlindSeatNo = 1,
+            bigBlindSeatNo = 2,
+            table.smallBlind,
+            table.bigBlind,
+            identityShuffler,
+        )
+        hand.act(hand.toActSeatNo!!, BettingAction.Fold)
+
+        val view = publicViewOf(TableId(1), table, hand)
+
+        val result = view.result!!
+        assertEquals(listOf(PayoutPublicView(seatNo = 2, amount = 300, shownCategory = null)), result.payouts)
+    }
+
+    @Test
+    fun `쇼다운으로 끝난 핸드의 공개 뷰를 직렬화해도 홀카드는 어느 좌석 것도 나오지 않는다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        table.moveButtonToNextOccupiedSeat()
+        val shuffler = fixedShuffler("Ah", "Kh", "Ad", "Kd", "2s", "7d", "9c", "Tc", "Jh")
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
+            table.buttonSeatNo!!,
+            smallBlindSeatNo = 1,
+            bigBlindSeatNo = 2,
+            table.smallBlind,
+            table.bigBlind,
+            shuffler,
+        )
+        hand.act(1, BettingAction.Call)
+        hand.act(2, BettingAction.Check)
+        repeat(3) {
+            hand.act(2, BettingAction.Check)
+            hand.act(1, BettingAction.Check)
+        }
+
+        val view = publicViewOf(TableId(1), table, hand)
+        val json = objectMapper.writeValueAsString(view)
+
+        for (card in listOf("Ah", "Ad", "Kh", "Kd")) {
+            assertFalse(json.contains("\"$card\""), "카드 $card 가 공개 뷰 직렬화 결과에 노출됨: $json")
+        }
     }
 }
