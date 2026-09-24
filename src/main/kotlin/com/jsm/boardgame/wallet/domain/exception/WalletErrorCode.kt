@@ -29,6 +29,11 @@ enum class WalletErrorCode(override val kind: ErrorKind) : ErrorCode {
     // 방향만 다르고 검사 내용은 같아서(Adjustment 가 credit/debit 을 코드 하나로 묶는 것과 같은 이유)
     // 코드 하나를 공유한다.
     GAME_TRANSFER_AMOUNT_INVALID(ErrorKind.INVALID),
+
+    // 같은 Idempotency-Key 로 관리자 조정을 두 번 요청함 — wallet_adjustment_keys 의 PK 위반을 이 코드로 번역한다.
+    ADJUSTMENT_ALREADY_APPLIED(ErrorKind.CONFLICT),
+    // Idempotency-Key 헤더가 없거나 비었거나 100 코드포인트를 넘음.
+    IDEMPOTENCY_KEY_INVALID(ErrorKind.INVALID),
     ;
 
     override val code: String get() = name

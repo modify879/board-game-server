@@ -93,8 +93,14 @@ class AdminWalletApiIntegrationTest {
     private fun authGet(url: String, accessToken: String): ResultActions =
         mockMvc.perform(get(url).header("Authorization", "Bearer $accessToken"))
 
-    private fun authPost(url: String, accessToken: String, body: String? = null): ResultActions {
+    private fun authPost(
+        url: String,
+        accessToken: String,
+        body: String? = null,
+        headers: Map<String, String> = emptyMap(),
+    ): ResultActions {
         val builder = post(url).header("Authorization", "Bearer $accessToken")
+        headers.forEach { (name, value) -> builder.header(name, value) }
         if (body != null) builder.contentType(MediaType.APPLICATION_JSON).content(body)
         return mockMvc.perform(builder)
     }
@@ -211,8 +217,12 @@ class AdminWalletApiIntegrationTest {
         val depositRequestId = requestDeposit(userToken, 5000)
         authPost("/api/admin/deposit-requests/$depositRequestId/approve", adminToken).andExpect(status().isNoContent)
 
-        authPost("/api/admin/wallets/$targetId/adjustments", adminToken, """{"amount":-1000,"reason":"부정 사용 회수"}""")
-            .andExpect(status().isNoContent)
+        authPost(
+            "/api/admin/wallets/$targetId/adjustments",
+            adminToken,
+            """{"amount":-1000,"reason":"부정 사용 회수"}""",
+            mapOf("Idempotency-Key" to UUID.randomUUID().toString()),
+        ).andExpect(status().isNoContent)
 
         assertThat(balanceOf(userToken)).isEqualTo(4000)
 
@@ -230,8 +240,12 @@ class AdminWalletApiIntegrationTest {
         val (_, adminToken) = signUpAdminAndLogin()
         val (targetId, _) = signUpAndLogin()
 
-        authPost("/api/admin/wallets/$targetId/adjustments", adminToken, """{"amount":1000,"reason":""}""")
-            .andExpect(status().isBadRequest)
+        authPost(
+            "/api/admin/wallets/$targetId/adjustments",
+            adminToken,
+            """{"amount":1000,"reason":""}""",
+            mapOf("Idempotency-Key" to UUID.randomUUID().toString()),
+        ).andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.errorCode").value("ADJUSTMENT_REASON_BLANK"))
     }
 
@@ -293,9 +307,48 @@ class AdminWalletApiIntegrationTest {
         val (_, adminToken) = signUpAdminAndLogin()
         val nonExistentUserId = 987_654_321L
 
-        authPost("/api/admin/wallets/$nonExistentUserId/adjustments", adminToken, """{"amount":1000,"reason":"사유"}""")
-            .andExpect(status().isBadRequest)
+        authPost(
+            "/api/admin/wallets/$nonExistentUserId/adjustments",
+            adminToken,
+            """{"amount":1000,"reason":"사유"}""",
+            mapOf("Idempotency-Key" to UUID.randomUUID().toString()),
+        ).andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.errorCode").value("WALLET_OWNER_NOT_FOUND"))
             .andExpect(jsonPath("$.detail").doesNotExist())
+    }
+
+    @Test
+    fun `같은 Idempotency-Key 로 조정을 두 번 요청하면 두 번째는 409 와 ADJUSTMENT_ALREADY_APPLIED 를 응답하고 조정은 한 번만 반영된다`() {
+        val (_, adminToken) = signUpAdminAndLogin()
+        val (targetId, userToken) = signUpAndLogin()
+        val idempotencyKey = UUID.randomUUID().toString()
+        val body = """{"amount":1000,"reason":"이벤트 보상"}"""
+
+        authPost(
+            "/api/admin/wallets/$targetId/adjustments",
+            adminToken,
+            body,
+            mapOf("Idempotency-Key" to idempotencyKey),
+        ).andExpect(status().isNoContent)
+
+        authPost(
+            "/api/admin/wallets/$targetId/adjustments",
+            adminToken,
+            body,
+            mapOf("Idempotency-Key" to idempotencyKey),
+        ).andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("ADJUSTMENT_ALREADY_APPLIED"))
+
+        assertThat(balanceOf(userToken)).isEqualTo(1000)
+    }
+
+    @Test
+    fun `Idempotency-Key 헤더 없이 조정하면 400과 IDEMPOTENCY_KEY_INVALID 를 응답한다`() {
+        val (_, adminToken) = signUpAdminAndLogin()
+        val (targetId, _) = signUpAndLogin()
+
+        authPost("/api/admin/wallets/$targetId/adjustments", adminToken, """{"amount":1000,"reason":"사유"}""")
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("IDEMPOTENCY_KEY_INVALID"))
     }
 }
