@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -24,6 +25,8 @@ private class StartScheduledHandFakeTableRepository : HoldemTableRepository {
 
     override fun findById(id: TableId): HoldemTable? = stored[id.value]
     override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
+
+    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
     override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
     override fun findAllPendingNextHandTableIds(): List<TableId> =
         stored.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
@@ -56,6 +59,11 @@ private class StartScheduledHandFakeHandStore : HandStore {
     override fun findAllInProgress(): List<TableId> = stored.keys.map { TableId(it) }
 }
 
+private class StartScheduledHandFakeWalletTransfer : WalletTransfer {
+    override fun toGame(userId: Long, amount: Long, tableId: Long, memo: String?) {}
+    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {}
+}
+
 class StartScheduledHandServiceTest {
 
     private val tables = StartScheduledHandFakeTableRepository()
@@ -63,9 +71,11 @@ class StartScheduledHandServiceTest {
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
     private val clock: Clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock)
-    private val handStarter = HandStarter(tables, handStore, identityShuffler, handSettler, eventPublisher)
-    private val service = StartScheduledHandService(tables, handStore, handStarter)
+    private val nextHandDelay: Duration = Duration.ofSeconds(5)
+    private val walletTransfer = StartScheduledHandFakeWalletTransfer()
+    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, walletTransfer, nextHandDelay)
+    private val handStarter = HandStarter(tables, handStore, identityShuffler, handSettler, eventPublisher, clock, nextHandDelay)
+    private val service = StartScheduledHandService(tables, handStore, handStarter, clock)
 
     private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): TableId {
         var table = HoldemTable.create("test-table")
@@ -121,7 +131,7 @@ class StartScheduledHandServiceTest {
     fun `nextHandAt 이 설정돼 있고 후보가 2명 이상이면 핸드가 시작되고 nextHandAt 이 해제된다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
         val table = tables.findById(tableId)!!
-        table.scheduleNextHand(Instant.now(clock).plus(Duration.ofSeconds(5)))
+        table.scheduleNextHand(Instant.now(clock).minusSeconds(1)) // 이미 도래한 시각 — 고정 시계에서도 항상 시작 조건을 만족한다
         tables.save(table)
 
         service.start(StartScheduledHandCommand(tableId.value))
@@ -135,12 +145,26 @@ class StartScheduledHandServiceTest {
     fun `nextHandAt 이 설정돼 있지만 후보가 2명 미만이면 핸드는 생성되지 않고 nextHandAt 이 해제되며 예외가 나지 않는다`() {
         val tableId = tableWithSeats(1 to 10_000L)
         val table = tables.findById(tableId)!!
-        table.scheduleNextHand(Instant.now(clock).plus(Duration.ofSeconds(5)))
+        table.scheduleNextHand(Instant.now(clock).minusSeconds(1)) // 이미 도래한 시각
         tables.save(table)
 
         service.start(StartScheduledHandCommand(tableId.value)) // 예외 없이 끝나야 한다
 
         assertNull(handStore.find(tableId))
         assertNull(tables.findById(tableId)!!.nextHandAt)
+    }
+
+    @Test
+    fun `nextHandAt 이 아직 도래하지 않았으면 조용히 반환하고 아무 것도 바뀌지 않는다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+        val table = tables.findById(tableId)!!
+        val future = Instant.now(clock).plus(Duration.ofSeconds(5))
+        table.scheduleNextHand(future)
+        tables.save(table)
+
+        service.start(StartScheduledHandCommand(tableId.value))
+
+        assertNull(handStore.find(tableId))
+        assertEquals(future, tables.findById(tableId)!!.nextHandAt)
     }
 }

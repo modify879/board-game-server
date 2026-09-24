@@ -4,6 +4,10 @@ import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.common.web.StompSessionRegistry
 import com.jsm.boardgame.common.web.StompSessionRevalidator
 import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
+import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
+import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.user.infrastructure.security.config.JwtProperties
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
@@ -29,6 +33,7 @@ import org.springframework.security.oauth2.jwt.JwsHeader
 import org.springframework.security.oauth2.jwt.JwtClaimsSet
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder
+import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -36,6 +41,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.web.socket.client.standard.StandardWebSocketClient
 import org.springframework.web.socket.messaging.WebSocketStompClient
 import java.lang.reflect.Type
+import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.LinkedBlockingQueue
@@ -46,10 +52,15 @@ import javax.crypto.spec.SecretKeySpec
  * holdem STOMP CONNECT 인증과 SUBSCRIBE 인가 통합 테스트.
  * 타이머는 다음 조각이라 여기서 다루지 않는다 —
  * 여기는 CONNECT 관문과 구독 인가만 검증한다.
+ *
+ * next-hand-delay 를 1시간으로 늘려 실제 5초 타이머가 테스트 도중 우연히 발화하지 않게 한다 — 핸드
+ * 시작은 startHandRest() 헬퍼가 nextHandAt 을 과거로 강제로 당겨 StartScheduledHandUseCase 를
+ * 직접 불러 결정적으로 일으킨다(수동 시작 엔드포인트는 더 이상 없다).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
+@TestPropertySource(properties = ["app.holdem.next-hand-delay=1h"])
 class HoldemStompIntegrationTest {
 
     @Autowired
@@ -69,6 +80,15 @@ class HoldemStompIntegrationTest {
 
     @Autowired
     private lateinit var stompSessionRevalidator: StompSessionRevalidator
+
+    @Autowired
+    private lateinit var holdemTableRepository: HoldemTableRepository
+
+    @Autowired
+    private lateinit var startScheduledHandUseCase: StartScheduledHandUseCase
+
+    @Autowired
+    private lateinit var clock: Clock
 
     @LocalServerPort
     private var port: Int = 0
@@ -166,8 +186,12 @@ class HoldemStompIntegrationTest {
         return TablePair(tableId, SeatedUser(userIdA, tokenA, tableId), SeatedUser(userIdB, tokenB, tableId))
     }
 
-    private fun startHandRest(accessToken: String, tableId: Long) {
-        authPost("/api/holdem/tables/$tableId/hands", accessToken).andExpect(status().isCreated)
+    /** 수동 시작 엔드포인트가 없으므로 nextHandAt 을 과거로 당겨 시스템 진입점을 직접 불러 결정적으로 시작시킨다. */
+    private fun startHandRest(tableId: Long) {
+        val table = holdemTableRepository.findById(TableId(tableId))!!
+        table.scheduleNextHand(Instant.now(clock).minusSeconds(1))
+        holdemTableRepository.save(table)
+        startScheduledHandUseCase.start(StartScheduledHandCommand(tableId))
     }
 
     private fun capturingFrameHandler(): Pair<StompFrameHandler, LinkedBlockingQueue<String>> {
@@ -406,7 +430,7 @@ class HoldemStompIntegrationTest {
         drainAll(privateQueueA)
         drainAll(privateQueueB)
 
-        startHandRest(pair.a.accessToken, pair.tableId)
+        startHandRest(pair.tableId)
 
         val publicJson = publicQueueA.poll(5, TimeUnit.SECONDS)
         val privateJsonA = privateQueueA.poll(5, TimeUnit.SECONDS)
@@ -447,7 +471,7 @@ class HoldemStompIntegrationTest {
     @Test
     fun `핸드가 이미 진행 중인 테이블을 구독하면 그 시점 상태를 스냅샷으로 즉시 받는다`() {
         val pair = seatTwoUsersAtSameTable()
-        startHandRest(pair.a.accessToken, pair.tableId)
+        startHandRest(pair.tableId)
 
         val (sessionA, _) = tryConnect(pair.a.accessToken)
         checkNotNull(sessionA)
@@ -500,7 +524,7 @@ class HoldemStompIntegrationTest {
     @Test
     fun `관전자는 구독 직후 공개 상태를 스냅샷으로 받고 그 원문에는 어느 좌석의 홀카드도 없다`() {
         val pair = seatTwoUsersAtSameTable()
-        startHandRest(pair.a.accessToken, pair.tableId)
+        startHandRest(pair.tableId)
 
         val (sessionA, _) = tryConnect(pair.a.accessToken)
         checkNotNull(sessionA)

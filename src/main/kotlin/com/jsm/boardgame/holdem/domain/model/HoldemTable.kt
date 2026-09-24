@@ -3,6 +3,7 @@ package com.jsm.boardgame.holdem.domain.model
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.InvalidTableNameException
+import com.jsm.boardgame.holdem.domain.exception.JoinRequestNotFoundException
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.exception.SeatNoOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.SeatTakenException
@@ -21,6 +22,7 @@ class HoldemTable private constructor(
     seats: Map<Int, Seat>,
     val version: Long,
     nextHandAt: Instant?,
+    joinRequests: Map<Int, JoinRequest>,
 ) {
     var buttonSeatNo: Int? = buttonSeatNo
         private set
@@ -43,6 +45,8 @@ class HoldemTable private constructor(
 
     var nextHandAt: Instant? = nextHandAt
         private set
+
+    private val joinRequests: MutableMap<Int, JoinRequest> = joinRequests.toMutableMap()
 
     fun sitDown(seatNo: Int, userId: Long, buyIn: Chips, postBlindImmediately: Boolean = false): Seat {
         if (seatNo !in 1..MAX_SEATS) {
@@ -91,6 +95,50 @@ class HoldemTable private constructor(
     fun seatAt(seatNo: Int): Seat? = seats[seatNo]
 
     fun occupiedSeats(): List<Seat> = seats.values.sortedBy { it.seatNo }
+
+    /** 후보 = 점유 좌석 중 스택이 양수인 것. HandStarter 와 카운트다운 리셋 판단이 이 정의를 공유한다. */
+    fun candidateSeatNos(): Set<Int> = occupiedSeats().filter { it.stack.isPositive() }.map { it.seatNo }.toSet()
+
+    fun pendingJoinRequests(): List<JoinRequest> = joinRequests.values.sortedBy { it.requestedAt }
+
+    fun pendingSeatNos(): Set<Int> = joinRequests.keys
+
+    /**
+     * 핸드 진행 중에 들어온 착석 요청을 등록한다. sitDown() 과 같은 검증(좌석 범위·바이인 범위)을
+     * 하되, "이미 점유"가 아니라 "이미 점유되었거나 이미 요청됨" 둘 다를 SEAT_TAKEN 으로 막는다 —
+     * 관전자가 같은 빈 좌석을 두 번 찜하지 못하게 한다.
+     */
+    fun requestJoin(userId: Long, seatNo: Int, buyIn: Chips, postBlindImmediately: Boolean, requestedAt: Instant): JoinRequest {
+        if (seatNo !in 1..MAX_SEATS) {
+            throw SeatNoOutOfRangeException("좌석 번호는 1..$MAX_SEATS 여야 합니다: $seatNo")
+        }
+        if (seats.containsKey(seatNo)) {
+            throw SeatTakenException("이미 점유된 좌석입니다: seatNo=$seatNo")
+        }
+        if (joinRequests.containsKey(seatNo)) {
+            throw SeatTakenException("이미 참가 요청이 있는 좌석입니다: seatNo=$seatNo")
+        }
+        val minBuyIn = bigBlind * MIN_BUY_IN_BB
+        val maxBuyIn = bigBlind * MAX_BUY_IN_BB
+        if (buyIn < minBuyIn || buyIn > maxBuyIn) {
+            throw BuyInOutOfRangeException("바이인은 $minBuyIn..$maxBuyIn 범위여야 합니다: $buyIn")
+        }
+        val request = JoinRequest(userId, seatNo, buyIn, postBlindImmediately, requestedAt)
+        joinRequests[seatNo] = request
+        return request
+    }
+
+    /** 요청자 본인이 자기 요청을 취소한다. 없으면(다른 사용자 또는 이미 처리/취소됨) 예외. */
+    fun cancelJoinRequest(userId: Long) {
+        val seatNo = joinRequests.values.find { it.userId == userId }?.seatNo
+            ?: throw JoinRequestNotFoundException("취소할 참가 요청이 없습니다: userId=$userId")
+        joinRequests.remove(seatNo)
+    }
+
+    /** HandSettler 가 정산 뒤 요청을 소진할 때 부른다. 처리 성공 여부와 무관하게 항상 제거한다. */
+    fun consumeJoinRequest(seatNo: Int) {
+        joinRequests.remove(seatNo)
+    }
 
     fun moveButtonToNextOccupiedSeat() {
         val occupiedSeatNos = seats.keys.sorted()
@@ -251,6 +299,7 @@ class HoldemTable private constructor(
                 seats = emptyMap(),
                 version = 0,
                 nextHandAt = null,
+                joinRequests = emptyMap(),
             )
         }
 
@@ -266,6 +315,7 @@ class HoldemTable private constructor(
             smallBlindSeatNo: Int? = null,
             bigBlindSeatNo: Int? = null,
             nextHandAt: Instant? = null,
-        ): HoldemTable = HoldemTable(id, name, smallBlind, bigBlind, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, seats, version, nextHandAt)
+            joinRequests: Map<Int, JoinRequest> = emptyMap(),
+        ): HoldemTable = HoldemTable(id, name, smallBlind, bigBlind, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, seats, version, nextHandAt, joinRequests)
     }
 }

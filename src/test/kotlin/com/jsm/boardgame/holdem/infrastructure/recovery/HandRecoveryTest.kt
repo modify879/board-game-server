@@ -100,6 +100,8 @@ private class HandRecoveryFakeTableRepository : HoldemTableRepository {
     override fun findById(id: TableId): HoldemTable? = store[id.value]
     override fun findByUserId(userId: Long): HoldemTable? = store.values.firstOrNull { it.seatOf(userId) != null }
 
+    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
+
     override fun save(table: HoldemTable): HoldemTable {
         if (table.id != null) {
             store[table.id.value] = table

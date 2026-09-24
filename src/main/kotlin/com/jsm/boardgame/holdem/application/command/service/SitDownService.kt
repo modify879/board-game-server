@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.SitDownCommand
+import com.jsm.boardgame.holdem.application.command.usecase.SitDownOutcome
 import com.jsm.boardgame.holdem.application.command.usecase.SitDownUseCase
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
 import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
@@ -12,10 +13,15 @@ import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Clock
+import java.time.Instant
 
 /**
  * 기본 전파(REQUIRED)를 그대로 쓴다 — 지갑 차감(walletTransfer.toGame)과 착석(tables.save)이
  * 한 트랜잭션이어야 잔액 부족 시 착석까지 롤백된다.
+ *
+ * 핸드가 진행 중이면 착석 대신 참가 요청을 남긴다(REQUESTED) — 판 도중에는 좌석·스택을 건드리지
+ * 않는다. 그 요청은 HandSettler 가 그 핸드 정산 직후 requestedAt 순서대로 처리한다.
  */
 @Service
 @Transactional
@@ -23,10 +29,13 @@ class SitDownService(
     private val tables: HoldemTableRepository,
     private val handStore: HandStore,
     private val walletTransfer: WalletTransfer,
+    private val handStarter: HandStarter,
+    private val clock: Clock,
 ) : SitDownUseCase {
 
-    override fun sitDown(command: SitDownCommand) {
-        val table = tables.findById(TableId(command.tableId))
+    override fun sitDown(command: SitDownCommand): SitDownOutcome {
+        val tableId = TableId(command.tableId)
+        val table = tables.findById(tableId)
             ?: throw TableNotFoundException("존재하지 않는 테이블입니다: tableId=${command.tableId}")
 
         val seatedTable = tables.findByUserId(command.userId)
@@ -36,12 +45,15 @@ class SitDownService(
             }
             throw AlreadySeatedException("이미 다른 테이블에 앉아 있는 사용자입니다: userId=${command.userId}")
         }
+        if (tables.findByPendingJoinUserId(command.userId) != null) {
+            throw AlreadySeatedException("이미 다른 테이블에 참가 요청을 남긴 사용자입니다: userId=${command.userId}")
+        }
 
-        // 진행 중인 핸드의 좌석 번호(hand.seatNos)에는 앉을 수 없다 — 그 좌석은 핸드가 끝날 때
-        // HandSettler.settle 이 정산으로 스택을 덮어쓴다. 핸드에 없는 다른 빈 좌석은 핸드 도중에도 앉을 수 있다.
-        val hand = handStore.find(table.id!!)
-        if (hand != null && command.seatNo in hand.seatNos) {
-            throw HandInProgressException("진행 중인 핸드의 좌석에는 앉을 수 없습니다: tableId=${command.tableId}, seatNo=${command.seatNo}")
+        val hand = handStore.find(tableId)
+        if (hand != null) {
+            table.requestJoin(command.userId, command.seatNo, Chips.of(command.buyIn), command.postBlindImmediately, Instant.now(clock))
+            tables.save(table)
+            return SitDownOutcome.REQUESTED
         }
 
         // 도메인 검증(좌석 범위·점유·바이인 범위)을 지갑 차감보다 먼저 해서, 좌석이 이미 찼는데
@@ -51,6 +63,7 @@ class SitDownService(
         // memo 가 유일하게 "어느 게임인가" 를 나른다 — LedgerEntryType 이 이미 방향을 말하고
         // LedgerReferenceType.GAME_TABLE 엔 게임 이름이 없다. 표시 문구를 넣지 않는다(규칙 8, 문구는 클라이언트가 만든다).
         walletTransfer.toGame(command.userId, command.buyIn, command.tableId, memo = "holdem")
-        tables.save(table)
+        handStarter.rescheduleOnEntry(tableId, table)
+        return SitDownOutcome.SEATED
     }
 }

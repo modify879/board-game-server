@@ -7,14 +7,18 @@ import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
+import java.time.Clock
+import java.time.Duration
+import java.time.Instant
 
 /**
  * 핸드 시작 규칙(후보 산정, 블라인드 회전, BB 대기/즉시 포스팅, 완화)을 한 곳에 둔다 —
- * StartHandService(수동, 착석자 트리거)와 StartScheduledHandService(자동, 5초 뒤 시스템 트리거)가
- * 이 규칙을 그대로 공유한다. 두 진입점이 서로 다른 규칙으로 판을 시작하는 일이 없게 하는 것이 이
- * 클래스의 존재 이유다.
+ * StartScheduledHandService(자동, 시스템 트리거)가 이 규칙을 쓴다. 착석·기립으로 후보가 바뀔 때의
+ * 카운트다운 리셋(rescheduleOnEntry/rescheduleOnExit)도 여기 둔다 — 시작 규칙과 카운트다운 규칙이
+ * 서로 다른 곳에서 어긋나는 일이 없게 하는 것이 이 클래스의 존재 이유다.
  *
  * 참가자(스택이 있는 점유 좌석)가 2명 미만이면 테이블을 건드리지 않고 false 를 돌려준다 — 그
  * 경우 예외를 던질지 조용히 기다릴지는 호출자가 정한다.
@@ -26,11 +30,13 @@ class HandStarter(
     private val shuffler: Shuffler,
     private val handSettler: HandSettler,
     private val eventPublisher: ApplicationEventPublisher,
+    private val clock: Clock,
+    @Value("\${app.holdem.next-hand-delay}") private val nextHandDelay: Duration,
 ) {
     fun start(tableId: TableId, table: HoldemTable): Boolean {
         // 후보 = 점유 좌석 중 스택이 양수인 것. BB 대기 중인 좌석도 후보에 포함한다 — BB 회전은
         // 이들 위로도 지나가야 다음 정상 참가 때 좌석 번호 오름차순 불변식이 깨지지 않는다.
-        val candidateSeatNos = table.occupiedSeats().filter { it.stack.isPositive() }.map { it.seatNo }.toSet()
+        val candidateSeatNos = table.candidateSeatNos()
         if (candidateSeatNos.size < 2) {
             return false
         }
@@ -101,5 +107,27 @@ class HandStarter(
         tables.save(table)
         eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand))
         return true
+    }
+
+    /** 착석처럼 "들어오는" 좌석 변화 뒤에 부른다(호출 전에 핸드가 없음을 호출자가 확인한다).
+     *  후보가 2명 이상이면 카운트다운을 지금부터 다시 [nextHandDelay] 뒤로 리셋한다 — 이미 걸려
+     *  있던 시각도 덮어쓴다. 저장과 브로드캐스트까지 이 메서드가 책임진다. */
+    fun rescheduleOnEntry(tableId: TableId, table: HoldemTable) {
+        if (table.candidateSeatNos().size >= 2) {
+            table.scheduleNextHand(Instant.now(clock).plus(nextHandDelay))
+        }
+        tables.save(table)
+        eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, null))
+    }
+
+    /** 기립처럼 "나가는" 좌석 변화 뒤에 부른다(호출 전에 핸드가 없음을 호출자가 확인한다).
+     *  후보가 2명 미만으로 떨어지면 취소하고, 아니면 이미 걸린 시각을 그대로 둔다 — 나가는
+     *  쪽은 카운트다운을 리셋하지 않는다(남은 사람들의 대기 시간을 부당하게 늘리지 않는다). */
+    fun rescheduleOnExit(tableId: TableId, table: HoldemTable) {
+        if (table.candidateSeatNos().size < 2) {
+            table.clearNextHand()
+        }
+        tables.save(table)
+        eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, null))
     }
 }

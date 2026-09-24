@@ -23,6 +23,8 @@ private class CancelHandFakeTableRepository : HoldemTableRepository {
     override fun findByUserId(userId: Long): HoldemTable? =
         store.values.firstOrNull { it.seatOf(userId) != null }?.let { copyOf(it) }
 
+    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
+
     override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllPendingNextHandTableIds(): List<TableId> =

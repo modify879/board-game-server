@@ -22,6 +22,8 @@ private class ExpireConnectionFakeHoldemTableRepository : HoldemTableRepository 
 
     override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
+    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
+
     override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllPendingNextHandTableIds(): List<TableId> =

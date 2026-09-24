@@ -1,6 +1,8 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.WalletTransfer
+import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Card
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -19,6 +21,7 @@ import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -30,6 +33,8 @@ private class HandSettlerFakeTableRepository : HoldemTableRepository {
     override fun findById(id: TableId): HoldemTable? = store[id.value]
 
     override fun findByUserId(userId: Long): HoldemTable? = store.values.find { it.seatOf(userId) != null }
+
+    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
 
     override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
@@ -75,6 +80,26 @@ private val bustingHandOrder: List<Card> = listOf(
 private val bustingShuffler = Shuffler { full -> bustingHandOrder + full.filterNot { it in bustingHandOrder } }
 private val identityShuffler = Shuffler { it }
 
+/** 실패시킬 사용자 id 를 지정하면 그 사용자의 toGame 호출에서 BusinessException 을 던져
+ *  잔액 부족 같은 실패를 흉내낸다(실제 wallet 의 InsufficientBalanceException 을 참조하지 않는다 —
+ *  holdem 은 wallet 의 domain 을 참조하지 않는다). */
+private class HandSettlerFakeWalletTransfer(private val failingUserIds: Set<Long> = emptySet()) : WalletTransfer {
+    data class ToGameCall(val userId: Long, val amount: Long, val tableId: Long, val memo: String?)
+
+    val toGameCalls = mutableListOf<ToGameCall>()
+
+    override fun toGame(userId: Long, amount: Long, tableId: Long, memo: String?) {
+        if (userId in failingUserIds) {
+            throw BuyInOutOfRangeException("잔액 부족 등 지갑 실패를 흉내낸다: userId=$userId")
+        }
+        toGameCalls += ToGameCall(userId, amount, tableId, memo)
+    }
+
+    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {
+        error("HandSettler 는 fromGame 을 부르지 않는다")
+    }
+}
+
 class HandSettlerTest {
 
     private val tables = HandSettlerFakeTableRepository()
@@ -82,10 +107,9 @@ class HandSettlerTest {
     private val eventPublisher = ApplicationEventPublisher { }
     private val fixedInstant: Instant = Instant.parse("2026-01-01T00:00:00Z")
     private val clock: Clock = Clock.fixed(fixedInstant, ZoneOffset.UTC)
-
-    // HandSettler 생성자에 WalletTransfer 가 없다 — 자동 기립이 지갑 이체를 부를 방법 자체가 없다
-    // (StandUpService 가 스택 0일 때 이체를 건너뛰는 것과 같은 이유).
-    private val settler = HandSettler(tables, handStore, eventPublisher, clock)
+    private val nextHandDelay: Duration = Duration.ofSeconds(5)
+    private val walletTransfer = HandSettlerFakeWalletTransfer()
+    private val settler = HandSettler(tables, handStore, eventPublisher, clock, walletTransfer, nextHandDelay)
 
     private fun seatedTable(vararg stacks: Pair<Int, Long>): HoldemTable {
         val seats = stacks.associate { (seatNo, stack) ->
@@ -196,5 +220,116 @@ class HandSettlerTest {
 
         val savedTable = tables.findById(tableId)!!
         assertEquals(fixedInstant.plus(Duration.ofSeconds(5)), savedTable.nextHandAt)
+    }
+
+    @Test
+    fun `정산 뒤 대기를 선택한 참가 요청은 좌석에 앉고 지갑이 차감되며 BB 대기 상태가 된다`() {
+        val table = seatedTable(1 to 10_000L, 2 to 10_000L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
+        handStore.save(tableId, hand)
+        hand.act(1, BettingAction.Fold)
+        table.requestJoin(userId = 9001L, seatNo = 5, buyIn = Chips.of(8_000), postBlindImmediately = false, requestedAt = fixedInstant)
+
+        settler.settle(tableId, table, hand)
+
+        val savedTable = tables.findById(tableId)!!
+        val newSeat = savedTable.seatAt(5)
+        assertNotNull(newSeat)
+        assertEquals(9001L, newSeat.userId)
+        assertTrue(newSeat.awaitingBigBlind)
+        assertFalse(newSeat.owesImmediatePost)
+        assertEquals(emptyList(), savedTable.pendingJoinRequests())
+        val call = walletTransfer.toGameCalls.single()
+        assertEquals(9001L, call.userId)
+        assertEquals(8_000L, call.amount)
+        assertEquals(tableId.value, call.tableId)
+    }
+
+    @Test
+    fun `정산 뒤 즉시 포스팅을 선택한 참가 요청은 좌석에 앉고 owesImmediatePost 상태가 된다`() {
+        val table = seatedTable(1 to 10_000L, 2 to 10_000L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
+        handStore.save(tableId, hand)
+        hand.act(1, BettingAction.Fold)
+        table.requestJoin(userId = 9002L, seatNo = 6, buyIn = Chips.of(8_000), postBlindImmediately = true, requestedAt = fixedInstant)
+
+        settler.settle(tableId, table, hand)
+
+        val newSeat = tables.findById(tableId)!!.seatAt(6)
+        assertNotNull(newSeat)
+        assertFalse(newSeat.awaitingBigBlind)
+        assertTrue(newSeat.owesImmediatePost)
+    }
+
+    @Test
+    fun `지갑 이체가 실패하는 참가 요청은 정산을 실패시키지 않고 버려지며 칩 총량이 보존된다`() {
+        val table = seatedTable(1 to 10_000L, 2 to 10_000L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
+        handStore.save(tableId, hand)
+        hand.act(1, BettingAction.Fold)
+        table.requestJoin(userId = 9003L, seatNo = 7, buyIn = Chips.of(8_000), postBlindImmediately = false, requestedAt = fixedInstant)
+
+        val failingWallet = HandSettlerFakeWalletTransfer(failingUserIds = setOf(9003L))
+        val failingSettler = HandSettler(tables, handStore, eventPublisher, clock, failingWallet, nextHandDelay)
+
+        failingSettler.settle(tableId, table, hand)
+
+        val savedTable = tables.findById(tableId)!!
+        assertNull(savedTable.seatAt(7))
+        assertEquals(emptyList(), savedTable.pendingJoinRequests())
+        assertEquals(Chips.of(20_000), savedTable.seatAt(1)!!.stack + savedTable.seatAt(2)!!.stack)
+    }
+
+    @Test
+    fun `이미 다른 테이블에 앉은 사용자의 참가 요청은 버려진다`() {
+        val table = seatedTable(1 to 10_000L, 2 to 10_000L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
+        handStore.save(tableId, hand)
+        hand.act(1, BettingAction.Fold)
+
+        val otherTable = HoldemTable.reconstitute(
+            id = TableId(2),
+            name = "other",
+            smallBlind = Chips.of(100),
+            bigBlind = Chips.of(200),
+            buttonSeatNo = null,
+            seats = emptyMap(),
+            version = 0,
+        )
+        otherTable.sitDown(1, userId = 9004L, buyIn = Chips.of(8_000))
+        tables.save(otherTable)
+
+        table.requestJoin(userId = 9004L, seatNo = 7, buyIn = Chips.of(8_000), postBlindImmediately = false, requestedAt = fixedInstant)
+
+        settler.settle(tableId, table, hand)
+
+        val savedTable = tables.findById(tableId)!!
+        assertNull(savedTable.seatAt(7))
+        assertEquals(0, walletTransfer.toGameCalls.size)
+    }
+
+    @Test
+    fun `참가 요청은 requestedAt 순서대로 처리된다`() {
+        val table = seatedTable(1 to 10_000L, 2 to 10_000L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
+        handStore.save(tableId, hand)
+        hand.act(1, BettingAction.Fold)
+
+        table.requestJoin(userId = 9006L, seatNo = 6, buyIn = Chips.of(8_000), postBlindImmediately = false, requestedAt = fixedInstant.plusSeconds(2))
+        table.requestJoin(userId = 9005L, seatNo = 5, buyIn = Chips.of(8_000), postBlindImmediately = false, requestedAt = fixedInstant.plusSeconds(1))
+
+        settler.settle(tableId, table, hand)
+
+        assertEquals(listOf(9005L, 9006L), walletTransfer.toGameCalls.map { it.userId })
     }
 }

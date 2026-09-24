@@ -27,6 +27,7 @@ enum class HoldemErrorCode(override val kind: ErrorKind) : ErrorCode {
     ALREADY_SEATED(ErrorKind.CONFLICT),
     // 없는 리소스가 아니라 앉은 적 없는 사용자의 기립 요청이라 404 다.
     NOT_SEATED(ErrorKind.NOT_FOUND),
+    JOIN_REQUEST_NOT_FOUND(ErrorKind.NOT_FOUND),
     BUY_IN_OUT_OF_RANGE(ErrorKind.INVALID),
     TABLE_NOT_FOUND(ErrorKind.NOT_FOUND),
     HAND_IN_PROGRESS(ErrorKind.CONFLICT),

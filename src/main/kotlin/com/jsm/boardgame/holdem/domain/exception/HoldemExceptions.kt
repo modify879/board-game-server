@@ -29,3 +29,4 @@ class AlreadySeatedException(logMessage: String) : BusinessException(HoldemError
 class NotSeatedException(logMessage: String) : BusinessException(HoldemErrorCode.NOT_SEATED, logMessage)
 class BuyInOutOfRangeException(logMessage: String) : BusinessException(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, logMessage)
 class ConcurrentTableUpdateException(logMessage: String) : BusinessException(HoldemErrorCode.CONCURRENT_TABLE_UPDATE, logMessage)
+class JoinRequestNotFoundException(logMessage: String) : BusinessException(HoldemErrorCode.JOIN_REQUEST_NOT_FOUND, logMessage)

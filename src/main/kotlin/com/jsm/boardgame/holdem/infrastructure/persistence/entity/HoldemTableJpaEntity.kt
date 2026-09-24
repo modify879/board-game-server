@@ -42,7 +42,7 @@ interface HoldemTableJpaRepository : JpaRepository<HoldemTableJpaEntity, Long>, 
     fun findAllByNextHandAtIsNotNull(): List<HoldemTableJpaEntity>
 }
 
-fun HoldemTableJpaEntity.toDomain(seats: List<HoldemSeatJpaEntity>): HoldemTable =
+fun HoldemTableJpaEntity.toDomain(seats: List<HoldemSeatJpaEntity>, joinRequests: List<HoldemJoinRequestJpaEntity> = emptyList()): HoldemTable =
     HoldemTable.reconstitute(
         id = TableId(id),
         name = name,
@@ -54,6 +54,7 @@ fun HoldemTableJpaEntity.toDomain(seats: List<HoldemSeatJpaEntity>): HoldemTable
         smallBlindSeatNo = smallBlindSeatNo,
         bigBlindSeatNo = bigBlindSeatNo,
         nextHandAt = nextHandAt,
+        joinRequests = joinRequests.associate { it.seatNo to it.toDomain() },
     )
 
 fun HoldemTable.toJpaEntity(): HoldemTableJpaEntity =

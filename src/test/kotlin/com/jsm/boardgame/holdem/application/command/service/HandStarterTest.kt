@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
@@ -10,6 +11,7 @@ import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 import kotlin.test.Test
@@ -28,6 +30,8 @@ private class HandStarterFakeTableRepository : HoldemTableRepository {
 
     override fun findByUserId(userId: Long): HoldemTable? =
         store.values.firstOrNull { it.seatOf(userId) != null }?.let { copyOf(it) }
+
+    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
 
     override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
@@ -65,6 +69,11 @@ private class HandStarterFakeHandStore : HandStore {
     override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
 }
 
+private class HandStarterFakeWalletTransfer : WalletTransfer {
+    override fun toGame(userId: Long, amount: Long, tableId: Long, memo: String?) {}
+    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {}
+}
+
 class HandStarterTest {
 
     private val tables = HandStarterFakeTableRepository()
@@ -72,8 +81,10 @@ class HandStarterTest {
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
     private val clock: Clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock)
-    private val handStarter = HandStarter(tables, handStore, identityShuffler, handSettler, eventPublisher)
+    private val nextHandDelay: Duration = Duration.ofSeconds(5)
+    private val walletTransfer = HandStarterFakeWalletTransfer()
+    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, walletTransfer, nextHandDelay)
+    private val handStarter = HandStarter(tables, handStore, identityShuffler, handSettler, eventPublisher, clock, nextHandDelay)
 
     private fun start(tableId: TableId) {
         val table = tables.findById(tableId)!!
