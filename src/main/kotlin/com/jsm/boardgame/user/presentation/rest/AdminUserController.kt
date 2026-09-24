@@ -1,6 +1,8 @@
 package com.jsm.boardgame.user.presentation.rest
 
 import com.jsm.boardgame.user.application.command.usecase.ChangeUserRoleUseCase
+import com.jsm.boardgame.user.application.command.usecase.UnlockUserCommand
+import com.jsm.boardgame.user.application.command.usecase.UnlockUserUseCase
 import com.jsm.boardgame.user.presentation.rest.request.ChangeUserRoleRequest
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.PathVariable
@@ -16,11 +18,18 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/admin/users")
 class AdminUserController(
     private val changeUserRoleUseCase: ChangeUserRoleUseCase,
+    private val unlockUserUseCase: UnlockUserUseCase,
 ) {
 
     @PostMapping("/{id}/role")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun changeRole(@PathVariable id: Long, @RequestBody request: ChangeUserRoleRequest) {
         changeUserRoleUseCase.changeRole(request.toCommand(id))
+    }
+
+    @PostMapping("/{id}/unlock")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun unlock(@PathVariable id: Long) {
+        unlockUserUseCase.unlock(UnlockUserCommand(id))
     }
 }
