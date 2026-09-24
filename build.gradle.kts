@@ -71,6 +71,14 @@ tasks.withType<Test> {
     environment("APP_JWT_SECRET", localJwtSecret)
 }
 
+tasks.register<Test>("unitTest") {
+    description = "컨테이너 없이 도는 단위 테스트만 실행한다 (*IntegrationTest 제외)."
+    group = "verification"
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    exclude("**/*IntegrationTest*")
+}
+
 tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
     environment("APP_JWT_SECRET", localJwtSecret)
 }
