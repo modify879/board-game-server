@@ -14,7 +14,20 @@ data class HandResult(
     val payouts: Map<Int, Chips>,
     val pots: List<SidePot>,
     val showdownRanks: Map<Int, HandRank>,
-)
+) {
+    /** 두 좌석 이상이 겨룬 팟에서 이긴 좌석 — 쇼다운에서 패를 공개해야 하는 좌석이다. 진 좌석은 머크한다. */
+    val showdownWinners: Set<Int>
+        get() {
+            if (showdownRanks.isEmpty()) return emptySet()
+            val winners = mutableSetOf<Int>()
+            for (pot in pots) {
+                if (pot.eligibleSeats.size < 2) continue
+                val best = pot.eligibleSeats.maxOf { seat -> showdownRanks.getValue(seat) }
+                winners += pot.eligibleSeats.filter { seat -> showdownRanks.getValue(seat) == best }
+            }
+            return winners
+        }
+}
 
 /**
  * 한 핸드(딜부터 정산까지)의 진행. 좌석·테이블은 이 안에 없다(3단계 이전) — 시작 스택과 버튼

@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.ws.payload
 
 import com.jsm.boardgame.holdem.domain.model.Hand
+import com.jsm.boardgame.holdem.domain.model.HandResult
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 
@@ -42,7 +43,19 @@ fun publicViewOf(tableId: TableId, table: HoldemTable, hand: Hand?): TablePublic
         toActSeatNo = hand?.toActSeatNo,
         buttonSeatNo = table.buttonSeatNo,
         seats = seats,
+        result = hand?.result?.let(::handResultPublicViewOf),
     )
+}
+
+private fun handResultPublicViewOf(result: HandResult): HandResultPublicView {
+    val payouts = result.payouts
+        .filterValues { it.isPositive() }
+        .toSortedMap()
+        .map { (seatNo, amount) ->
+            val shownCategory = if (seatNo in result.showdownWinners) result.showdownRanks.getValue(seatNo).category.name else null
+            PayoutPublicView(seatNo, amount.amount, shownCategory)
+        }
+    return HandResultPublicView(payouts)
 }
 
 /** [seatNo] 자신의 홀카드만 담는다. 다른 좌석의 카드는 이 함수의 인자로도 들어오지 않는다. */

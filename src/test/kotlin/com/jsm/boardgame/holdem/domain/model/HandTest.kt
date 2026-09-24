@@ -69,6 +69,7 @@ class HandTest {
         assertTrue(hand.board.isEmpty())
         assertEquals(chips(300), hand.result!!.payouts.getValue(3))
         assertEquals(emptyMap(), hand.result!!.showdownRanks)
+        assertEquals(emptySet(), hand.result!!.showdownWinners)
         assertEquals(chips(30_000), sumStacks(listOf(1, 2, 3), hand))
     }
 
@@ -111,6 +112,7 @@ class HandTest {
         assertTrue(hand.isFinished)
         assertEquals(listOf(Card.of("2s"), Card.of("7d"), Card.of("9c"), Card.of("Tc"), Card.of("Jh")), hand.board)
         assertEquals(HandCategory.PAIR, hand.result!!.showdownRanks.getValue(1).category)
+        assertEquals(setOf(1), hand.result!!.showdownWinners) // 이긴 좌석만 패를 공개한다
         assertEquals(chips(10_200), hand.stackOf(1)) // AA가 KK를 이겨 팟(400) 전부를 가져간다
         assertEquals(chips(9_800), hand.stackOf(2))
         assertEquals(chips(20_000), sumStacks(listOf(1, 2), hand))
@@ -130,6 +132,7 @@ class HandTest {
 
         assertTrue(hand.isFinished)
         assertEquals(hand.result!!.showdownRanks.getValue(1), hand.result!!.showdownRanks.getValue(2))
+        assertEquals(setOf(1, 2), hand.result!!.showdownWinners) // 스플릿팟은 둘 다 이긴 좌석이다
         assertEquals(chips(10_000), hand.stackOf(1)) // 정확히 반씩 나뉘어 시작 스택 그대로
         assertEquals(chips(10_000), hand.stackOf(2))
         assertEquals(chips(20_000), sumStacks(listOf(1, 2), hand))
@@ -153,6 +156,7 @@ class HandTest {
 
         assertTrue(hand.isFinished)
         assertEquals(2, hand.result!!.pots.size)
+        assertEquals(setOf(1, 2), hand.result!!.showdownWinners) // 메인팟·사이드팟 승자 모두 포함, QQ는 빠진다
         assertEquals(chips(3_000), hand.stackOf(1)) // 메인팟(3,000) 승자 = AA
         assertEquals(chips(6_000), hand.stackOf(2)) // 사이드팟(4,000) 승자 = KK
         assertEquals(chips(2_000), hand.stackOf(3)) // QQ는 둘 다 못 이겨 못 가져간다
@@ -183,6 +187,7 @@ class HandTest {
         hand.act(2, BettingAction.Call) // BB는 1,000까지밖에 못 낸다
 
         assertTrue(hand.isFinished)
+        assertEquals(setOf(2), hand.result!!.showdownWinners) // 언콜드 벳 반환만 받은 seat1은 쇼다운 승자가 아니다
         assertEquals(chips(4_000), hand.stackOf(1)) // 콜 못 받은 4,000 반환 — 쇼다운에서 졌는데도 더 많이 남는다
         assertEquals(chips(2_000), hand.stackOf(2)) // 실제 팟(2,000)만 가져간다
         assertEquals(chips(6_000), sumStacks(listOf(1, 2), hand))
