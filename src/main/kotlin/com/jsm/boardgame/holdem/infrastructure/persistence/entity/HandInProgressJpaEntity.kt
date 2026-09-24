@@ -44,7 +44,11 @@ class HandInProgressJpaEntity(
 
 interface HandInProgressJpaRepository : JpaRepository<HandInProgressJpaEntity, Long>
 
-/** [HandSnapshot] 의 영속 전용 표현. 필드 이름·구조는 대응하는 도메인 스냅샷과 맞추되 타입만 원시로 내린다. */
+/**
+ * [HandSnapshot] 의 영속 전용 표현. 필드 이름·구조는 대응하는 도메인 스냅샷과 맞추되 타입만 원시로 내린다.
+ * [showdownLeaderSeatNo] 와 [BettingRoundJson.lastAggressorSeatNo] 는 nullable + `= null` 기본값이다 —
+ * 이 필드가 생기기 전에 저장된 행도 그대로 역직렬화되어야 한다(둘 다 없었으면 null 과 동치이므로 안전하다).
+ */
 data class HandStateJson(
     val buttonSeatNo: Int,
     val bigBlind: Long,
@@ -58,6 +62,7 @@ data class HandStateJson(
     val statuses: Map<Int, String>,
     val totalContributed: Map<Int, Long>,
     val currentRound: BettingRoundJson?,
+    val showdownLeaderSeatNo: Int? = null,
 ) {
     data class BettingSeatJson(
         val seatNo: Int,
@@ -73,6 +78,7 @@ data class HandStateJson(
         val lastFullLevel: Long,
         val actedSinceLastFullRaise: Set<Int>,
         val toActSeatNo: Int?,
+        val lastAggressorSeatNo: Int? = null,
     )
 }
 
@@ -89,6 +95,7 @@ fun HandSnapshot.toJson(): HandStateJson = HandStateJson(
     statuses = statuses.mapValues { it.value.name },
     totalContributed = totalContributed.mapValues { it.value.amount },
     currentRound = currentRound?.toJson(),
+    showdownLeaderSeatNo = showdownLeaderSeatNo,
 )
 
 private fun HandSnapshot.BettingRoundSnapshot.toJson(): HandStateJson.BettingRoundJson = HandStateJson.BettingRoundJson(
@@ -98,6 +105,7 @@ private fun HandSnapshot.BettingRoundSnapshot.toJson(): HandStateJson.BettingRou
     lastFullLevel = lastFullLevel.amount,
     actedSinceLastFullRaise = actedSinceLastFullRaise,
     toActSeatNo = toActSeatNo,
+    lastAggressorSeatNo = lastAggressorSeatNo,
 )
 
 private fun HandSnapshot.BettingSeatSnapshot.toJson(): HandStateJson.BettingSeatJson = HandStateJson.BettingSeatJson(
@@ -120,6 +128,7 @@ fun HandStateJson.toSnapshot(): HandSnapshot = HandSnapshot(
     statuses = statuses.mapValues { SeatStatus.valueOf(it.value) },
     totalContributed = totalContributed.mapValues { Chips.reconstitute(it.value) },
     currentRound = currentRound?.toSnapshot(),
+    showdownLeaderSeatNo = showdownLeaderSeatNo,
 )
 
 private fun HandStateJson.BettingRoundJson.toSnapshot(): HandSnapshot.BettingRoundSnapshot = HandSnapshot.BettingRoundSnapshot(
@@ -129,6 +138,7 @@ private fun HandStateJson.BettingRoundJson.toSnapshot(): HandSnapshot.BettingRou
     lastFullLevel = Chips.reconstitute(lastFullLevel),
     actedSinceLastFullRaise = actedSinceLastFullRaise,
     toActSeatNo = toActSeatNo,
+    lastAggressorSeatNo = lastAggressorSeatNo,
 )
 
 private fun HandStateJson.BettingSeatJson.toSnapshot(): HandSnapshot.BettingSeatSnapshot = HandSnapshot.BettingSeatSnapshot(

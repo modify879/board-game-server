@@ -76,14 +76,21 @@ class BettingRound private constructor(
 
     private var toAct: Int? = null
 
+    /**
+     * 이 라운드에서 마지막으로 받아들여진 RaiseTo 의 좌석(풀 레이즈든 재오픈하는 짧은 올인이든 둘 다
+     * 센다) — 블라인드 포스팅은 세지 않는다. 쇼다운 공개 순서(TDA 17)의 시작점을 정하는 데 쓰인다.
+     */
+    var lastAggressorSeatNo: Int? = null
+        private set
+
     init {
         toAct = if (isRoundComplete()) null else firstActiveSeatNoFrom(firstToActSeatNo)
     }
 
     /**
-     * 영속 복원 전용 — 검증하지 않는다. actedSinceLastFullRaise·toAct 을 여기서 다시 계산하지 않고
-     * 스냅샷 값을 그대로 되돌린다. 그렇지 않으면 BB 옵션이 사라지거나 이미 행동한 좌석이
-     * 다시 레이즈할 수 있게 된다.
+     * 영속 복원 전용 — 검증하지 않는다. actedSinceLastFullRaise·toAct·lastAggressorSeatNo 를 여기서
+     * 다시 계산하지 않고 스냅샷 값을 그대로 되돌린다. 그렇지 않으면 BB 옵션이 사라지거나 이미 행동한
+     * 좌석이 다시 레이즈할 수 있게 되거나 쇼다운 공개 순서의 시작점을 잃는다.
      */
     private constructor(
         seats: List<BettingSeat>,
@@ -92,10 +99,12 @@ class BettingRound private constructor(
         lastFullLevel: Chips,
         actedSinceLastFullRaise: Set<Int>,
         toAct: Int?,
+        lastAggressorSeatNo: Int?,
     ) : this(seats, currentBet, lastRaiseSize, lastFullLevel, toAct ?: seats.firstOrNull()?.seatNo ?: 0) {
         this.actedSinceLastFullRaise.clear()
         this.actedSinceLastFullRaise.addAll(actedSinceLastFullRaise)
         this.toAct = toAct
+        this.lastAggressorSeatNo = lastAggressorSeatNo
     }
 
     val minRaiseTo: Chips get() = currentBet + lastRaiseSize
@@ -121,8 +130,8 @@ class BettingRound private constructor(
     }
 
     /**
-     * 진행 중 라운드 상태를 그대로 뽑는다. actedSinceLastFullRaise·toAct 까지 담아야
-     * 복원 후에도 BB 옵션·짧은 올인 재오픈 금지가 깨지지 않는다.
+     * 진행 중 라운드 상태를 그대로 뽑는다. actedSinceLastFullRaise·toAct·lastAggressorSeatNo 까지 담아야
+     * 복원 후에도 BB 옵션·짧은 올인 재오픈 금지·쇼다운 공개 순서 시작점이 깨지지 않는다.
      */
     fun snapshot(): HandSnapshot.BettingRoundSnapshot = HandSnapshot.BettingRoundSnapshot(
         seats = seats.map { HandSnapshot.BettingSeatSnapshot(it.seatNo, it.stack, it.committed, it.status) },
@@ -131,6 +140,7 @@ class BettingRound private constructor(
         lastFullLevel = lastFullLevel,
         actedSinceLastFullRaise = actedSinceLastFullRaise.toSet(),
         toActSeatNo = toAct,
+        lastAggressorSeatNo = lastAggressorSeatNo,
     )
 
     fun act(seatNo: Int, action: BettingAction) {
@@ -182,6 +192,7 @@ class BettingRound private constructor(
         }
 
         seat.commit(needed)
+        lastAggressorSeatNo = seat.seatNo
 
         if (amount >= minRaiseTo) {
             // 자발적 풀 레이즈 — 액션을 완전히 새로 연다.
@@ -293,6 +304,7 @@ class BettingRound private constructor(
             lastFullLevel: Chips,
             actedSinceLastFullRaise: Set<Int>,
             toActSeatNo: Int?,
+            lastAggressorSeatNo: Int?,
         ): BettingRound = BettingRound(
             seats.sortedBy { it.seatNo },
             currentBet,
@@ -300,6 +312,7 @@ class BettingRound private constructor(
             lastFullLevel,
             actedSinceLastFullRaise,
             toActSeatNo,
+            lastAggressorSeatNo,
         )
     }
 }

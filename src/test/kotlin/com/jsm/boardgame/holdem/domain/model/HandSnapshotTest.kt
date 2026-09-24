@@ -180,4 +180,21 @@ class HandSnapshotTest {
             assertEquals(handA.stackOf(seatNo), handB.stackOf(seatNo), "seatNo=$seatNo 최종 스택이 다르다")
         }
     }
+
+    @Test
+    fun `레이즈 이후 복원하면 lastAggressorSeatNo 와 showdownLeaderSeatNo 가 그대로 유지된다`() {
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
+
+        hand.act(1, BettingAction.RaiseTo(chips(600)))
+        assertEquals(1, hand.showdownLeaderSeatNo)
+
+        val snapshot = hand.snapshot()
+        assertEquals(1, snapshot.showdownLeaderSeatNo)
+        assertEquals(1, snapshot.currentRound!!.lastAggressorSeatNo)
+
+        val restored = Hand.reconstitute(snapshot, identityShuffler)
+
+        assertEquals(1, restored.showdownLeaderSeatNo)
+        assertEquals(snapshot, restored.snapshot())
+    }
 }

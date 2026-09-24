@@ -27,6 +27,8 @@ data class HandSnapshot(
     val totalContributed: Map<Int, Chips>,
     /** 라운드가 없으면(핸드가 끝났거나 아직 열리지 않았으면) null. */
     val currentRound: BettingRoundSnapshot?,
+    /** 쇼다운 공개 순서(TDA 17)의 시작점. [Hand.showdownLeaderSeatNo] 그대로. */
+    val showdownLeaderSeatNo: Int?,
 ) {
     data class BettingSeatSnapshot(
         val seatNo: Int,
@@ -47,5 +49,7 @@ data class HandSnapshot(
          */
         val actedSinceLastFullRaise: Set<Int>,
         val toActSeatNo: Int?,
+        /** 이 라운드의 마지막 공격자. [BettingRound.lastAggressorSeatNo] 그대로. */
+        val lastAggressorSeatNo: Int?,
     )
 }

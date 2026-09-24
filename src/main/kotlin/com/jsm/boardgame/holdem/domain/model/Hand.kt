@@ -9,13 +9,16 @@ enum class Street { PREFLOP, FLOP, TURN, RIVER }
 /**
  * @param payouts 좌석별 최종 수령액. 언콜드 벳 반환분도 포함한다
  * @param showdownRanks 쇼다운을 하지 않고 폴드로 끝났으면 빈 맵
+ * @param showdownOrder 쇼다운 공개 순서(TDA 17: 마지막 라운드의 마지막 공격자부터, 없으면 버튼 다음 좌석부터).
+ *   폴드로 끝났으면 빈 리스트
  */
 data class HandResult(
     val payouts: Map<Int, Chips>,
     val pots: List<SidePot>,
     val showdownRanks: Map<Int, HandRank>,
+    val showdownOrder: List<Int>,
 ) {
-    /** 두 좌석 이상이 겨룬 팟에서 이긴 좌석 — 쇼다운에서 패를 공개해야 하는 좌석이다. 진 좌석은 머크한다. */
+    /** 두 좌석 이상이 겨룬 팟에서 이긴 좌석. 반드시 [shownSeatNos] 에 포함된다(팟을 가져가려면 공개해야 한다, TDA 13). */
     val showdownWinners: Set<Int>
         get() {
             if (showdownRanks.isEmpty()) return emptySet()
@@ -26,6 +29,34 @@ data class HandResult(
                 winners += pot.eligibleSeats.filter { seat -> showdownRanks.getValue(seat) == best }
             }
             return winners
+        }
+
+    /**
+     * 실제로 패를 공개하는 좌석. [showdownOrder] 를 따라가며 겨루는 팟(자격자 2명 이상)마다 판정한다 —
+     * 그 팟에서 아직 아무도 공개하지 않았거나(TDA 17: 먼저 공개할 차례) 지금까지 그 팟에서 공개된
+     * 최고 패를 이기거나 비기면 공개하고, 아니면 머크한다. 사이드팟은 팟마다 따로 판정한다(TDA 21).
+     */
+    val shownSeatNos: Set<Int>
+        get() {
+            val shown = mutableSetOf<Int>()
+            val bestShownRankByPot = mutableMapOf<SidePot, HandRank>()
+            for (seatNo in showdownOrder) {
+                val rank = showdownRanks[seatNo] ?: continue
+                var shows = false
+                for (pot in pots) {
+                    if (pot.eligibleSeats.size < 2 || seatNo !in pot.eligibleSeats) continue
+                    val bestSoFar = bestShownRankByPot[pot]
+                    if (bestSoFar == null || rank >= bestSoFar) {
+                        shows = true
+                        if (bestSoFar == null || rank > bestSoFar) bestShownRankByPot[pot] = rank
+                    }
+                }
+                if (shows) shown += seatNo
+            }
+            check(showdownWinners.all { it in shown }) {
+                "쇼다운 승자는 반드시 패를 공개해야 한다: winners=$showdownWinners, shown=$shown"
+            }
+            return shown
         }
 }
 
@@ -57,6 +88,15 @@ class Hand private constructor(
     val board: List<Card> get() = boardCards.toList()
 
     var result: HandResult? = null
+        private set
+
+    /**
+     * 쇼다운 공개 순서(TDA 17)의 시작점 — 실제로 진행된 마지막 베팅 라운드의 마지막 공격자.
+     * act() 마다 갱신되므로 마지막에 남는 값은 항상 "마지막으로 실제 진행된 라운드" 의 것이다 —
+     * 전원 올인이라 건너뛴 라운드는 act() 자체가 없어 따로 처리할 필요가 없다. 그 라운드에
+     * 벳/레이즈가 없었으면(체크로 넘어갔으면) null.
+     */
+    var showdownLeaderSeatNo: Int? = null
         private set
 
     val isFinished: Boolean get() = result != null
@@ -104,12 +144,15 @@ class Hand private constructor(
         statuses = statuses.toMap(),
         totalContributed = totalContributed.toMap(),
         currentRound = currentRound?.snapshot(),
+        showdownLeaderSeatNo = showdownLeaderSeatNo,
     )
 
     fun act(seatNo: Int, action: BettingAction) {
         val round = currentRound
             ?: throw IllegalHandStateException(HoldemErrorCode.HAND_ALREADY_FINISHED, "이미 끝난 핸드입니다: buttonSeatNo=$buttonSeatNo")
         round.act(seatNo, action)
+        // 라운드가 교체되기 전에 읽는다 — round 는 로컬 참조라 currentRound 필드가 바뀌어도 안전하다.
+        showdownLeaderSeatNo = round.lastAggressorSeatNo
         if (round.isComplete) {
             onRoundComplete(round)
         }
@@ -176,7 +219,7 @@ class Hand private constructor(
     private fun finishByFold() {
         val layout = Pot.layout(totalContributed, foldedSeats())
         val payouts = mergeUncalled(Pot.distribute(layout.pots, emptyMap(), seatOrderFromButton()), layout)
-        finalizeResult(HandResult(payouts, layout.pots, emptyMap()))
+        finalizeResult(HandResult(payouts, layout.pots, emptyMap(), emptyList()))
     }
 
     private fun finishShowdown() {
@@ -184,7 +227,7 @@ class Hand private constructor(
         val contenders = statuses.filterValues { it != SeatStatus.FOLDED }.keys
         val ranks = contenders.associateWith { seatNo -> HandEvaluator.evaluate(holeCards.getValue(seatNo) + board) }
         val payouts = mergeUncalled(Pot.distribute(layout.pots, ranks, seatOrderFromButton()), layout)
-        finalizeResult(HandResult(payouts, layout.pots, ranks))
+        finalizeResult(HandResult(payouts, layout.pots, ranks, showdownOrder(contenders)))
     }
 
     private fun foldedSeats(): Set<Int> = statuses.filterValues { it == SeatStatus.FOLDED }.keys
@@ -211,6 +254,19 @@ class Hand private constructor(
         val startSeatNo = seatNos.firstOrNull { it > buttonSeatNo } ?: seatNos.first()
         val startIdx = seatNos.indexOf(startSeatNo)
         return List(seatNos.size) { i -> seatNos[(startIdx + i) % seatNos.size] }
+    }
+
+    /**
+     * 쇼다운 공개 순서(TDA 17). [showdownLeaderSeatNo] 부터, 없으면(또는 그 좌석이 폴드했으면) 버튼
+     * 다음 좌석부터, 시계 방향(좌석 번호 오름차순, 순환)으로 폴드하지 않은 좌석만 돈다.
+     */
+    private fun showdownOrder(liveSeats: Set<Int>): List<Int> {
+        if (liveSeats.isEmpty()) return emptyList()
+        val sorted = liveSeats.sorted()
+        val startSeatNo = showdownLeaderSeatNo?.takeIf { it in liveSeats }
+            ?: sorted.firstOrNull { it > buttonSeatNo } ?: sorted.first()
+        val startIdx = sorted.indexOf(startSeatNo)
+        return List(sorted.size) { i -> sorted[(startIdx + i) % sorted.size] }
     }
 
     companion object {
@@ -313,6 +369,7 @@ class Hand private constructor(
                     lastFullLevel = round.lastFullLevel,
                     actedSinceLastFullRaise = round.actedSinceLastFullRaise,
                     toActSeatNo = round.toActSeatNo,
+                    lastAggressorSeatNo = round.lastAggressorSeatNo,
                 )
             }
 
@@ -331,6 +388,7 @@ class Hand private constructor(
             )
             hand.street = snapshot.street
             hand.boardCards.addAll(snapshot.board)
+            hand.showdownLeaderSeatNo = snapshot.showdownLeaderSeatNo
             return hand
         }
     }
