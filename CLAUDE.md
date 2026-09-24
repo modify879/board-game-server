@@ -30,7 +30,7 @@ Docker 가 떠 있어야 한다. 접속 정보는 `application.yaml` 에 적지 
 - 예외는 메시지가 아니라 `errorCode` 로 검증한다
 - 테스트 이름은 백틱을 쓴 한국어 문장
 - 지갑을 여는 통합 테스트(wallet, 바이인하는 holdem)는 `UserRepository` 로 **실제 `users` 행을 먼저 만든다**.
-  `fk_wallets_user` 때문에 합성 userId 로 지갑을 열면 FK 위반이다. 충전·환전 *요청* 테이블에는 FK 가 없다
+  `fk_wallets_user` 때문에 합성 userId 로 지갑을 열면 FK 위반이다
 - 규칙을 테스트로 못 박을 때는 성격이 다른 경로를 여럿 잡는다. 이 저장소에서 세 번
   같은 식으로 뚫렸다 — 사전 체크 경로만 타서 DB 제약 번역이 한 번도 안 돌았다
 
@@ -69,8 +69,8 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
   포트를 import 하는 것이라 정상이다. 금지는 반대 방향 하나뿐이다
 - 컨텍스트끼리 서로의 `domain`·`infrastructure` 를 참조하지 않는다.
   필요하면 부르는 쪽이 포트를 소유하고 `infrastructure/acl/` 의 어댑터가 상대의
-  공개 `application` 만 부른다(`wallet/application/port/UserExistence`, `holdem` 의 `WalletTransferAdapter`).
-  교차 import 는 저장소에 이 두 곳뿐이고, 늘어나면 경계를 다시 봐야 한다는 신호다
+  공개 `application` 만 부른다(`wallet/application/port/UserExistence`).
+  교차 import 가 늘어나면 경계를 다시 봐야 한다는 신호다
 
 ## 바운디드 컨텍스트
 
@@ -78,7 +78,7 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 |---|---|---|
 | `user` | 구현됨 | 사용자, 인증, 세션, 역할, 계정 잠금 |
 | `wallet` | 구현됨 | 잔액·원장, 충전/환전 요청, 관리자 승인·반려·조정 |
-| `holdem` | 구현됨 | 홀덤 규칙 전부. 방/좌석을 자기 안에 둔다 |
+| `holdem` | 구현됨 | 텍사스 홀덤 캐시게임 |
 
 `user` 가 참조 구현이다. 새 컨텍스트는 그 파일 배치를 그대로 따른다.
 
@@ -113,6 +113,14 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
      열어두면 세션 id 만 알아도 남의 개인 큐를 엿본다
    - 구독 인가 인터셉터는 목적지를 해석하지 못하면 거부한다(fail-closed). 통과시키면 형식만 비튼 목적지로
      인가를 건너뛴다
+   - **CONNECT 프레임에서 `StompHeaderAccessor.wrap(message)` 로 `setUser` 하지 않는다.** `wrap` 은 새 인스턴스를
+     만들어 `StompSubProtocolHandler` 가 건 `setUserChangeCallback` 이 없다 — 세션에 반영되지 않아 이후 모든
+     프레임에서 principal 이 null 이다. `MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor::class.java)`
+     로 붙어 있는 accessor 를 쓴다. 읽기만 할 때는 `wrap` 도 무방하다
+   - **`convertAndSendToUser` 는 대상 세션이 없으면 예외도 로그도 없이 버린다.** `SimpUserRegistry` 로 확인해
+     WARN 을 남기되 **전송은 그대로 한다**(레지스트리가 경합할 수 있어 안 보내면 오히려 진짜 유실이 생긴다)
+   - **브로드캐스트는 트랜잭션 커밋 후에 한다.** 서비스는 이벤트만 올리고 `@TransactionalEventListener` 가
+     보낸다. 커밋 전에 내보내면 뒤이어 롤백됐을 때 클라이언트만 서버보다 앞선 상태를 보게 된다
 7. 재화는 원시 타입으로 다루지 않는다. 각 게임이 자기 VO 로 갖고, 게임 간에 공유하지 않는다
 8. 오류는 코드로 계약하고, 문구는 클라이언트가 만든다
    - 예외는 그 실패를 소유한 계층에 둔다. 기준은 "애그리거트가 그 단어를 아는가" —
@@ -142,8 +150,8 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 - 유일성·존재는 DB 가 보장한다. 응용 계층의 `existsBy...` 는 친절한 오류용이고 동시 요청을 막지 못한다.
   이름 붙인 제약(`uk_users_username`, `fk_wallets_user`)이 실제 보장이고, 어댑터가 그 이름으로 번역한다
 - **제약을 번역하는 어댑터는 `saveAndFlush` 를 쓴다.** `save()` 만 쓰면 UPDATE 가 커밋 시점에야
-  flush 되어 CHECK·`@Version` 위반이 `catch` 를 지나친다. INSERT 는 IDENTITY 채번 때문에 우연히
-  통과하므로 가입 테스트는 통과하고 잔액 음수 방지만 안 잡힌다. 회귀 테스트는 UPDATE 경로로 잡는다.
+  flush 되어 CHECK·`@Version` 위반이 `catch` 를 지나친다. INSERT 는 IDENTITY 채번 때문에 즉시 flush 되어
+  우연히 통과하므로 UPDATE 경로에서만 드러난다. 회귀 테스트는 UPDATE 경로로 잡는다.
   낙관적 락 충돌은 새 코드를 만들지 말고 기존 상태 예외로 번역한다
 - **assigned id 엔티티의 `@Version` 은 nullable(`Long? = null`) 이다.** Spring Data 가 새 행 여부를 버전으로
   판단한다. `Long = 0` 이면 첫 저장도 `merge` 로 가고, Hibernate 가 없는 행의 merge 를 거부해 INSERT 가 전부
@@ -176,5 +184,4 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
   **`data.sql` 의 문장 구분자는 `;` 가 아니라 `@@@`** — 기본 분할기가 `do $$ ... $$` 안의 `;` 에서 자른다
 - ArchUnit 의존성 테스트 — 게임이 둘 이상 생기면 도입. 목표는 BuckPal 과 같은 3줄:
   `application.doesNotDependOn(adapters)` / `domainDoesNotDependOnAdapters()` / `adapters.dontDependOnEachOther()`
-- 클라이언트 single-flight(토큰 갱신 경합), 프로필 이미지 업로드, 닉네임·비밀번호 변경, 회원 탈퇴,
-  관리자 화면, Micrometer Tracing
+- 관리자 화면, Micrometer Tracing

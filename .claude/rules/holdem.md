@@ -28,16 +28,8 @@ paths: ["**/holdem/**"]
   이벤트 로그가 아니라 **진행 중 핸드의 상태 스냅샷 1행**을 둔다. 이벤트 소싱은 재생 엔진이라는
   정상 경로와 다른 코드를 하나 더 만드는데, 거기서 틀리면 복구 시 돈이 틀어지고
   그 오류는 서버가 죽었을 때만 드러난다
-- **CONNECT 프레임에서 `StompHeaderAccessor.wrap(message)` 를 쓰지 않는다.** `wrap` 은 항상 새 인스턴스를
-  만드는데, 세션에 붙는 accessor 에는 `StompSubProtocolHandler` 가 `setUserChangeCallback` 을 걸어둔다.
-  새 인스턴스에 `setUser` 하면 세션에 반영되지 않아 **이후 모든 프레임에서 principal 이 null 로 보인다.**
-  `MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor::class.java)` 로 이미 붙어 있는
-  accessor 를 가져와야 한다. 읽기만 할 때는 `wrap` 도 무방하다
-- **`convertAndSendToUser` 는 대상 세션이 없으면 예외도 로그도 없이 메시지를 버린다.** "당신 차례" 가
-  증발하면 타임아웃 자동 폴드로 돈이 날아간다. `SimpUserRegistry` 로 확인해 WARN 을 남기되
-  **전송은 그대로 한다**(레지스트리가 경합할 수 있어 안 보내면 오히려 진짜 유실이 생긴다)
-- **브로드캐스트는 트랜잭션 커밋 후에 한다.** 서비스는 이벤트만 올리고 `@TransactionalEventListener` 가
-  보낸다. 커밋 전에 내보내면 뒤이어 롤백됐을 때 클라이언트만 서버보다 앞선 상태를 보게 된다
+- **개인 큐 유실은 돈 문제다.** "당신 차례" 가 증발하면 타임아웃 자동 폴드로 칩이 날아간다 —
+  `convertAndSendToUser` 경고 규칙(CLAUDE.md 규칙 6)을 여기서 특히 지킨다
 - **진행 중 핸드 스냅샷에 덱을 담지 않는다.** 담으면 DB 를 읽을 수 있는 사람이 미래 카드를 안다.
   복원할 때 아직 딜되지 않은 카드로 덱을 새로 섞는다. 팟도 담지 않는다 — 좌석별 총 투입액에서
   유도되므로 두 곳이 어긋날 수 있다
