@@ -469,4 +469,65 @@ class BettingRoundTest {
         assertNull(round.availableActionsFor(1))
         assertNull(round.availableActionsFor(2))
     }
+
+    @Test
+    fun `레이즈가 나오면 lastAggressorSeatNo 가 그 좌석으로 갱신된다`() {
+        val round = BettingRound.open(
+            seats = listOf(seat(1, 100_000), seat(2, 100_000)),
+            bigBlind = chips(200),
+            firstToActSeatNo = 1,
+        )
+        assertNull(round.lastAggressorSeatNo)
+
+        round.act(1, BettingAction.RaiseTo(chips(200)))
+
+        assertEquals(1, round.lastAggressorSeatNo)
+    }
+
+    @Test
+    fun `풀 레이즈에 못 미치는 짧은 올인도 lastAggressorSeatNo 를 갱신한다`() {
+        val round = BettingRound.open(
+            seats = listOf(seat(1, 100_000), seat(2, 100_000), seat(3, 100_000), seat(4, 300)),
+            bigBlind = chips(200),
+            firstToActSeatNo = 1,
+        )
+        round.act(1, BettingAction.Check)
+        round.act(2, BettingAction.RaiseTo(chips(200)))
+        round.act(3, BettingAction.Call)
+
+        round.act(4, BettingAction.RaiseTo(chips(300))) // 짧은 올인, 재오픈은 안 되지만 마지막 공격자다
+
+        assertEquals(4, round.lastAggressorSeatNo)
+    }
+
+    @Test
+    fun `블라인드만 포스팅된 프리플랍은 lastAggressorSeatNo 가 null 이다`() {
+        val round = BettingRound.preflop(
+            seats = listOf(seat(1, 100_000), seat(2, 100_000), seat(3, 100_000)),
+            smallBlind = chips(100),
+            bigBlind = chips(200),
+            sbSeatNo = 1,
+            bbSeatNo = 2,
+            firstToActSeatNo = 3,
+        )
+
+        assertNull(round.lastAggressorSeatNo)
+    }
+
+    @Test
+    fun `체크·콜은 lastAggressorSeatNo 를 바꾸지 않는다`() {
+        val round = BettingRound.open(
+            seats = listOf(seat(1, 100_000), seat(2, 100_000), seat(3, 100_000)),
+            bigBlind = chips(200),
+            firstToActSeatNo = 1,
+        )
+        round.act(1, BettingAction.Check)
+        round.act(2, BettingAction.RaiseTo(chips(200)))
+        round.act(3, BettingAction.Call)
+        assertEquals(2, round.lastAggressorSeatNo)
+
+        round.act(1, BettingAction.Call)
+
+        assertEquals(2, round.lastAggressorSeatNo)
+    }
 }
