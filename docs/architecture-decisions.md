@@ -1,6 +1,6 @@
 # 설계 결정과 근거
 
-`CLAUDE.md` 는 **어기면 깨지는 규칙**만 담는다(공식 권고: 200줄 이하, 길면 모델이 절반을 무시한다).
+`CLAUDE.md` 는 **어기면 깨지는 규칙**만 담는다(공식 권고: 200줄 이하. 길수록 컨텍스트를 더 쓰고 지시를 덜 따른다).
 이 문서는 그 규칙들이 **왜** 그렇게 정해졌는지를 담는다. 자동으로 로드되지 않으므로,
 결정을 뒤집으려 할 때 읽으면 된다.
 
@@ -25,12 +25,7 @@ Kotlin 의 `interface` 키워드와 시각적으로 충돌한다. 이 프로젝�
 판별 질문은 하나다 — **"`User.kt` 안에 이 단어가 나오나?"** `passwordHash` 는 나오고
 `session`·`token` 은 안 나온다.
 
-문헌상 이 배치는 **혼합 유파**다. DDD 전통(Evans)은 Repository 를 domain 에 두고,
-Hombergs/BuckPal 은 모든 출력 포트를 `application/port/out` 에 둔다(BuckPal 에는 top-level
-`domain` 이 아예 없고 `application/domain/model` 이다). 포트 종류별로 가르는 선례는
-Vaadin 의 "DDD & Hexagonal Architecture in Java" 에 있다 — *"The interface either lives in your
-application service layer (a factory interface) or your domain model (a repository interface)."*
-다만 그 글도 원리적 논증까지는 주지 않으므로, **문헌을 그대로 따른 게 아니라 절충안**이다.
+DDD 전통(Evans)은 Repository 를 domain 에, BuckPal 은 모든 출력 포트를 `application` 에 둔다. 이 배치는 그 **절충안**이다.
 
 ### `infrastructure` 가 `application` 을 참조해도 되는 이유
 의존성 규칙이 금지하는 것은 **안쪽이 바깥쪽을 아는 것** 하나뿐이다.
@@ -46,10 +41,6 @@ BuckPal 의 ArchUnit 규칙이 검사하는 것도 `applicationLayer.doesNotDepe
 
 이 저장소가 포트를 종류별로 나눠 두므로 어댑터의 참조 대상도 양쪽으로 갈린다.
 **포트를 어디 두느냐가 어댑터가 무엇을 import 하는지를 정한다.**
-
-참고: Cockburn 원문에는 `domain`/`application` 구분이 아예 없다 —
-*"The asymmetry to exploit is not that between left and right sides of the application but
-between inside and outside of the application."* 이 논쟁은 헥사고날이 DDD 와 결합되며 파생된 것이다.
 
 ### 명령/조회 절단면이 역할 분리보다 위인 이유
 BuckPal 은 `port/in` + `service` 를 최상위에 두지만 거기엔 명령/조회 분리가 없다.
@@ -68,9 +59,6 @@ BuckPal 은 `port/in` + `service` 를 최상위에 두지만 거기엔 명령/�
 가장 중요한 경계는 `error` 와 `web` 사이다 — `error` 는 `domain` 이 import 하는 유일한 common
 패키지이고 `web` 은 `domain` 이 절대 참조하지 않는다. 한 패키지에 있으면 이 선이 보이지 않는다.
 `ConstraintViolations` 는 오류 응답 경로가 아니라 어댑터가 쓰는 파싱 유틸이라 `persistence` 다.
-
-Spring Modulith 쪽 통설은 "common 을 junk drawer 로 만들지 말라"는 경고까지이고
-역할별 세분화를 권장하지도 반대하지도 않는다 — 이건 이 프로젝트 자체 규칙의 적용이다.
 
 ---
 
@@ -93,14 +81,11 @@ and that's an MVC or API concern **not a domain model concern**."*
 > shouldn't know in what context it's used." — Sairyss/domain-driven-hexagon
 
 `ErrorKind`(INVALID/UNAUTHORIZED/FORBIDDEN/NOT_FOUND/CONFLICT)가 그 절충 지점이고,
-HTTP 매핑은 핸들러 한 곳에서만 한다. 이 원칙에는 소수의견이 없다.
+HTTP 매핑은 핸들러 한 곳에서만 한다.
 
 ### `common` 에 범용 예외를 두지 않는 이유
 타입이 아니라 메시지 문자열이 의미를 나르게 되어 아이디 중복인지 닉네임 중복인지 구분할 수 없다.
 기반 타입(`BusinessException`)을 공유하는 것은 표준 패턴이므로 문제가 아니다.
-
-### 4xx 에 스택을 안 찍는 이유
-중복 가입 시도마다 스택이 찍히면 로그가 쓸모없어진다.
 
 ---
 
@@ -121,9 +106,6 @@ Hombergs 도 매핑 전략을 코드베이스 전체에 하나로 강제하지 �
 codebase... the answer is the typical 'it depends'."*
 **`presentation` 은 지점별 판단이 허용되고 `application` 계약은 아니다.** 이 비대칭이 의도다.
 
-다만 BuckPal 의 `SendMoneyController` 는 원시 타입만 받고 안에서 변환하므로,
-저자 본인 코드는 이보다 보수적이다.
-
 ---
 
 ## 도메인 모델
@@ -135,7 +117,7 @@ codebase... the answer is the typical 'it depends'."*
 
 ### `private` 생성자 + `of()` 와 일반 생성자 + `init` 이 섞여 있는 이유
 value class 는 `init` 에서 값을 바꿀 수 없어 정규화를 할 수 없다. 정규화가 필요 없는
-VO(`UserId`, `PasswordHash`)는 일반 생성자 + `init` 검증을 쓴다. 이 비대칭은 의도된 것이다.
+VO(`PasswordHash`)는 일반 생성자 + `init` 검증을 쓴다. 이 비대칭은 의도된 것이다.
 
 ### 잔액의 진실이 원장인 이유
 `Wallet.balance` 는 빠른 조회를 위한 캐시이고 append-only 인 `LedgerEntry` 가 진실이다.
@@ -210,10 +192,6 @@ Vernon 의 "한 트랜잭션에 애그리거트 하나" 를 지키지 않는다.
 
 ## 바운디드 컨텍스트
 
-### 방/좌석을 게임 안에 두는 이유
-좌석 모델이 게임 규칙에 좌우된다. 홀덤의 좌석은 버튼 이동·블라인드 포스팅·사이드팟 자격까지
-얽혀 있어, 게임 밖으로 빼면 그 게임에만 있는 개념이 공용 좌석 모델로 새어 나간다.
-
 ### `wallet` 이 규칙 1의 대상이 아닌 이유
 규칙 1이 금지하는 것은 `GameRule`/`Move` 같은 **게임 규칙 상위 타입**이지 비게임 컨텍스트가 아니다.
 지갑 잔액은 게임이 끝나도 남아 나중에 환전되는 **정산 워크플로**이고, 게임 안의 재화
@@ -227,19 +205,10 @@ Vernon 의 "한 트랜잭션에 애그리거트 하나" 를 지키지 않는다.
 
 ## 인프라
 
-### `saveAndFlush` 가 필요한 이유
-`save()` 만 쓰면 UPDATE 는 커밋 시점에야 flush 되므로 CHECK 제약 위반과 `@Version` 충돌이
-어댑터의 `catch` 를 **지나쳐** 버린다. 신규 INSERT 는 IDENTITY 채번 때문에 우연히 즉시 나가므로
-**가입·최초 생성 테스트는 통과한다.** "충전은 되는데 잔액 음수 방지만 안 잡히는" 형태로만 드러난다.
-
 ### `ddl-auto: update` 를 계속 쓰는 이유
 Flyway 로 전환할 계획이 없다. 대가는 컬럼 삭제·이름 변경·타입 변경·데이터 이관을 손으로 해야
 한다는 것이다. 제약을 `data.sql` 의 멱등 DDL 로 거는 이유는, 손으로 한 번 실행하면
 Testcontainers 의 빈 DB 에 제약이 없어 **번역 경로가 검증되지 않기** 때문이다.
-
-### 핸드 히스토리를 남기지 않는 이유
-감사·분쟁·통계 요구가 없다. 이벤트 소싱은 재생 엔진이라는 **정상 경로와 다른 코드**를 하나 더
-만드는데, 거기서 틀리면 복구 시 돈이 틀어지고 그 오류는 서버가 죽었을 때만 드러난다.
 
 ### 로그인 타이밍 방어를 제거한 이유
 없는 아이디는 BCrypt 를 타지 않아 응답이 짧다(평균 77ms vs 3.6ms). 시간을 맞추던 더미 해시
