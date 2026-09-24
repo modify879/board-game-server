@@ -98,8 +98,8 @@ class HandTest {
 
     @Test
     fun `쇼다운까지 가면 고정된 패로 승자가 결정된다`() {
-        // 딜 순서(오름차순 두 바퀴): seat1=Ah,Ad  seat2=Kh,Kd  보드=2s,7d,9c,Tc,Jh
-        val shuffler = fixedShuffler("Ah", "Kh", "Ad", "Kd", "2s", "7d", "9c", "Tc", "Jh")
+        // 딜 순서(버튼 다음부터 두 바퀴, 버튼이 마지막): seat2=Kh,Kd  seat1=Ah,Ad  보드=2s,7d,9c,Tc,Jh
+        val shuffler = fixedShuffler("Kh", "Ah", "Kd", "Ad", "2s", "7d", "9c", "Tc", "Jh")
         val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, chips(100), chips(200), shuffler)
 
         hand.act(1, BettingAction.Call)
@@ -140,8 +140,8 @@ class HandTest {
 
     @Test
     fun `숏스택이 프리플랍에서 올인하면 사이드팟이 생기고 메인팟과 사이드팟의 승자가 갈린다`() {
-        // 딜 순서: seat1=Ah,Ac(AA)  seat2=Kh,Kc(KK)  seat3=Qh,Qc(QQ)  보드=2d,7c,9h,Jc,4s(무늬·연속 없음)
-        val shuffler = fixedShuffler("Ah", "Kh", "Qh", "Ac", "Kc", "Qc", "2d", "7c", "9h", "Jc", "4s")
+        // 딜 순서(버튼(1) 다음부터 두 바퀴): seat2=Kh,Kc(KK)  seat3=Qh,Qc(QQ)  seat1=Ah,Ac(AA)  보드=2d,7c,9h,Jc,4s(무늬·연속 없음)
+        val shuffler = fixedShuffler("Kh", "Qh", "Ah", "Kc", "Qc", "Ac", "2d", "7c", "9h", "Jc", "4s")
         val hand = Hand.start(stacksOf(1 to 1_000, 2 to 5_000, 3 to 5_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), shuffler)
 
         hand.act(1, BettingAction.RaiseTo(chips(1_000))) // 숏스택 올인
@@ -180,7 +180,7 @@ class HandTest {
     @Test
     fun `올인 콜이 모자라면 초과분은 언콜드 벳으로 레이저에게 그대로 돌아간다`() {
         // seat1=7c,2d(하이카드)  seat2=Ah,Ad(AA) — 쇼다운은 seat2가 이기지만 세팅상 콜 못 받은 4,000은 seat1에게 그대로 돌아간다
-        val shuffler = fixedShuffler("7c", "Ah", "2d", "Ad", "9h", "Jc", "3s", "Kd", "4c")
+        val shuffler = fixedShuffler("Ah", "7c", "Ad", "2d", "9h", "Jc", "3s", "Kd", "4c")
         val hand = Hand.start(stacksOf(1 to 5_000, 2 to 1_000), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, chips(100), chips(200), shuffler)
 
         hand.act(1, BettingAction.RaiseTo(chips(5_000))) // 버튼 올인
@@ -195,8 +195,8 @@ class HandTest {
 
     @Test
     fun `헤즈업에서 두 좌석 모두 블라인드로 올인이 되면 생성 시점에 바로 쇼다운까지 끝난다`() {
-        // 딜 순서: seat1(버튼/SB)=Ah,Ac(AA)  seat2(BB)=Kh,Kc(KK)  보드=2d,7c,9h,Jc,4s
-        val shuffler = fixedShuffler("Ah", "Kh", "Ac", "Kc", "2d", "7c", "9h", "Jc", "4s")
+        // 딜 순서(버튼(SB) 다음인 BB부터, 버튼이 마지막): seat2(BB)=Kh,Kc(KK)  seat1(버튼/SB)=Ah,Ac(AA)  보드=2d,7c,9h,Jc,4s
+        val shuffler = fixedShuffler("Kh", "Ah", "Kc", "Ac", "2d", "7c", "9h", "Jc", "4s")
         val hand = Hand.start(stacksOf(1 to 100, 2 to 200), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, chips(100), chips(200), shuffler)
 
         assertTrue(hand.isFinished)
@@ -259,5 +259,43 @@ class HandTest {
         assertFailsWith<IllegalStateException> {
             Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 1, chips(100), chips(200), identityShuffler)
         }
+    }
+
+    @Test
+    fun `버튼이 가운데 좌석이어도 딜은 버튼 다음 좌석부터 시계방향으로 두 바퀴 돌고 버튼이 마지막 카드를 받는다`() {
+        // 버튼=2. 딜 순서는 3(버튼 다음) -> 1 -> 2(버튼, 마지막). 두 바퀴 모두 같은 순서다.
+        val shuffler = fixedShuffler("Ah", "2c", "3c", "Kh", "4c", "5c")
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 2, smallBlindSeatNo = 3, bigBlindSeatNo = 1, chips(100), chips(200), shuffler)
+
+        assertEquals(listOf(Card.of("Ah"), Card.of("Kh")), hand.holeCardsOf(3)) // 버튼 다음 좌석 — 매 바퀴 첫 카드
+        assertEquals(listOf(Card.of("2c"), Card.of("4c")), hand.holeCardsOf(1))
+        assertEquals(listOf(Card.of("3c"), Card.of("5c")), hand.holeCardsOf(2)) // 버튼 — 매 바퀴 마지막 카드
+    }
+
+    @Test
+    fun `헤즈업에서는 버튼이 SB 를 겸해 BB 가 첫 카드를, 버튼이 마지막 카드를 받는다`() {
+        val shuffler = fixedShuffler("Ah", "2c", "Kh", "3c")
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, chips(100), chips(200), shuffler)
+
+        assertEquals(listOf(Card.of("Ah"), Card.of("Kh")), hand.holeCardsOf(2)) // BB — 딜 전체에서 첫 카드
+        assertEquals(listOf(Card.of("2c"), Card.of("3c")), hand.holeCardsOf(1)) // 버튼/SB — 딜 전체에서 마지막 카드
+    }
+
+    @Test
+    fun `dead button 이어도 딜은 버튼 다음 참가 좌석부터 시작한다`() {
+        // 버튼=3(참가하지 않는 좌석, 2와 4 사이). 딜 순서는 4(버튼 다음 참가 좌석) -> 1 -> 2.
+        val shuffler = fixedShuffler("Ah", "2c", "3c", "Kh", "4c", "5c")
+        val hand = Hand.start(
+            stacksOf(1 to 10_000, 2 to 10_000, 4 to 10_000),
+            buttonSeatNo = 3,
+            smallBlindSeatNo = 4,
+            bigBlindSeatNo = 1,
+            chips(100), chips(200),
+            shuffler,
+        )
+
+        assertEquals(listOf(Card.of("Ah"), Card.of("Kh")), hand.holeCardsOf(4)) // 버튼 다음 참가 좌석 — 매 바퀴 첫 카드
+        assertEquals(listOf(Card.of("2c"), Card.of("4c")), hand.holeCardsOf(1))
+        assertEquals(listOf(Card.of("3c"), Card.of("5c")), hand.holeCardsOf(2)) // 매 바퀴 마지막 카드
     }
 }

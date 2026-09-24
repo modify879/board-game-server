@@ -56,9 +56,11 @@ private class HandSettlerFakeHandStore : HandStore {
  * 좌석 1 = As Ah(포켓 에이스), 좌석 2 = 7c 2d(무패). 보드는 Kd Qc Jh 9s 4h — 좌석 2 에는
  * 아무 도움도 안 되고 좌석 1 은 원페어를 완성해 쇼다운에서 반드시 이긴다. 무작위 셔플에 기대는
  * 대신 카드 강도로 승부를 고정해, 패자가 항상 좌석 2 가 되도록 만든다.
+ * 딜은 버튼(1) 다음인 좌석 2 부터 시작해 버튼이 마지막 카드를 받으므로, 위 배정을 유지하려면
+ * 좌석 2 의 카드를 먼저 둔다.
  */
 private val bustingHandOrder: List<Card> = listOf(
-    Card.of("As"), Card.of("7c"), Card.of("Ah"), Card.of("2d"),
+    Card.of("7c"), Card.of("As"), Card.of("2d"), Card.of("Ah"),
     Card.of("Kd"), Card.of("Qc"), Card.of("Jh"), Card.of("9s"), Card.of("4h"),
 )
 private val bustingShuffler = Shuffler { full -> bustingHandOrder + full.filterNot { it in bustingHandOrder } }

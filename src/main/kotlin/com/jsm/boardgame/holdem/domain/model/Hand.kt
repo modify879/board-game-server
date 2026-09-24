@@ -248,13 +248,8 @@ class Hand private constructor(
         currentRound = null
     }
 
-    /** 버튼 다음 참가 좌석부터 시계 방향으로 좌석 번호 오름차순 순환 — 팟 분배 시 나머지 칩을 돌리는 순서.
-     * 버튼이 참가자가 아니어도(dead button) 다음으로 큰 참가 좌석부터 시작해 정상 동작한다. */
-    private fun seatOrderFromButton(): List<Int> {
-        val startSeatNo = seatNos.firstOrNull { it > buttonSeatNo } ?: seatNos.first()
-        val startIdx = seatNos.indexOf(startSeatNo)
-        return List(seatNos.size) { i -> seatNos[(startIdx + i) % seatNos.size] }
-    }
+    /** 버튼 다음 참가 좌석부터 시계 방향으로 좌석 번호 오름차순 순환 — 팟 분배 시 나머지 칩을 돌리는 순서. */
+    private fun seatOrderFromButton(): List<Int> = seatOrderFromButton(seatNos, buttonSeatNo)
 
     /**
      * 쇼다운 공개 순서(TDA 17). [showdownLeaderSeatNo] 부터, 없으면(또는 그 좌석이 폴드했으면) 버튼
@@ -270,6 +265,14 @@ class Hand private constructor(
     }
 
     companion object {
+        /** 버튼 다음 참가 좌석부터 시계 방향(좌석 번호 오름차순, 순환). 버튼이 참가자가 아니어도(dead button)
+         * 다음으로 큰 참가 좌석부터 시작해 정상 동작한다. */
+        private fun seatOrderFromButton(seatNos: List<Int>, buttonSeatNo: Int): List<Int> {
+            val startSeatNo = seatNos.firstOrNull { it > buttonSeatNo } ?: seatNos.first()
+            val startIdx = seatNos.indexOf(startSeatNo)
+            return List(seatNos.size) { i -> seatNos[(startIdx + i) % seatNos.size] }
+        }
+
         fun start(
             stacks: Map<Int, Chips>,
             buttonSeatNo: Int,
@@ -305,9 +308,10 @@ class Hand private constructor(
 
             val deck = Deck.shuffled(shuffler)
 
-            // 홀카드: 좌석 번호 오름차순으로 한 장씩 두 바퀴.
+            // 홀카드: 버튼 다음 참가 좌석(시계 방향)부터 한 장씩 두 바퀴 — 버튼이 마지막 카드를 받는다.
+            val dealOrder = seatOrderFromButton(seatNos, buttonSeatNo)
             val holeCards = seatNos.associateWith { mutableListOf<Card>() }
-            repeat(2) { seatNos.forEach { seatNo -> holeCards.getValue(seatNo).add(deck.draw()) } }
+            repeat(2) { dealOrder.forEach { seatNo -> holeCards.getValue(seatNo).add(deck.draw()) } }
 
             // 시계 방향(좌석 번호 오름차순, 순환)으로 다음 참가 좌석. from 이 참가자가 아니어도(dead button) 동작한다.
             fun nextSeatNo(from: Int): Int = seatNos.firstOrNull { it > from } ?: seatNos.first()
