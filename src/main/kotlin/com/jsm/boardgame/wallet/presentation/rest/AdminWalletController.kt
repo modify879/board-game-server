@@ -108,7 +108,6 @@ class AdminWalletController(
     }
 }
 
-// AuthController.logout() 과 같은 방식이다 — subject 가 숫자로 파싱되지 않으면 401(오류 계약)로 변환한다.
 private fun Jwt.requireUserId(): Long =
     subject?.toLongOrNull()
         ?: throw AuthenticationRequiredException("인증된 JWT 의 subject 를 사용자 식별자로 파싱할 수 없다: subject=$subject")

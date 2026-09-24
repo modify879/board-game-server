@@ -150,7 +150,6 @@ class HoldemApiIntegrationTest {
 
     private data class SeatedContext(val tableId: Long, val userId: Long, val accessToken: String)
 
-    /** 한 사용자가 착석했지만 핸드는 시작하지 않은 테이블을 만든다. */
     private fun seatedWithoutHand(buyIn: Long = 10_000L, fundAmount: Long = 15_000L): SeatedContext {
         val (userId, accessToken) = signUpAndLogin()
         fundWallet(userId, fundAmount)
@@ -159,7 +158,7 @@ class HoldemApiIntegrationTest {
         return SeatedContext(tableId, userId, accessToken)
     }
 
-    /** 두 사용자가 착석하고 핸드가 진행 중인 테이블을 만든다. 반환값은 그중 한 명(userA) 기준이다. */
+    /** 반환값은 착석한 둘 중 한 명(userA) 기준이다. */
     private fun seatedWithHandInProgress(): SeatedContext {
         val (userIdA, accessTokenA) = signUpAndLogin()
         val (userIdB, accessTokenB) = signUpAndLogin()
@@ -171,8 +170,6 @@ class HoldemApiIntegrationTest {
         startHand(tableId)
         return SeatedContext(tableId, userIdA, accessTokenA)
     }
-
-    // ---------- GET /api/holdem/me/seat ----------
 
     @Test
     fun `핸드 진행 중인 좌석의 내 좌석 조회는 200과 handInProgress true 를 응답한다`() {
@@ -202,8 +199,6 @@ class HoldemApiIntegrationTest {
             .andExpect(status().isNoContent)
     }
 
-    // ---------- GET /api/holdem/tables ----------
-
     @Test
     fun `핸드 진행 중인 사용자의 테이블 목록 조회는 409와 HAND_IN_PROGRESS 를 응답한다`() {
         val ctx = seatedWithHandInProgress()
@@ -228,8 +223,6 @@ class HoldemApiIntegrationTest {
         authGet("/api/holdem/tables", accessToken)
             .andExpect(status().isOk)
     }
-
-    // ---------- POST /api/holdem/tables ----------
 
     @Test
     fun `핸드 진행 중인 사용자가 새 테이블을 생성하면 409와 HAND_IN_PROGRESS 를 응답한다`() {
@@ -257,8 +250,6 @@ class HoldemApiIntegrationTest {
             .andExpect(status().isCreated)
             .andExpect(jsonPath("$.tableId").isNumber)
     }
-
-    // ---------- POST /api/holdem/tables/{tableId}/seats (다른 방에 착석 시도) ----------
 
     @Test
     fun `핸드 진행 중인 사용자가 다른 테이블에 착석을 시도하면 409와 HAND_IN_PROGRESS 를 응답한다`() {
@@ -292,8 +283,6 @@ class HoldemApiIntegrationTest {
             .andExpect(status().isCreated)
     }
 
-    // ---------- DELETE /api/holdem/seat ----------
-
     @Test
     fun `핸드 진행 중에는 기립이 409와 HAND_IN_PROGRESS 를 응답한다`() {
         val ctx = seatedWithHandInProgress()
@@ -320,8 +309,6 @@ class HoldemApiIntegrationTest {
             .andExpect(jsonPath("$.errorCode").value("NOT_SEATED"))
     }
 
-    // ---------- 지갑 연동 ----------
-
     @Test
     fun `착석하면 바이인만큼 지갑 잔액이 줄어든다`() {
         val (userId, accessToken) = signUpAndLogin()
@@ -344,8 +331,6 @@ class HoldemApiIntegrationTest {
 
         assertThat(balanceOf(ctx.userId)).isEqualTo(15_000L)
     }
-
-    // ---------- 핸드 도중 착석(참가 요청) ----------
 
     @Test
     fun `핸드 진행 중에 착석하면 202를 응답하고 지갑은 아직 불리지 않는다`() {
@@ -419,8 +404,6 @@ class HoldemApiIntegrationTest {
         assertThat(savedTable.seatAt(5)?.userId).isEqualTo(requesterId)
         assertThat(balanceOf(requesterId)).isEqualTo(5_000L)
     }
-
-    // ---------- 그 외 오류 ----------
 
     @Test
     fun `바이인이 범위 밖이면 400과 BUY_IN_OUT_OF_RANGE 를 응답한다`() {

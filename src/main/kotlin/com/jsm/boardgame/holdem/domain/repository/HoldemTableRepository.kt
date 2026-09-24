@@ -6,7 +6,6 @@ import com.jsm.boardgame.holdem.domain.model.TableId
 interface HoldemTableRepository {
     fun findById(id: TableId): HoldemTable?
 
-    /** 주어진 사용자가 현재 앉아 있는 테이블(없으면 null). */
     fun findByUserId(userId: Long): HoldemTable?
 
     /** 대기 중인 참가 요청을 낸 사용자가 앉아 있(으려 하)는 테이블(없으면 null). `findByUserId` 의

@@ -250,7 +250,6 @@ class AdminWalletApiIntegrationTest {
     }
 
     @Test
-    // 이 URL 은 403 테스트에서만 불리고 있어 성공 경로가 통째로 비어 있었다.
     fun `관리자 충전 요청 목록 조회는 status 로 필터링한다`() {
         val (_, adminToken) = signUpAdminAndLogin()
         val (_, userToken) = signUpAndLogin()

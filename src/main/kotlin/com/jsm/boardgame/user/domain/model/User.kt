@@ -38,7 +38,6 @@ class User private constructor(
     }
 
     companion object {
-        /** 신규 가입. 프로필 이미지는 항상 null 로 시작한다(= 기본 프로필). 역할은 항상 USER 로 시작한다. 잠기지 않은 채로 시작한다. */
         fun register(username: Username, passwordHash: PasswordHash, nickname: Nickname): User =
             User(
                 id = null,
