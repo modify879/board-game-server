@@ -10,6 +10,7 @@ PostgreSQL + Redis / 단일 Gradle 모듈.
 ```bash
 ./gradlew build                          # 전체 빌드
 ./gradlew test --tests '*NicknameTest'   # 하나만
+./gradlew unitTest                       # 컨테이너 없이 단위 테스트만 (*IntegrationTest 제외)
 ./gradlew bootRun                        # 로컬 실행 (compose.yaml 자동 기동)
 ```
 
