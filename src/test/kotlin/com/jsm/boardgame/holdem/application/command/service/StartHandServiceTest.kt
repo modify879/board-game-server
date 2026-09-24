@@ -6,6 +6,7 @@ import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.exception.IllegalHandStateException
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
+import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -348,8 +349,8 @@ class StartHandServiceTest {
         start(tableId)
 
         val hand = handStore.find(tableId)!!
-        assertEquals(Chips.of(10_000) - HoldemTable.SMALL_BLIND, hand.stackOf(1))
-        assertEquals(Chips.of(10_000) - HoldemTable.BIG_BLIND, hand.stackOf(2))
+        assertEquals(Chips.of(10_000) - HoldemTable.SMALL_BLIND, hand.stackOf(2))
+        assertEquals(Chips.of(10_000) - HoldemTable.BIG_BLIND, hand.stackOf(1))
 
         val savedTable = tables.findById(tableId)!!
         assertFalse(savedTable.seatAt(1)!!.awaitingBigBlind)
@@ -408,5 +409,103 @@ class StartHandServiceTest {
         val participants = listOf(1, 2, 3, 4)
         val stacksTotal = participants.fold(Chips.ZERO) { acc, seatNo -> acc + hand.stackOf(seatNo) }
         assertEquals(Chips.of(buyIn * participants.size), stacksTotal + hand.potTotal())
+    }
+
+    @Test
+    fun `헤즈업 뒤 대기 중인 세 번째 좌석 때문에 버튼이 BB 와 겹치지 않는다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 3 to 10_000L)
+        start(tableId, userId = 1L) // 1핸드: 헤즈업 1·3
+        handStore.remove(tableId)
+
+        sitDownChoosing(tableId, seatNo = 2, buyIn = 10_000L, postBlindImmediately = false)
+
+        start(tableId, userId = 1L) // 2핸드: 참가자={1,3}(2는 대기)
+
+        var hand = handStore.find(tableId)!!
+        assertEquals(3, hand.buttonSeatNo)
+        assertEquals(Chips.of(10_000) - HoldemTable.SMALL_BLIND, hand.stackOf(3))
+        assertEquals(Chips.of(10_000) - HoldemTable.BIG_BLIND, hand.stackOf(1))
+        assertFailsWith<NoSuchElementException> { hand.stackOf(2) }
+        handStore.remove(tableId)
+
+        start(tableId, userId = 1L) // 3핸드: BB 가 2에 도달 -> 딜인, 3인 참가
+
+        val savedTable = tables.findById(tableId)!!
+        assertEquals(3, savedTable.buttonSeatNo)
+        assertEquals(1, savedTable.smallBlindSeatNo)
+        assertEquals(2, savedTable.bigBlindSeatNo)
+        hand = handStore.find(tableId)!!
+        assertNotNull(runCatching { hand.stackOf(2) }.getOrNull())
+    }
+
+    @Test
+    fun `헤즈업 뒤 즉시 포스팅을 고른 좌석이 버튼 자리에 걸리면 이번 핸드는 대기한다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 3 to 10_000L)
+        start(tableId, userId = 1L) // 1핸드: 헤즈업 1·3
+        handStore.remove(tableId)
+
+        sitDownChoosing(tableId, seatNo = 2, buyIn = 10_000L, postBlindImmediately = true)
+
+        start(tableId, userId = 1L) // 2핸드: 2는 명목 버튼 자리 -> 딜인되지 않는다
+
+        var hand = handStore.find(tableId)!!
+        assertFailsWith<NoSuchElementException> { hand.stackOf(2) }
+        assertTrue(tables.findById(tableId)!!.seatAt(2)!!.owesImmediatePost)
+        handStore.remove(tableId)
+
+        start(tableId, userId = 1L) // 3핸드: 2는 BB -> 딜인, 추가 포스팅 없이 BB 만 낸다
+
+        hand = handStore.find(tableId)!!
+        assertEquals(2, tables.findById(tableId)!!.bigBlindSeatNo)
+        assertEquals(Chips.of(10_000) - HoldemTable.BIG_BLIND, hand.stackOf(2))
+        assertFalse(tables.findById(tableId)!!.seatAt(2)!!.owesImmediatePost)
+    }
+
+    @Test
+    fun `SB 자리에 걸린 즉시 포스팅 좌석은 추가 포스팅 없이 SB 만 낸다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        sitDownChoosing(tableId, seatNo = 3, buyIn = 10_000L, postBlindImmediately = true)
+
+        start(tableId) // 1핸드: 버튼=2, SB=3, BB=1 (완화로 전원 참가)
+
+        val hand = handStore.find(tableId)!!
+        assertEquals(Chips.of(10_000) - HoldemTable.SMALL_BLIND, hand.stackOf(3))
+        assertFalse(tables.findById(tableId)!!.seatAt(3)!!.owesImmediatePost)
+
+        hand.act(2, BettingAction.Call)
+        hand.act(3, BettingAction.Call)
+
+        assertEquals(Chips.of(200), hand.totalContributedBy(3))
+    }
+
+    @Test
+    fun `기립 후 즉시 포스팅으로 재입장한 좌석은 명목 SB·버튼을 지나야 딜인된다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L, 4 to 10_000L)
+        start(tableId) // 1핸드: BB=1
+        handStore.remove(tableId)
+        start(tableId) // 2핸드: BB=2
+        handStore.remove(tableId)
+
+        var table = tables.findById(tableId)!!
+        table.standUp(2L)
+        tables.save(table)
+        sitDownChoosing(tableId, seatNo = 2, buyIn = 10_000L, postBlindImmediately = true)
+
+        start(tableId) // 3핸드: 2는 명목 SB -> dead SB, 딜인되지 않는다
+        var hand = handStore.find(tableId)!!
+        assertFailsWith<NoSuchElementException> { hand.stackOf(2) }
+        assertTrue(tables.findById(tableId)!!.seatAt(2)!!.owesImmediatePost)
+        handStore.remove(tableId)
+
+        start(tableId) // 4핸드: 2는 명목 버튼 -> 여전히 딜인되지 않는다
+        hand = handStore.find(tableId)!!
+        assertFailsWith<NoSuchElementException> { hand.stackOf(2) }
+        assertTrue(tables.findById(tableId)!!.seatAt(2)!!.owesImmediatePost)
+        handStore.remove(tableId)
+
+        start(tableId) // 5핸드: 딜인, 추가 BB 포스팅
+        hand = handStore.find(tableId)!!
+        assertEquals(Chips.of(10_000) - HoldemTable.BIG_BLIND, hand.stackOf(2))
+        assertFalse(tables.findById(tableId)!!.seatAt(2)!!.owesImmediatePost)
     }
 }
