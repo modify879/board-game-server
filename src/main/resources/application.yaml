@@ -40,6 +40,8 @@ logging:
     level: "%5p [%X{traceId:-}]"
 
 app:
+  holdem:
+    next-hand-delay: 5s
   profile-image:
     # 실제 CDN 이 붙기 전까지의 로컬 기본값
     base-url: "http://localhost:8080/images/profiles/"

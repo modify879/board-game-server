@@ -2,6 +2,10 @@ package com.jsm.boardgame.holdem.presentation.rest
 
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
+import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
+import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
@@ -15,6 +19,7 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
+import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
@@ -22,6 +27,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 
@@ -29,10 +35,15 @@ import java.util.UUID
  * `holdem` 방/좌석 REST API 통합 테스트.
  * 핸드 내부 베팅 규칙 자체는 도메인 테스트가 맡는다 — 여기는 방 생성·착석·기립·조회의
  * HTTP 계약(상태 코드, errorCode)만 검증한다. 핸드는 시작 직후 상태만 확인하고 끝까지 진행하지 않는다.
+ *
+ * next-hand-delay 를 1시간으로 늘려 실제 5초 타이머가 테스트 도중 우연히 발화하지 않게 한다 —
+ * 핸드 시작은 startHand() 헬퍼가 nextHandAt 을 과거로 강제로 당겨 StartScheduledHandUseCase 를
+ * 직접 불러 결정적으로 일으킨다(수동 시작 엔드포인트는 더 이상 없다).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
+@TestPropertySource(properties = ["app.holdem.next-hand-delay=1h"])
 class HoldemApiIntegrationTest {
 
     @Autowired
@@ -43,6 +54,15 @@ class HoldemApiIntegrationTest {
 
     @Autowired
     private lateinit var ledgerEntryRepository: LedgerEntryRepository
+
+    @Autowired
+    private lateinit var holdemTableRepository: HoldemTableRepository
+
+    @Autowired
+    private lateinit var startScheduledHandUseCase: StartScheduledHandUseCase
+
+    @Autowired
+    private lateinit var clock: Clock
 
     private fun uniqueUsername(): String =
         "u" + UUID.randomUUID().toString().replace("-", "").take(9).lowercase()
@@ -108,7 +128,7 @@ class HoldemApiIntegrationTest {
         ledgerEntryRepository.save(entry)
     }
 
-    private fun balanceOf(userId: Long): Long = walletRepository.findByUserId(userId)!!.balance.amount
+    private fun balanceOf(userId: Long): Long = walletRepository.findByUserId(userId)?.balance?.amount ?: 0L
 
     private fun createTable(accessToken: String, name: String = "t-${UUID.randomUUID().toString().take(8)}"): Long {
         val result = authPost("/api/holdem/tables", accessToken, """{"name":"$name"}""")
@@ -120,8 +140,13 @@ class HoldemApiIntegrationTest {
     private fun sitDown(accessToken: String, tableId: Long, seatNo: Int, buyIn: Long): ResultActions =
         authPost("/api/holdem/tables/$tableId/seats", accessToken, """{"seatNo":$seatNo,"buyIn":$buyIn}""")
 
-    private fun startHand(accessToken: String, tableId: Long): ResultActions =
-        authPost("/api/holdem/tables/$tableId/hands", accessToken)
+    /** 수동 시작 엔드포인트가 없으므로 nextHandAt 을 과거로 당겨 시스템 진입점을 직접 불러 결정적으로 시작시킨다. */
+    private fun startHand(tableId: Long) {
+        val table = holdemTableRepository.findById(TableId(tableId))!!
+        table.scheduleNextHand(Instant.now(clock).minusSeconds(1))
+        holdemTableRepository.save(table)
+        startScheduledHandUseCase.start(StartScheduledHandCommand(tableId))
+    }
 
     private data class SeatedContext(val tableId: Long, val userId: Long, val accessToken: String)
 
@@ -143,7 +168,7 @@ class HoldemApiIntegrationTest {
         val tableId = createTable(accessTokenA)
         sitDown(accessTokenA, tableId, 1, 10_000).andExpect(status().isCreated)
         sitDown(accessTokenB, tableId, 2, 10_000).andExpect(status().isCreated)
-        startHand(accessTokenA, tableId).andExpect(status().isCreated)
+        startHand(tableId)
         return SeatedContext(tableId, userIdA, accessTokenA)
     }
 
@@ -320,19 +345,79 @@ class HoldemApiIntegrationTest {
         assertThat(balanceOf(ctx.userId)).isEqualTo(15_000L)
     }
 
-    // ---------- POST /api/holdem/tables/{tableId}/hands ----------
+    // ---------- 핸드 도중 착석(참가 요청) ----------
 
     @Test
-    fun `앉지 않은 사용자가 핸드 시작을 요청하면 404와 NOT_SEATED 를 응답한다`() {
+    fun `핸드 진행 중에 착석하면 202를 응답하고 지갑은 아직 불리지 않는다`() {
+        val ctx = seatedWithHandInProgress()
         val (userId, accessToken) = signUpAndLogin()
         fundWallet(userId, 15_000)
-        val tableId = createTable(accessToken)
-        sitDown(accessToken, tableId, 1, 10_000).andExpect(status().isCreated)
-        val (_, bystanderToken) = signUpAndLogin()
 
-        startHand(bystanderToken, tableId)
+        sitDown(accessToken, ctx.tableId, 5, 10_000)
+            .andExpect(status().isAccepted)
+
+        assertThat(balanceOf(userId)).isEqualTo(15_000L)
+    }
+
+    @Test
+    fun `참가 요청을 취소하면 204를 응답한다`() {
+        val ctx = seatedWithHandInProgress()
+        val (userId, accessToken) = signUpAndLogin()
+        fundWallet(userId, 15_000)
+        sitDown(accessToken, ctx.tableId, 5, 10_000).andExpect(status().isAccepted)
+
+        authDelete("/api/holdem/tables/${ctx.tableId}/seats/request", accessToken)
+            .andExpect(status().isNoContent)
+    }
+
+    @Test
+    fun `참가 요청이 없는데 취소하면 404와 JOIN_REQUEST_NOT_FOUND 를 응답한다`() {
+        val (_, accessToken) = signUpAndLogin()
+        val tableId = createTable(accessToken)
+
+        authDelete("/api/holdem/tables/$tableId/seats/request", accessToken)
             .andExpect(status().isNotFound)
-            .andExpect(jsonPath("$.errorCode").value("NOT_SEATED"))
+            .andExpect(jsonPath("$.errorCode").value("JOIN_REQUEST_NOT_FOUND"))
+    }
+
+    @Test
+    fun `핸드 도중 잔액 부족한 참가 요청이 있어도 폴드로 핸드는 정산된다`() {
+        val ctx = seatedWithHandInProgress()
+        val (spectatorId, spectatorToken) = signUpAndLogin() // 잔액 0 — fundWallet 호출 없음
+        sitDown(spectatorToken, ctx.tableId, 5, 10_000)
+            .andExpect(status().isAccepted)
+
+        authPost("/api/holdem/tables/${ctx.tableId}/hands/actions", ctx.accessToken, """{"action":"FOLD"}""")
+            .andExpect(status().isNoContent)
+
+        authGet("/api/holdem/me/seat", ctx.accessToken)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.handInProgress").value(false))
+
+        val savedTable = holdemTableRepository.findById(TableId(ctx.tableId))!!
+        assertThat(savedTable.pendingJoinRequests()).isEmpty()
+        assertThat(savedTable.seatAt(5)).isNull()
+        assertThat(balanceOf(spectatorId)).isEqualTo(0L)
+    }
+
+    @Test
+    fun `핸드 정산 뒤 잔액이 충분한 참가 요청은 좌석에 앉고 바이인만큼 지갑이 차감된다`() {
+        val ctx = seatedWithHandInProgress()
+        val (requesterId, requesterToken) = signUpAndLogin()
+        fundWallet(requesterId, 15_000)
+        sitDown(requesterToken, ctx.tableId, 5, 10_000)
+            .andExpect(status().isAccepted)
+
+        authPost("/api/holdem/tables/${ctx.tableId}/hands/actions", ctx.accessToken, """{"action":"FOLD"}""")
+            .andExpect(status().isNoContent)
+
+        authGet("/api/holdem/me/seat", ctx.accessToken)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.handInProgress").value(false))
+
+        val savedTable = holdemTableRepository.findById(TableId(ctx.tableId))!!
+        assertThat(savedTable.seatAt(5)?.userId).isEqualTo(requesterId)
+        assertThat(balanceOf(requesterId)).isEqualTo(5_000L)
     }
 
     // ---------- 그 외 오류 ----------

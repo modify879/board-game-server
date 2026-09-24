@@ -19,6 +19,7 @@ data class TablePublicView(
     val buttonSeatNo: Int?,
     val seats: List<SeatPublicView>,
     val result: HandResultPublicView?,
+    val pendingSeatNos: List<Int>,
 )
 
 data class SeatPublicView(

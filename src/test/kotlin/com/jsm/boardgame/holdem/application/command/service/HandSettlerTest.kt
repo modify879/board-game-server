@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Card
@@ -12,10 +13,17 @@ import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
+import java.time.Clock
+import java.time.Duration
+import java.time.Instant
+import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 private class HandSettlerFakeTableRepository : HoldemTableRepository {
     private val store = mutableMapOf<Long, HoldemTable>()
@@ -24,6 +32,8 @@ private class HandSettlerFakeTableRepository : HoldemTableRepository {
     override fun findById(id: TableId): HoldemTable? = store[id.value]
 
     override fun findByUserId(userId: Long): HoldemTable? = store.values.find { it.seatOf(userId) != null }
+
+    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
 
     override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
@@ -37,10 +47,15 @@ private class HandSettlerFakeTableRepository : HoldemTableRepository {
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
             version = table.version,
+            nextHandAt = table.nextHandAt,
         )
         store[id.value] = saved
         return saved
     }
+
+    override fun findAllPendingNextHandTableIds(): List<TableId> = store.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
+
+    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
 }
 
 private class HandSettlerFakeHandStore : HandStore {
@@ -66,15 +81,20 @@ private val bustingHandOrder: List<Card> = listOf(
 private val bustingShuffler = Shuffler { full -> bustingHandOrder + full.filterNot { it in bustingHandOrder } }
 private val identityShuffler = Shuffler { it }
 
+private class HandSettlerFakeEventPublisher : ApplicationEventPublisher {
+    val events = mutableListOf<Any>()
+    override fun publishEvent(event: Any) { events += event }
+}
+
 class HandSettlerTest {
 
     private val tables = HandSettlerFakeTableRepository()
     private val handStore = HandSettlerFakeHandStore()
-    private val eventPublisher = ApplicationEventPublisher { }
-
-    // HandSettler 생성자에 WalletTransfer 가 없다 — 자동 기립이 지갑 이체를 부를 방법 자체가 없다
-    // (StandUpService 가 스택 0일 때 이체를 건너뛰는 것과 같은 이유).
-    private val settler = HandSettler(tables, handStore, eventPublisher)
+    private val eventPublisher = HandSettlerFakeEventPublisher()
+    private val fixedInstant: Instant = Instant.parse("2026-01-01T00:00:00Z")
+    private val clock: Clock = Clock.fixed(fixedInstant, ZoneOffset.UTC)
+    private val nextHandDelay: Duration = Duration.ofSeconds(5)
+    private val settler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
 
     private fun seatedTable(vararg stacks: Pair<Int, Long>): HoldemTable {
         val seats = stacks.associate { (seatNo, stack) ->
@@ -133,5 +153,86 @@ class HandSettlerTest {
         assertNotNull(seat1)
         assertNotNull(seat2)
         assertEquals(Chips.of(20_000), seat1.stack + seat2.stack)
+    }
+
+    @Test
+    fun `핸드 도중 기립한 폴드 좌석은 정산에서 건너뛰고 칩은 보존된다`() {
+        // seat2 는 이미 ExpireTurnService 가 1분 무응답 폴드로 기립시켜 테이블에 없다고 가정한다.
+        val table = seatedTable(1 to 10_000L, 3 to 10_000L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, Chips.of(100), Chips.of(200), identityShuffler)
+        hand.act(1, BettingAction.Call)
+        hand.act(2, BettingAction.Fold)
+        hand.act(3, BettingAction.Fold)
+        handStore.save(tableId, hand)
+        assertTrue(hand.isFinished)
+
+        settler.settle(tableId, table, hand)
+
+        assertNull(handStore.find(tableId))
+        val savedTable = tables.findById(tableId)!!
+        assertNull(savedTable.seatAt(2))
+        val seat1 = savedTable.seatAt(1)!!
+        val seat3 = savedTable.seatAt(3)!!
+        // seat2 몫(hand.stackOf(2))은 정산 이전에 이미 지갑으로 나갔다고 가정한다 — 셋을 합치면 시작 총액과 같다.
+        assertEquals(Chips.of(30_000), seat1.stack + seat3.stack + hand.stackOf(2))
+    }
+
+    @Test
+    fun `점유되지 않았는데 폴드도 아닌 좌석이 섞이면 불변식 위반으로 터진다`() {
+        val table = seatedTable(1 to 10_000L) // seat2 는 애초에 앉지 않았다 - 정상 상황이 아니다.
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
+        hand.act(1, BettingAction.Fold) // 좌석2 가 이겨 핸드는 끝나지만, 좌석2 는 원래 앉아있지도 않았다.
+
+        assertFailsWith<IllegalStateException> {
+            settler.settle(tableId, table, hand)
+        }
+    }
+
+    @Test
+    fun `정산하면 다음 핸드 시작 시각이 5초 뒤로 예약된다`() {
+        val table = seatedTable(1 to 10_000L, 2 to 10_000L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
+        handStore.save(tableId, hand)
+        hand.act(1, BettingAction.Fold)
+
+        settler.settle(tableId, table, hand)
+
+        val savedTable = tables.findById(tableId)!!
+        assertEquals(fixedInstant.plus(Duration.ofSeconds(5)), savedTable.nextHandAt)
+    }
+
+    @Test
+    fun `정산 뒤 대기 중인 참가 요청이 있으면 JoinRequestsDue 이벤트를 발행한다`() {
+        val table = seatedTable(1 to 10_000L, 2 to 10_000L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
+        handStore.save(tableId, hand)
+        hand.act(1, BettingAction.Fold)
+        table.requestJoin(userId = 9001L, seatNo = 5, buyIn = Chips.of(8_000), postBlindImmediately = false, requestedAt = fixedInstant)
+
+        settler.settle(tableId, table, hand)
+
+        assertTrue(eventPublisher.events.any { it is JoinRequestsDue && it.tableId == tableId })
+    }
+
+    @Test
+    fun `정산 뒤 대기 중인 참가 요청이 없으면 JoinRequestsDue 이벤트를 발행하지 않는다`() {
+        val table = seatedTable(1 to 10_000L, 2 to 10_000L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
+        handStore.save(tableId, hand)
+        hand.act(1, BettingAction.Fold)
+
+        settler.settle(tableId, table, hand)
+
+        assertTrue(eventPublisher.events.none { it is JoinRequestsDue })
     }
 }

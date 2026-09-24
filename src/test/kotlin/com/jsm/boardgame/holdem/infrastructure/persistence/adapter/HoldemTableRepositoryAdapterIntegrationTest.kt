@@ -4,7 +4,6 @@ import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.ConcurrentTableUpdateException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
-import com.jsm.boardgame.holdem.domain.exception.SeatTakenException
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.Seat
@@ -19,6 +18,8 @@ import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -166,5 +167,96 @@ class HoldemTableRepositoryAdapterIntegrationTest {
 
         val e = assertFailsWith<ConcurrentTableUpdateException> { tables.save(staleSnapshot) }
         assertEquals(HoldemErrorCode.CONCURRENT_TABLE_UPDATE, e.errorCode)
+    }
+
+    @Test
+    fun `nextHandAt 저장 후 복원되고, clearNextHand 후 저장하면 null 로 복원된다`() {
+        val userId = uniqueUserId()
+        val table = HoldemTable.create("t9")
+        table.sitDown(1, userId, buyIn)
+        val saved = tables.save(table)
+
+        val scheduledAt = Instant.now().truncatedTo(ChronoUnit.MICROS)
+        saved.scheduleNextHand(scheduledAt)
+        tables.save(saved)
+
+        val found = tables.findById(saved.id!!)
+        assertEquals(scheduledAt, found?.nextHandAt)
+
+        found!!.clearNextHand()
+        tables.save(found)
+
+        val clearedFound = tables.findById(saved.id!!)
+        assertNull(clearedFound?.nextHandAt)
+    }
+
+    @Test
+    fun `참가 요청 저장 후 복원 - 다시 조회해도 살아남는다`() {
+        val userId = uniqueUserId()
+        val requesterId = uniqueUserId()
+        val table = HoldemTable.create("t10")
+        table.sitDown(1, userId, buyIn)
+        val saved = tables.save(table)
+
+        saved.requestJoin(userId = requesterId, seatNo = 2, buyIn = buyIn, postBlindImmediately = true, requestedAt = Instant.now().truncatedTo(ChronoUnit.MICROS))
+        tables.save(saved)
+
+        val found = tables.findById(saved.id!!)!!
+        val request = found.pendingJoinRequests().single()
+        assertEquals(requesterId, request.userId)
+        assertEquals(2, request.seatNo)
+        assertEquals(buyIn, request.buyIn)
+        assertEquals(true, request.postBlindImmediately)
+        assertEquals(saved.id, tables.findByPendingJoinUserId(requesterId)?.id)
+    }
+
+    // uk_holdem_join_requests_table_seat 위반을 어댑터의 save() 하나로 재현하는 시나리오는 없다 —
+    // save() 가 upsert 직전에 항상 최신 행을 다시 읽어(existingJoinRequests) 기존 id 를 재사용하므로,
+    // 순차 호출로는 같은 (table_id, seat_no) 재요청이 항상 UPDATE 가 된다. 진짜 DB 레이스(두 트랜잭션이
+    // 그 SELECT 와 INSERT 사이에 끼어드는 경우)에서만 이 제약이 실제로 걸린다 — 좌석 쪽의 동일 제약
+    // (uk_holdem_seats_table_seat) 도 이 저장소에 어댑터 레벨 테스트가 없다(같은 이유). SEAT_TAKEN 번역
+    // 자체는 uk_holdem_seats_table_seat 케이스로 이미 구조적으로 같은 translateSeat 코드가 검증되어 있고,
+    // requestJoin 의 도메인 레벨 사전 체크(같은 좌석 재요청 거부)는 HoldemTableTest 에 있다.
+
+    @Test
+    fun `uk_holdem_join_requests_user 위반은 AlreadySeatedException 으로 번역된다`() {
+        val userId = uniqueUserId()
+        val requesterX = uniqueUserId()
+        val table1 = HoldemTable.create("t12")
+        table1.sitDown(1, userId, buyIn)
+        val saved1 = tables.save(table1)
+        saved1.requestJoin(userId = requesterX, seatNo = 2, buyIn = buyIn, postBlindImmediately = false, requestedAt = Instant.now())
+        tables.save(saved1)
+
+        // 서로 다른 테이블 — 참가 요청자 unique 제약(사람당 전역 하나) 위반만 노린다.
+        val table2 = tables.save(HoldemTable.create("t13"))
+        table2.sitDown(1, uniqueUserId(), buyIn)
+        val e = assertFailsWith<AlreadySeatedException> {
+            val reloadedTable2 = tables.findById(table2.id!!)!!
+            reloadedTable2.requestJoin(userId = requesterX, seatNo = 2, buyIn = buyIn, postBlindImmediately = false, requestedAt = Instant.now())
+            tables.save(reloadedTable2)
+        }
+        assertEquals(HoldemErrorCode.ALREADY_SEATED, e.errorCode)
+    }
+
+    @Test
+    fun `대기 중인 참가 요청이 있는 테이블만 findAllTableIdsWithPendingJoinRequests 에 나타난다`() {
+        val seatedUserPending = uniqueUserId()
+        val requesterId = uniqueUserId()
+        val tablePending = HoldemTable.create("t14")
+        tablePending.sitDown(1, seatedUserPending, buyIn)
+        val savedPending = tables.save(tablePending)
+        savedPending.requestJoin(userId = requesterId, seatNo = 2, buyIn = buyIn, postBlindImmediately = false, requestedAt = Instant.now().truncatedTo(ChronoUnit.MICROS))
+        tables.save(savedPending)
+
+        val seatedUserNoPending = uniqueUserId()
+        val tableNoPending = HoldemTable.create("t15")
+        tableNoPending.sitDown(1, seatedUserNoPending, buyIn)
+        tables.save(tableNoPending)
+
+        val tableIds = tables.findAllTableIdsWithPendingJoinRequests()
+
+        assertTrue(tableIds.contains(savedPending.id))
+        assertTrue(!tableIds.contains(tableNoPending.id))
     }
 }

@@ -1,11 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
-import com.jsm.boardgame.holdem.application.command.usecase.StartHandCommand
-import com.jsm.boardgame.holdem.application.exception.HandInProgressException
 import com.jsm.boardgame.holdem.application.port.HandStore
-import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
-import com.jsm.boardgame.holdem.domain.exception.IllegalHandStateException
-import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
@@ -14,15 +9,19 @@ import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
+import java.time.Clock
+import java.time.Duration
+import java.time.Instant
+import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlin.test.assertFalse
 
-private class StartHandFakeTableRepository : HoldemTableRepository {
+private class HandStarterFakeTableRepository : HoldemTableRepository {
     private val store = mutableMapOf<Long, HoldemTable>()
     private var nextId = 1L
 
@@ -31,7 +30,13 @@ private class StartHandFakeTableRepository : HoldemTableRepository {
     override fun findByUserId(userId: Long): HoldemTable? =
         store.values.firstOrNull { it.seatOf(userId) != null }?.let { copyOf(it) }
 
+    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
+
     override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
+
+    override fun findAllPendingNextHandTableIds(): List<TableId> =
+        store.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
+    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: TableId(nextId++)
@@ -51,10 +56,11 @@ private class StartHandFakeTableRepository : HoldemTableRepository {
             version = table.version,
             smallBlindSeatNo = table.smallBlindSeatNo,
             bigBlindSeatNo = table.bigBlindSeatNo,
+            nextHandAt = table.nextHandAt,
         )
 }
 
-private class StartHandFakeHandStore : HandStore {
+private class HandStarterFakeHandStore : HandStore {
     private val store = mutableMapOf<Long, Hand>()
 
     override fun find(tableId: TableId): Hand? = store[tableId.value]
@@ -63,18 +69,20 @@ private class StartHandFakeHandStore : HandStore {
     override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
 }
 
-class StartHandServiceTest {
+class HandStarterTest {
 
-    private val tables = StartHandFakeTableRepository()
-    private val handStore = StartHandFakeHandStore()
+    private val tables = HandStarterFakeTableRepository()
+    private val handStore = HandStarterFakeHandStore()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
-    private val handSettler = HandSettler(tables, handStore, eventPublisher)
-    private val service = StartHandService(tables, handStore, identityShuffler, handSettler, eventPublisher)
+    private val clock: Clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
+    private val nextHandDelay: Duration = Duration.ofSeconds(5)
+    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
+    private val handStarter = HandStarter(tables, handStore, identityShuffler, handSettler, eventPublisher, clock, nextHandDelay)
 
-    /** 대부분의 테스트에서 좌석 1이 시작 시점에 앉아 있으므로 기본 호출자로 쓴다. */
-    private fun start(tableId: TableId, userId: Long = 1L) {
-        service.start(StartHandCommand(tableId.value, userId))
+    private fun start(tableId: TableId) {
+        val table = tables.findById(tableId)!!
+        handStarter.start(tableId, table)
     }
 
     private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): TableId {
@@ -110,41 +118,15 @@ class StartHandServiceTest {
     }
 
     @Test
-    fun `이미 진행 중인 핸드가 있으면 거부한다`() {
-        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        val table = tables.findById(tableId)!!
-        table.moveButtonToNextOccupiedSeat()
-        val hand = Hand.start(
-            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
-            buttonSeatNo = table.buttonSeatNo!!,
-            smallBlindSeatNo = table.buttonSeatNo!!,
-            bigBlindSeatNo = 2,
-            table.smallBlind,
-            table.bigBlind,
-            identityShuffler,
-        )
-        handStore.save(tableId, hand)
-
-        val e = assertFailsWith<HandInProgressException> { start(tableId) }
-        assertEquals(HoldemErrorCode.HAND_IN_PROGRESS, e.errorCode)
-    }
-
-    @Test
-    fun `앉지 않은 사용자가 핸드를 시작하면 NOT_SEATED 로 거부되고 핸드가 생기지 않는다`() {
-        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-
-        val e = assertFailsWith<NotSeatedException> { start(tableId, userId = 999L) }
-
-        assertEquals(HoldemErrorCode.NOT_SEATED, e.errorCode)
-        assertNull(handStore.find(tableId))
-    }
-
-    @Test
-    fun `양수 스택 좌석이 2명 미만이면 거부한다`() {
+    fun `참가 후보가 2명 미만이면 시작하지 않고 false 를 반환한다`() {
         val tableId = tableWithSeats(1 to 10_000L)
+        val table = tables.findById(tableId)!!
 
-        val e = assertFailsWith<IllegalHandStateException> { start(tableId) }
-        assertEquals(HoldemErrorCode.NOT_ENOUGH_PLAYERS, e.errorCode)
+        val started = handStarter.start(tableId, table)
+
+        assertFalse(started)
+        assertNull(handStore.find(tableId))
+        assertEquals(1, tables.findById(tableId)!!.occupiedSeats().size)
     }
 
     @Test
@@ -334,7 +316,7 @@ class StartHandServiceTest {
     @Test
     fun `비었다가 다시 찬 테이블은 대기 좌석만 있어도 예외 없이 핸드가 시작되고 둘 다 참가한다`() {
         val tableId = tableWithSeats(5 to 10_000L, 6 to 10_000L, 7 to 10_000L)
-        start(tableId, userId = 5L) // bigBlindSeatNo 를 채워둔다(첫 핸드는 전원 참가 완화가 적용된다)
+        start(tableId) // bigBlindSeatNo 를 채워둔다(첫 핸드는 전원 참가 완화가 적용된다)
         handStore.remove(tableId)
 
         var table = tables.findById(tableId)!!
@@ -414,12 +396,12 @@ class StartHandServiceTest {
     @Test
     fun `헤즈업 뒤 대기 중인 세 번째 좌석 때문에 버튼이 BB 와 겹치지 않는다`() {
         val tableId = tableWithSeats(1 to 10_000L, 3 to 10_000L)
-        start(tableId, userId = 1L) // 1핸드: 헤즈업 1·3
+        start(tableId) // 1핸드: 헤즈업 1·3
         handStore.remove(tableId)
 
         sitDownChoosing(tableId, seatNo = 2, buyIn = 10_000L, postBlindImmediately = false)
 
-        start(tableId, userId = 1L) // 2핸드: 참가자={1,3}(2는 대기)
+        start(tableId) // 2핸드: 참가자={1,3}(2는 대기)
 
         var hand = handStore.find(tableId)!!
         assertEquals(3, hand.buttonSeatNo)
@@ -428,7 +410,7 @@ class StartHandServiceTest {
         assertFailsWith<NoSuchElementException> { hand.stackOf(2) }
         handStore.remove(tableId)
 
-        start(tableId, userId = 1L) // 3핸드: BB 가 2에 도달 -> 딜인, 3인 참가
+        start(tableId) // 3핸드: BB 가 2에 도달 -> 딜인, 3인 참가
 
         val savedTable = tables.findById(tableId)!!
         assertEquals(3, savedTable.buttonSeatNo)
@@ -441,19 +423,19 @@ class StartHandServiceTest {
     @Test
     fun `헤즈업 뒤 즉시 포스팅을 고른 좌석이 버튼 자리에 걸리면 이번 핸드는 대기한다`() {
         val tableId = tableWithSeats(1 to 10_000L, 3 to 10_000L)
-        start(tableId, userId = 1L) // 1핸드: 헤즈업 1·3
+        start(tableId) // 1핸드: 헤즈업 1·3
         handStore.remove(tableId)
 
         sitDownChoosing(tableId, seatNo = 2, buyIn = 10_000L, postBlindImmediately = true)
 
-        start(tableId, userId = 1L) // 2핸드: 2는 명목 버튼 자리 -> 딜인되지 않는다
+        start(tableId) // 2핸드: 2는 명목 버튼 자리 -> 딜인되지 않는다
 
         var hand = handStore.find(tableId)!!
         assertFailsWith<NoSuchElementException> { hand.stackOf(2) }
         assertTrue(tables.findById(tableId)!!.seatAt(2)!!.owesImmediatePost)
         handStore.remove(tableId)
 
-        start(tableId, userId = 1L) // 3핸드: 2는 BB -> 딜인, 추가 포스팅 없이 BB 만 낸다
+        start(tableId) // 3핸드: 2는 BB -> 딜인, 추가 포스팅 없이 BB 만 낸다
 
         hand = handStore.find(tableId)!!
         assertEquals(2, tables.findById(tableId)!!.bigBlindSeatNo)

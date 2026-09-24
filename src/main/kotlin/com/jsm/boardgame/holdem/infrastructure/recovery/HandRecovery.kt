@@ -2,6 +2,8 @@ package com.jsm.boardgame.holdem.infrastructure.recovery
 
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
+import com.jsm.boardgame.holdem.application.command.usecase.ProcessJoinRequestsCommand
+import com.jsm.boardgame.holdem.application.command.usecase.ProcessJoinRequestsUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandUseCase
 import com.jsm.boardgame.holdem.application.port.HandStore
@@ -9,6 +11,7 @@ import com.jsm.boardgame.holdem.domain.exception.ConcurrentTableUpdateException
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.infrastructure.timer.ConnectionTimer
+import com.jsm.boardgame.holdem.infrastructure.timer.NextHandTimer
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -52,6 +55,11 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * **단일 인스턴스 배포를 전제한다.** 인스턴스가 여럿이면 모두가 같은 행을 복구하려 들어 취소·재개
  * 유스케이스가 중복 호출된다. 다중 인스턴스로 가려면 리더 선출이나 행 잠금이 필요하다.
+ *
+ * `nextHandAt` 이 채워진 테이블 중 진행 중 핸드가 없는 것만 재무장한다 — 핸드가 있으면 그 핸드가
+ * 끝날 때 `HandSettler` 가 다시 스케줄하거나, 이미 진행 중인 복구 흐름이 처리한다.
+ *
+ * 같은 이유로, 대기 중인 참가 요청이 처리되지 못한 테이블(이벤트로 처리될 적에 프로세스가 죽은 경우)도 부팅 시 같은 방식으로 훑는다.
  */
 @Component
 class HandRecovery(
@@ -62,6 +70,8 @@ class HandRecovery(
     private val resumeHandUseCase: ResumeHandUseCase,
     private val cancelHandUseCase: CancelHandUseCase,
     private val connectionTimer: ConnectionTimer,
+    private val nextHandTimer: NextHandTimer,
+    private val processJoinRequestsUseCase: ProcessJoinRequestsUseCase,
 ) {
     private class PendingRecovery(
         val allUserIds: Set<Long>,
@@ -80,10 +90,33 @@ class HandRecovery(
     @Order(0)
     fun onApplicationReady() {
         val tableIds = handStore.findAllInProgress()
-        if (tableIds.isEmpty()) return
+        if (tableIds.isNotEmpty()) {
+            log.info("복구 대상 진행 중 핸드 {}건을 확인했습니다: tableIds={}", tableIds.size, tableIds.map { it.value })
+            tableIds.forEach { beginRecovery(it) }
+        }
 
-        log.info("복구 대상 진행 중 핸드 {}건을 확인했습니다: tableIds={}", tableIds.size, tableIds.map { it.value })
-        tableIds.forEach { beginRecovery(it) }
+        rearmPendingNextHandTimers()
+        processPendingJoinRequests()
+    }
+
+    private fun processPendingJoinRequests() {
+        val tableIds = tables.findAllTableIdsWithPendingJoinRequests()
+        for (tableId in tableIds) {
+            if (handStore.find(tableId) != null) continue
+            processJoinRequestsUseCase.process(ProcessJoinRequestsCommand(tableId.value))
+        }
+    }
+
+    private fun rearmPendingNextHandTimers() {
+        val pendingTableIds = tables.findAllPendingNextHandTableIds()
+        for (tableId in pendingTableIds) {
+            if (handStore.find(tableId) != null) continue
+            val table = tables.findById(tableId) ?: continue
+            val nextHandAt = table.nextHandAt ?: continue
+            val fireAt = maxOf(Instant.now(clock), nextHandAt)
+            nextHandTimer.scheduleAt(tableId, fireAt)
+            log.info("테이블 {} 자동 시작 예약을 재무장했습니다: at={}", tableId.value, fireAt)
+        }
     }
 
     private fun beginRecovery(tableId: TableId) {

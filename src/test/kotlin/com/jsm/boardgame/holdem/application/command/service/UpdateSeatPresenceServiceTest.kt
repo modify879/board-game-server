@@ -17,7 +17,14 @@ private class UpdateSeatPresenceFakeHoldemTableRepository : HoldemTableRepositor
 
     override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
+    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
+
     override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
+
+    override fun findAllPendingNextHandTableIds(): List<TableId> =
+        stored.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
+
+    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: run { sequence += 1; TableId(sequence) }
@@ -29,6 +36,7 @@ private class UpdateSeatPresenceFakeHoldemTableRepository : HoldemTableRepositor
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
             version = table.version,
+            nextHandAt = table.nextHandAt,
         )
         stored[id.value] = saved
         return saved

@@ -3,14 +3,17 @@ package com.jsm.boardgame.holdem.domain.model
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.InvalidTableNameException
+import com.jsm.boardgame.holdem.domain.exception.JoinRequestNotFoundException
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.exception.SeatNoOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.SeatTakenException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
+import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class HoldemTableTest {
 
@@ -379,5 +382,71 @@ class HoldemTableTest {
         assertEquals(2, actual.buttonSeatNo) // 2는 참가자가 아니다 — dead button
         assertEquals(3, actual.smallBlindSeatNo)
         assertEquals(1, actual.bigBlindSeatNo)
+    }
+
+    @Test
+    fun `requestJoin 은 이미 점유된 좌석을 SEAT_TAKEN 으로 거부한다`() {
+        val table = newTable()
+        table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(10_000))
+
+        val e = assertFailsWith<SeatTakenException> {
+            table.requestJoin(userId = 2L, seatNo = 1, buyIn = Chips.of(10_000), postBlindImmediately = false, requestedAt = Instant.now())
+        }
+        assertEquals(HoldemErrorCode.SEAT_TAKEN, e.errorCode)
+    }
+
+    @Test
+    fun `requestJoin 은 이미 참가 요청이 있는 좌석을 SEAT_TAKEN 으로 거부한다`() {
+        val table = newTable()
+        table.requestJoin(userId = 1L, seatNo = 1, buyIn = Chips.of(10_000), postBlindImmediately = false, requestedAt = Instant.now())
+
+        val e = assertFailsWith<SeatTakenException> {
+            table.requestJoin(userId = 2L, seatNo = 1, buyIn = Chips.of(10_000), postBlindImmediately = false, requestedAt = Instant.now())
+        }
+        assertEquals(HoldemErrorCode.SEAT_TAKEN, e.errorCode)
+    }
+
+    @Test
+    fun `requestJoin 은 범위 밖 바이인을 BUY_IN_OUT_OF_RANGE 로 거부한다`() {
+        val table = newTable()
+
+        val e = assertFailsWith<BuyInOutOfRangeException> {
+            table.requestJoin(userId = 1L, seatNo = 1, buyIn = Chips.of(100), postBlindImmediately = false, requestedAt = Instant.now())
+        }
+        assertEquals(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, e.errorCode)
+    }
+
+    @Test
+    fun `requestJoin 이 등록한 요청은 pendingJoinRequests·pendingSeatNos 로 조회된다`() {
+        val table = newTable()
+        val now = Instant.now()
+
+        table.requestJoin(userId = 1L, seatNo = 3, buyIn = Chips.of(10_000), postBlindImmediately = false, requestedAt = now)
+
+        assertEquals(setOf(3), table.pendingSeatNos())
+        assertEquals(1, table.pendingJoinRequests().size)
+        assertEquals(1L, table.pendingJoinRequests().single().userId)
+    }
+
+    @Test
+    fun `cancelJoinRequest 는 요청자 본인의 요청을 제거하고 두 번째 취소는 JOIN_REQUEST_NOT_FOUND 다`() {
+        val table = newTable()
+        table.requestJoin(userId = 1L, seatNo = 3, buyIn = Chips.of(10_000), postBlindImmediately = false, requestedAt = Instant.now())
+
+        table.cancelJoinRequest(1L)
+
+        assertTrue(table.pendingJoinRequests().isEmpty())
+        val e = assertFailsWith<JoinRequestNotFoundException> { table.cancelJoinRequest(1L) }
+        assertEquals(HoldemErrorCode.JOIN_REQUEST_NOT_FOUND, e.errorCode)
+    }
+
+    @Test
+    fun `candidateSeatNos 는 스택이 양수인 점유 좌석만 포함한다`() {
+        val table = newTable()
+        table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(10_000))
+        table.sitDown(seatNo = 2, userId = 2L, buyIn = Chips.of(10_000))
+        table.applyStacks(mapOf(2 to Chips.ZERO))
+
+        assertEquals(setOf(1), table.candidateSeatNos())
     }
 }

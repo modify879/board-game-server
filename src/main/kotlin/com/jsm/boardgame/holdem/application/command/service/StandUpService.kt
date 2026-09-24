@@ -12,7 +12,9 @@ import org.springframework.transaction.annotation.Transactional
 
 /**
  * 핸드가 진행 중이면 기립을 거부한다(going south 방지) — "퇴장 예약" 메커니즘은 만들지 않는다,
- * 연결 끊김 타이머는 4단계(홀덤 WS) 몫이다.
+ * 연결 끊김 타이머는 4단계(홀덤 WS) 몫이다. 기립은 핸드가 없을 때만 일어나므로, 그 뒤
+ * HandStarter.rescheduleOnExit 를 불러 카운트다운을 정리한다(후보 2명 미만이면 취소, 아니면
+ * 그대로 둔다 — 기립은 카운트다운을 리셋하지 않는다).
  */
 @Service
 @Transactional
@@ -20,6 +22,7 @@ class StandUpService(
     private val tables: HoldemTableRepository,
     private val handStore: HandStore,
     private val walletTransfer: WalletTransfer,
+    private val handStarter: HandStarter,
 ) : StandUpUseCase {
 
     override fun standUp(command: StandUpCommand) {
@@ -37,6 +40,6 @@ class StandUpService(
             // LedgerReferenceType.GAME_TABLE 엔 게임 이름이 없다. 표시 문구를 넣지 않는다(규칙 8, 문구는 클라이언트가 만든다).
             walletTransfer.fromGame(command.userId, returned.amount, tableId.value, memo = "holdem")
         }
-        tables.save(table)
+        handStarter.rescheduleOnExit(tableId, table)
     }
 }

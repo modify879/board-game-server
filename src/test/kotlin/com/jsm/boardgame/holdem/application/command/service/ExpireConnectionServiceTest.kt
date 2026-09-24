@@ -22,7 +22,14 @@ private class ExpireConnectionFakeHoldemTableRepository : HoldemTableRepository 
 
     override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
+    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
+
     override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
+
+    override fun findAllPendingNextHandTableIds(): List<TableId> =
+        stored.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
+
+    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: run { sequence += 1; TableId(sequence) }
@@ -34,6 +41,7 @@ private class ExpireConnectionFakeHoldemTableRepository : HoldemTableRepository 
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
             version = table.version,
+            nextHandAt = table.nextHandAt,
         )
         stored[id.value] = saved
         return saved
@@ -104,6 +112,16 @@ class ExpireConnectionServiceTest {
         val result = service.expire(ExpireConnectionCommand(userId = 1))
 
         assertEquals(saved.id, result)
+        assertEquals(0, standUpUseCase.calls.size)
+    }
+
+    @Test
+    fun `1분 무응답 폴드로 이미 기립한 사용자는 연결 만료 처리도 조용히 끝난다`() {
+        // ExpireTurnService 가 1분 무응답 폴드로 이미 기립시켰다고 가정 — 이 사용자는 이제 어느
+        // 테이블에도 앉아 있지 않다.
+        val result = service.expire(ExpireConnectionCommand(userId = 1))
+
+        assertNull(result)
         assertEquals(0, standUpUseCase.calls.size)
     }
 }

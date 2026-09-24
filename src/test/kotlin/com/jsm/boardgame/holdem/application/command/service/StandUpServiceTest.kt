@@ -14,10 +14,16 @@ import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
+import org.springframework.context.ApplicationEventPublisher
+import java.time.Clock
+import java.time.Duration
+import java.time.Instant
+import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 private class StandUpFakeHoldemTableRepository : HoldemTableRepository {
     val stored = mutableMapOf<Long, HoldemTable>()
@@ -27,7 +33,13 @@ private class StandUpFakeHoldemTableRepository : HoldemTableRepository {
 
     override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
+    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
+
     override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
+
+    override fun findAllPendingNextHandTableIds(): List<TableId> =
+        stored.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
+    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: run { sequence += 1; TableId(sequence) }
@@ -39,6 +51,7 @@ private class StandUpFakeHoldemTableRepository : HoldemTableRepository {
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
             version = table.version,
+            nextHandAt = table.nextHandAt,
         )
         stored[id.value] = saved
         return saved
@@ -73,7 +86,12 @@ class StandUpServiceTest {
     private val tables = StandUpFakeHoldemTableRepository()
     private val handStore = StandUpFakeHandStore()
     private val walletTransfer = StandUpFakeWalletTransfer()
-    private val service = StandUpService(tables, handStore, walletTransfer)
+    private val eventPublisher = ApplicationEventPublisher { }
+    private val clock: Clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
+    private val nextHandDelay: Duration = Duration.ofSeconds(5)
+    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
+    private val handStarter = HandStarter(tables, handStore, Shuffler { it }, handSettler, eventPublisher, clock, nextHandDelay)
+    private val service = StandUpService(tables, handStore, walletTransfer, handStarter)
 
     @Test
     fun `기립하면 좌석이 비고 스택이 지갑으로 돌아간다`() {
@@ -133,5 +151,33 @@ class StandUpServiceTest {
 
         assertEquals(0, walletTransfer.fromGameCalls.size)
         assertNull(tables.findById(TableId(1))!!.seatAt(1))
+    }
+
+    @Test
+    fun `기립으로 후보가 2명 미만이 되면 nextHandAt 이 취소된다`() {
+        val table = tables.save(HoldemTable.create("테스트 테이블"))
+        table.sitDown(1, 1, Chips.of(8_000))
+        table.sitDown(2, 2, Chips.of(8_000))
+        table.scheduleNextHand(Instant.now(clock).plusSeconds(5))
+        tables.save(table)
+
+        service.standUp(StandUpCommand(userId = 1))
+
+        assertNull(tables.findById(table.id!!)!!.nextHandAt)
+    }
+
+    @Test
+    fun `기립 후에도 후보가 2명 이상이면 기존 nextHandAt 이 그대로 유지된다`() {
+        val table = tables.save(HoldemTable.create("테스트 테이블"))
+        table.sitDown(1, 1, Chips.of(8_000))
+        table.sitDown(2, 2, Chips.of(8_000))
+        table.sitDown(3, 3, Chips.of(8_000))
+        val scheduledAt = Instant.now(clock).plusSeconds(5)
+        table.scheduleNextHand(scheduledAt)
+        tables.save(table)
+
+        service.standUp(StandUpCommand(userId = 1))
+
+        assertEquals(scheduledAt, tables.findById(table.id!!)!!.nextHandAt)
     }
 }
