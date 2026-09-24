@@ -299,4 +299,19 @@ class BettingRoundTest {
         assertFalse(round.isComplete)
         assertTrue(round.canRaise(4))
     }
+
+    @Test
+    fun `extraPostSeatNos 에 SB 좌석이 포함되면 예외를 던진다`() {
+        assertFailsWith<IllegalStateException> {
+            BettingRound.preflop(
+                seats = listOf(seat(1, 100_000), seat(2, 100_000), seat(3, 100_000)),
+                smallBlind = chips(100),
+                bigBlind = chips(200),
+                sbSeatNo = 1,
+                bbSeatNo = 2,
+                firstToActSeatNo = 3,
+                extraPostSeatNos = setOf(1),
+            )
+        }
+    }
 }

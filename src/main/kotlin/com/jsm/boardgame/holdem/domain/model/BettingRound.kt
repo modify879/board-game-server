@@ -240,6 +240,8 @@ class BettingRound private constructor(
             firstToActSeatNo: Int,
             extraPostSeatNos: Set<Int> = emptySet(),
         ): BettingRound {
+            check(sbSeatNo !in extraPostSeatNos) { "추가 포스팅 좌석에 SB 가 포함될 수 없다: sbSeatNo=$sbSeatNo, extraPostSeatNos=$extraPostSeatNos" }
+            check(bbSeatNo !in extraPostSeatNos) { "추가 포스팅 좌석에 BB 가 포함될 수 없다: bbSeatNo=$bbSeatNo, extraPostSeatNos=$extraPostSeatNos" }
             val sorted = seats.sortedBy { it.seatNo }
             if (sbSeatNo != null) {
                 val sbSeat = sorted.first { it.seatNo == sbSeatNo }

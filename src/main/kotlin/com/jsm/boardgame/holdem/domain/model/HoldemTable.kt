@@ -102,18 +102,38 @@ class HoldemTable private constructor(
     }
 
     /** 다음 핸드에서 실제로 쓸 포지션. [smallBlindSeatNo] 가 `null` 이면 아무도 스몰 블라인드를 내지 않는다(dead small blind). */
-    data class HandPositions(val buttonSeatNo: Int, val smallBlindSeatNo: Int?, val bigBlindSeatNo: Int)
+    data class HandPositions(val buttonSeatNo: Int, val smallBlindSeatNo: Int?, val bigBlindSeatNo: Int) {
+        /** 실제 참가자 기준으로 좁힌 이번 핸드의 포지션. 테이블에 저장되는 회전값(명목 포지션)은 바꾸지 않는다. */
+        fun forParticipants(participants: Set<Int>): HandPositions {
+            check(bigBlindSeatNo in participants) {
+                "빅 블라인드 좌석은 항상 참가자여야 한다: bigBlindSeatNo=$bigBlindSeatNo, participants=$participants"
+            }
+            if (participants.size == 2) {
+                // 헤즈업으로 좁혀지면 BB 가 아닌 나머지 한 좌석이 버튼·SB 를 겸한다(dead button 없음).
+                val other = participants.first { it != bigBlindSeatNo }
+                return HandPositions(other, other, bigBlindSeatNo)
+            }
+            return HandPositions(buttonSeatNo, smallBlindSeatNo?.takeIf { it in participants }, bigBlindSeatNo)
+        }
+    }
 
     /**
-     * 참가 좌석을 받아 다음 핸드의 버튼·SB·BB 를 정하고 테이블 상태를 갱신한다.
+     * 참가 좌석을 받아 다음 핸드의 버튼·SB·BB 를 정하고 테이블 상태를 갱신한다. 여기서 정하는 값은
+     * "명목" 포지션이다 — 대기 중인 좌석도 후보에 포함해 회전이 밀리지 않게 하고, 실제 참가자 기준
+     * 조정은 [HandPositions.forParticipants] 가 별도로 한다.
      *
-     * 불변식: 빅 블라인드 좌석은 매 핸드 좌석 번호 순으로 정확히 한 칸씩 전진한다. 나머지는 거기서
-     * 유도된다 — newSB = 직전 BB 좌석(이번 핸드에 참가하지 않으면 dead small blind),
-     * newButton = 직전 SB 좌석(비어 있어도 그대로 둔다 → dead button). 직전 BB 가 없으면(테이블의
-     * 첫 핸드) 참가 좌석 중 가장 작은 번호를 BB 로 둔다.
+     * 불변식: 빅 블라인드 좌석은 매 핸드 좌석 번호 순으로 정확히 한 칸씩 전진한다(Robert's Rules,
+     * dead button: "The big blind is posted by the player due for it"). 나머지는 거기서 유도된다 —
+     * newSB = 직전 BB 좌석(이번 핸드에 참가하지 않으면 dead small blind), newButton = 직전 SB 좌석
+     * (비어 있어도 그대로 둔다 → dead button). 단, 직전 핸드가 헤즈업이었으면(버튼==SB) 새 버튼은
+     * 새 SB(직전 BB) 바로 앞 참가 좌석으로 정한다 — 헤즈업 뒤에는 버튼이 곧 SB 였으므로 "직전 SB"를
+     * 그대로 쓰면 새 BB 와 겹칠 수 있어서다. 직전 BB 가 없으면(테이블의 첫 핸드) 참가 좌석 중 가장
+     * 작은 번호를 BB 로 둔다.
      *
-     * 헤즈업(참가 2명)은 이 불변식을 덮어쓴다 — 버튼이 SB 를 겸하고, 매 핸드 두 좌석이 번갈아 버튼을 맡는다.
-     * 헤즈업 분기는 이 메서드 안에만 둔다 — [Hand.start] 는 여기서 정해진 값을 그대로 받아 쓴다.
+     * 헤즈업(참가 2명)은 이 불변식을 덮어쓴다 — Robert's Rules, Button and Blind Use: "in heads-up play
+     * with two blinds, the small blind is on the button." 버튼이 SB 를 겸하고, BB 는 직전 BB 다음
+     * 참가 좌석으로 정해 TDA Rule 34(같은 좌석이 연속으로 BB 를 내지 않는다)를 지킨다. 헤즈업 분기는
+     * 이 메서드 안에만 둔다 — [Hand.start] 는 여기서 정해진 값을 그대로 받아 쓴다.
      */
     fun advanceBlinds(participatingSeatNos: Set<Int>): HandPositions {
         val sorted = participatingSeatNos.sorted()
@@ -136,28 +156,43 @@ class HoldemTable private constructor(
         )
     }
 
-    /** 헤즈업: 버튼이 SB 를 겸한다. 직전 버튼이 이번 핸드에도 참가하면 반대 좌석으로 넘어가고, 아니면 작은 좌석 번호부터 다시 시작한다. */
+    /**
+     * 헤즈업: 버튼이 SB 를 겸한다(Robert's Rules, Button and Blind Use). 직전 BB 가 없으면(첫 핸드)
+     * 작은 좌석 번호가 버튼/SB, 나머지가 BB 다. 그 외에는 BB 가 직전 BB 다음 참가 좌석으로 전진하고
+     * (TDA Rule 34 — 같은 좌석이 연속으로 BB 를 내지 않는다) 나머지 한 좌석이 버튼/SB 를 겸한다.
+     */
     private fun headsUpPositions(sorted: List<Int>): Triple<Int, Int, Int> {
-        val prevButton = buttonSeatNo
-        val newButton = if (prevButton != null && prevButton in sorted) {
-            sorted.first { it != prevButton }
+        val prevBigBlind = bigBlindSeatNo
+        val newBigBlind = if (prevBigBlind == null) {
+            sorted.first { it != sorted.min() }
         } else {
-            sorted.min()
+            sorted.firstOrNull { it > prevBigBlind } ?: sorted.first()
         }
-        val newBigBlind = sorted.first { it != newButton }
+        val newButton = sorted.first { it != newBigBlind }
         return Triple(newButton, newButton, newBigBlind)
     }
 
     /**
      * 3인 이상. 직전 BB 가 없으면(테이블의 첫 핸드) 참가 좌석 중 가장 작은 번호를 BB 로 두고,
      * 그 앞의 두 좌석(사이클 상 마지막, 마지막에서 두 번째)을 각각 SB·버튼으로 삼는다.
+     *
+     * 직전 핸드가 헤즈업이었으면(버튼==SB, [smallBlindSeatNo] 로 판별) 새 SB 는 직전 BB 고, 새 버튼은
+     * "직전 SB" 가 아니라 새 SB 바로 앞(좌석 번호 오름차순 기준 직전) 참가 좌석이다 — 헤즈업에서는
+     * 버튼이 곧 SB 였으므로 그 값을 그대로 쓰면 새로 정해진 BB 와 좌석이 겹칠 수 있다.
      */
     private fun fullRingPositions(sorted: List<Int>): Triple<Int, Int, Int> {
         val prevBigBlind = bigBlindSeatNo
             ?: return Triple(sorted[sorted.size - 2], sorted.last(), sorted.first())
 
-        val prevSmallBlind = smallBlindSeatNo ?: sorted.last()
         val newBigBlind = sorted.firstOrNull { it > prevBigBlind } ?: sorted.first()
+
+        if (buttonSeatNo != null && buttonSeatNo == smallBlindSeatNo) {
+            val newSmallBlind = prevBigBlind
+            val newButton = sorted.lastOrNull { it < newSmallBlind } ?: sorted.last()
+            return Triple(newButton, newSmallBlind, newBigBlind)
+        }
+
+        val prevSmallBlind = smallBlindSeatNo ?: sorted.last()
         return Triple(prevSmallBlind, prevBigBlind, newBigBlind)
     }
 

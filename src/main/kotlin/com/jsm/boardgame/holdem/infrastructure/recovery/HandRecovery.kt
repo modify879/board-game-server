@@ -5,6 +5,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandUseCase
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.domain.exception.ConcurrentTableUpdateException
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.infrastructure.timer.ConnectionTimer
@@ -142,7 +143,14 @@ class HandRecovery(
             resumeHandUseCase.resume(ResumeHandCommand(tableId.value))
         } else {
             log.info("테이블 {} 복구 유예 시간 안에 전원이 돌아오지 않아 핸드를 취소합니다.", tableId.value)
-            cancelHandUseCase.cancel(CancelHandCommand(tableId.value))
+            try {
+                cancelHandUseCase.cancel(CancelHandCommand(tableId.value))
+            } catch (e: ConcurrentTableUpdateException) {
+                // 이 호출은 TaskScheduler 콜백(onRecoveryTimeout) 에서 오고 기다리는 HTTP
+                // 호출자가 없다 - CancelHandService.cancel 이 부르는 handStore.remove 에서
+                // 버전 충돌이 나도 드러날 곳이 없으니 버려도 안전하다.
+                log.info("핸드 취소가 다른 트랜잭션과 경합해 무시했습니다: tableId={}", tableId.value)
+            }
         }
     }
 

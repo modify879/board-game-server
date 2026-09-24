@@ -3,7 +3,9 @@ package com.jsm.boardgame.holdem.infrastructure.timer
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
+import com.jsm.boardgame.holdem.domain.exception.ConcurrentTableUpdateException
 import com.jsm.boardgame.holdem.domain.model.TableId
+import org.slf4j.LoggerFactory
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
 import org.springframework.transaction.event.TransactionalEventListener
@@ -53,11 +55,19 @@ class TurnTimer(
 
     private fun onExpire(tableId: TableId, seatNo: Int, token: Long) {
         if (tokens[tableId]?.get() != token) return
-        expireTurnUseCase.expire(ExpireTurnCommand(tableId.value, seatNo))
+        try {
+            expireTurnUseCase.expire(ExpireTurnCommand(tableId.value, seatNo))
+        } catch (e: ConcurrentTableUpdateException) {
+            // 이 타이머가 경합에서 진 쪽이다 - 이긴 플레이어 액션이 이미 커밋되며
+            // HandBroadcastRequested 를 발행했고, 그게 이 타이머를 새로 예약했다.
+            // 그러니 낡은 만료를 버려도 잃는 것이 없다.
+            log.info("차례 만료가 플레이어 액션과 경합해 무시했습니다: tableId={}, seatNo={}", tableId.value, seatNo)
+        }
     }
 
     companion object {
         // 계획서: 테이블 설정값이 될 자리. 지금은 전역 상수.
         private val TURN_TIMEOUT: Duration = Duration.ofMinutes(3)
+        private val log = LoggerFactory.getLogger(TurnTimer::class.java)
     }
 }

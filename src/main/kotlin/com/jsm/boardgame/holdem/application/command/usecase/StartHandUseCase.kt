@@ -4,4 +4,4 @@ interface StartHandUseCase {
     fun start(command: StartHandCommand)
 }
 
-data class StartHandCommand(val tableId: Long)
+data class StartHandCommand(val tableId: Long, val userId: Long)

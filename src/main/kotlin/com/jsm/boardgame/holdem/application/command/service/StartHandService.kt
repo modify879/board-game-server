@@ -8,6 +8,7 @@ import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.exception.IllegalHandStateException
+import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
@@ -30,6 +31,8 @@ class StartHandService(
         val tableId = TableId(command.tableId)
         val table = tables.findById(tableId)
             ?: throw TableNotFoundException("테이블을 찾을 수 없습니다: tableId=${command.tableId}")
+        table.seatOf(command.userId)
+            ?: throw NotSeatedException("이 테이블에 앉아 있지 않은 사용자입니다: userId=${command.userId}")
 
         if (handStore.find(tableId) != null) {
             throw HandInProgressException("이미 진행 중인 핸드가 있습니다: tableId=${command.tableId}")
@@ -48,35 +51,52 @@ class StartHandService(
         val positions = table.advanceBlinds(candidateSeatNos)
         table.clearAwaitingBigBlind(positions.bigBlindSeatNo)
 
-        // 참가자 = 후보 − (아직 대기 중인데 이번 BB 가 아닌 좌석). 대기 중인 좌석이 SB·버튼 자리에
-        // 걸리면 그 자리는 비는 셈이라 dead small blind/dead button 이 그대로 적용된다.
         val awaitingSeatNos = table.occupiedSeats().filter { it.awaitingBigBlind }.map { it.seatNo }.toSet()
-        var participatingSeatNos = candidateSeatNos - awaitingSeatNos
 
-        // 대기 규칙은 판을 굶겨 죽이지 않는다: 후보가 2명 이상인데 대기 제외 후 2명 미만이면 판이
-        // 못 선다. 판이 못 서면 애초에 건너뛸 블라인드 회전 자체가 없으므로 대기시킬 이유가 없다 —
-        // 후보 전원의 대기 플래그를 풀고 전원을 참가시킨다. 테이블의 진짜 첫 핸드(전원 대기 기본값),
-        // 비었다가 다시 찬 테이블, 정규 참가자 파산까지 이 규칙 하나로 덮인다.
-        if (participatingSeatNos.size < 2) {
+        // 착석 시 "즉시 포스팅"을 고른 좌석. Robert's Rules of Poker, Button and Blind Use: 새 참가자는
+        // 포스팅을 자청해도 SB·버튼 자리에서는 딜인되지 않는다 — 버튼이 지나갈 때까지 대기한다.
+        val owingSeatNos = table.occupiedSeats()
+            .filter { it.seatNo in candidateSeatNos && it.owesImmediatePost }
+            .map { it.seatNo }
+            .toSet()
+        val blockedNewPlayers = owingSeatNos.filter { it == positions.buttonSeatNo || it == positions.smallBlindSeatNo }.toSet()
+
+        // 참가자 = 후보 − (아직 대기 중인데 이번 BB 가 아닌 좌석) − (SB·버튼 자리에 걸린 즉시 포스팅
+        // 신규 좌석). 대기 중인 좌석이 SB·버튼 자리에 걸리면 그 자리는 비는 셈이라 dead small
+        // blind/dead button 이 그대로 적용된다.
+        var participatingSeatNos = candidateSeatNos - awaitingSeatNos - blockedNewPlayers
+
+        // 대기·차단 규칙은 판을 굶겨 죽이지 않는다: 후보가 2명 이상인데 제외 후 2명 미만이면 판이
+        // 못 선다. 판이 못 서면 애초에 건너뛸 블라인드 회전 자체가 없으므로 대기·차단시킬 이유가
+        // 없다 — 후보 전원의 대기 플래그를 풀고 전원을 참가시키며, 이번 핸드만큼은 진입료도
+        // 면제한다(테이블이 사실상 다시 시작하는 셈이라 BB 대기 면제와 같은 이유다). 테이블의 진짜
+        // 첫 핸드(전원 대기 기본값), 비었다가 다시 찬 테이블, 정규 참가자 파산까지 이 규칙 하나로 덮인다.
+        val relief = participatingSeatNos.size < 2
+        if (relief) {
             candidateSeatNos.forEach { table.clearAwaitingBigBlind(it) }
             participatingSeatNos = candidateSeatNos
         }
 
-        val smallBlindSeatNo = positions.smallBlindSeatNo?.takeIf { it in participatingSeatNos }
+        val actual = positions.forParticipants(participatingSeatNos)
 
-        val owingSeatNos = table.occupiedSeats()
-            .filter { it.seatNo in participatingSeatNos && it.owesImmediatePost }
-            .map { it.seatNo }
-            .toSet()
-        val extraPostSeatNos = owingSeatNos - positions.bigBlindSeatNo
-        owingSeatNos.forEach { table.consumeImmediatePost(it) }
+        // 블라인드 포스팅 자체가 이번 핸드의 진입료다 — 빚진 좌석이 실제 SB/BB 로 좁혀지면 추가
+        // 포스팅을 따로 받지 않는다. 대기 좌석은 owing 이 될 수 없으므로(즉시 참가를 고른 좌석만
+        // owing), 빚진 좌석이 실제 SB 가 되는 경로는 헤즈업 좁히기(다른 좌석은 전부 대기)뿐이다 —
+        // 그때는 SB 포스팅을 진입료 대신으로 받아들이는 의도된 단순화다.
+        val extraPostSeatNos = if (relief) {
+            emptySet()
+        } else {
+            owingSeatNos.intersect(participatingSeatNos) - setOfNotNull(actual.smallBlindSeatNo, actual.bigBlindSeatNo)
+        }
+
+        owingSeatNos.filter { it in participatingSeatNos }.forEach { table.consumeImmediatePost(it) }
 
         val stacks = participatingSeatNos.associateWith { seatNo -> table.seatAt(seatNo)!!.stack }
         val hand = Hand.start(
             stacks = stacks,
-            buttonSeatNo = positions.buttonSeatNo,
-            smallBlindSeatNo = smallBlindSeatNo,
-            bigBlindSeatNo = positions.bigBlindSeatNo,
+            buttonSeatNo = actual.buttonSeatNo,
+            smallBlindSeatNo = actual.smallBlindSeatNo,
+            bigBlindSeatNo = actual.bigBlindSeatNo,
             smallBlind = table.smallBlind,
             bigBlind = table.bigBlind,
             shuffler = shuffler,

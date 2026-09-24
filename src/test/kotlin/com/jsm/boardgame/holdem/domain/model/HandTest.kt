@@ -248,4 +248,11 @@ class HandTest {
         // 스택 보존: 팟에 들어간 만큼만 스택 합이 줄어야 한다(칩이 생기거나 사라지지 않는다).
         assertEquals(chips(30_000), sumStacks(listOf(1, 2, 4), hand) + hand.potTotal())
     }
+
+    @Test
+    fun `3인 이상에서 버튼과 BB 가 같으면 예외를 던진다`() {
+        assertFailsWith<IllegalStateException> {
+            Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 1, chips(100), chips(200), identityShuffler)
+        }
+    }
 }

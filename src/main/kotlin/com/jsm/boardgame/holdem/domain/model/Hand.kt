@@ -217,6 +217,21 @@ class Hand private constructor(
             }
 
             val seatNos = stacks.keys.sorted()
+
+            // 불변식 가드 — 있을 수 없는 상태는 조용히 넘어가지 않고 바로 터뜨린다.
+            if (seatNos.size == 2) {
+                check(buttonSeatNo == smallBlindSeatNo) {
+                    "헤즈업은 버튼이 SB 를 겸해야 한다: buttonSeatNo=$buttonSeatNo, smallBlindSeatNo=$smallBlindSeatNo"
+                }
+                check(buttonSeatNo in seatNos) { "버튼 좌석은 참가자여야 한다: buttonSeatNo=$buttonSeatNo, seatNos=$seatNos" }
+                check(buttonSeatNo != bigBlindSeatNo) { "헤즈업에서 버튼이 BB 와 같을 수 없다: buttonSeatNo=$buttonSeatNo" }
+            } else {
+                check(buttonSeatNo != bigBlindSeatNo) { "버튼과 BB 는 같을 수 없다: buttonSeatNo=$buttonSeatNo, bigBlindSeatNo=$bigBlindSeatNo" }
+                check(smallBlindSeatNo == null || (smallBlindSeatNo != buttonSeatNo && smallBlindSeatNo != bigBlindSeatNo)) {
+                    "SB 는 버튼·BB 와 달라야 한다: smallBlindSeatNo=$smallBlindSeatNo, buttonSeatNo=$buttonSeatNo, bigBlindSeatNo=$bigBlindSeatNo"
+                }
+            }
+
             val deck = Deck.shuffled(shuffler)
 
             // 홀카드: 좌석 번호 오름차순으로 한 장씩 두 바퀴.

@@ -311,4 +311,73 @@ class HoldemTableTest {
         val third = table.advanceBlinds(setOf(1, 2))
         assertEquals(1, third.buttonSeatNo)
     }
+
+    @Test
+    fun `3인에서 헤즈업으로 줄어도 직전 BB 는 연속으로 BB 를 내지 않는다`() {
+        val table = newTable()
+        repeat(3) { table.advanceBlinds(setOf(1, 2, 3)) } // BB: 1 -> 2 -> 3
+
+        val positions = table.advanceBlinds(setOf(2, 3))
+
+        assertEquals(2, positions.bigBlindSeatNo)
+        assertEquals(3, positions.buttonSeatNo)
+        assertEquals(3, positions.smallBlindSeatNo)
+    }
+
+    @Test
+    fun `헤즈업 뒤 세 번째 좌석이 들어오면 버튼·SB·BB 가 서로 다른 좌석이다`() {
+        val table = newTable()
+        table.advanceBlinds(setOf(1, 3))
+
+        val positions = table.advanceBlinds(setOf(1, 2, 3))
+
+        assertEquals(2, positions.buttonSeatNo)
+        assertEquals(3, positions.smallBlindSeatNo)
+        assertEquals(1, positions.bigBlindSeatNo)
+    }
+
+    @Test
+    fun `헤즈업 뒤 직전 BB 다음 자리로 들어온 좌석은 바로 BB 가 된다`() {
+        val table = newTable()
+        table.advanceBlinds(setOf(1, 3))
+
+        val positions = table.advanceBlinds(setOf(1, 3, 4))
+
+        assertEquals(4, positions.bigBlindSeatNo)
+        assertEquals(3, positions.smallBlindSeatNo)
+        assertEquals(1, positions.buttonSeatNo)
+    }
+
+    @Test
+    fun `forParticipants 는 2명으로 좁혀지면 BB 가 아닌 좌석이 버튼과 SB 를 겸한다`() {
+        val positions = HoldemTable.HandPositions(buttonSeatNo = 2, smallBlindSeatNo = 3, bigBlindSeatNo = 1)
+
+        val actual = positions.forParticipants(setOf(1, 3))
+
+        assertEquals(3, actual.buttonSeatNo)
+        assertEquals(3, actual.smallBlindSeatNo)
+        assertEquals(1, actual.bigBlindSeatNo)
+    }
+
+    @Test
+    fun `forParticipants 는 3명 이상이면 명목 버튼을 유지하되 참가하지 않는 SB 는 null 로 좁힌다`() {
+        val positions = HoldemTable.HandPositions(buttonSeatNo = 2, smallBlindSeatNo = 3, bigBlindSeatNo = 1)
+
+        val actual = positions.forParticipants(setOf(1, 2, 4))
+
+        assertEquals(2, actual.buttonSeatNo)
+        assertEquals(null, actual.smallBlindSeatNo) // 3은 참가자가 아니다
+        assertEquals(1, actual.bigBlindSeatNo)
+    }
+
+    @Test
+    fun `forParticipants 는 참가하지 않는 버튼을 dead button 으로 그대로 둔다`() {
+        val positions = HoldemTable.HandPositions(buttonSeatNo = 2, smallBlindSeatNo = 3, bigBlindSeatNo = 1)
+
+        val actual = positions.forParticipants(setOf(1, 3, 4))
+
+        assertEquals(2, actual.buttonSeatNo) // 2는 참가자가 아니다 — dead button
+        assertEquals(3, actual.smallBlindSeatNo)
+        assertEquals(1, actual.bigBlindSeatNo)
+    }
 }
