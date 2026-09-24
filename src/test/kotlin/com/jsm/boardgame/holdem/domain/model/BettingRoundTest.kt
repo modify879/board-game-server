@@ -314,4 +314,159 @@ class BettingRoundTest {
             )
         }
     }
+
+    @Test
+    fun `프리플랍 UTG는 BB를 마주해 콜은 빅블라인드, 최소 레이즈는 2배다`() {
+        fun freshRound() = BettingRound.preflop(
+            seats = listOf(seat(1, 100_000), seat(2, 100_000), seat(3, 100_000)),
+            smallBlind = chips(100),
+            bigBlind = chips(200),
+            sbSeatNo = 1,
+            bbSeatNo = 2,
+            firstToActSeatNo = 3,
+        )
+
+        val round = freshRound()
+        val actions = round.availableActionsFor(3)!!
+
+        assertFalse(actions.canCheck)
+        assertEquals(chips(200), actions.callAmount)
+        assertEquals(chips(400), actions.minRaiseTo)
+        assertEquals(chips(100_000), actions.maxRaiseTo)
+
+        freshRound().act(3, BettingAction.RaiseTo(actions.minRaiseTo!!))
+        freshRound().act(3, BettingAction.RaiseTo(actions.maxRaiseTo!!))
+        val e = assertFailsWith<IllegalBettingActionException> {
+            freshRound().act(3, BettingAction.RaiseTo(actions.minRaiseTo!! - chips(100)))
+        }
+        assertEquals(HoldemErrorCode.RAISE_TOO_SMALL, e.errorCode)
+    }
+
+    @Test
+    fun `림프 이후 BB 옵션에서는 체크할 수 있고 레이즈도 할 수 있다`() {
+        fun freshRoundAtBbOption(): BettingRound {
+            val round = BettingRound.preflop(
+                seats = listOf(seat(1, 100_000), seat(2, 100_000), seat(3, 100_000)),
+                smallBlind = chips(100),
+                bigBlind = chips(200),
+                sbSeatNo = 1,
+                bbSeatNo = 2,
+                firstToActSeatNo = 3,
+            )
+            round.act(3, BettingAction.Call)
+            round.act(1, BettingAction.Call)
+            return round
+        }
+
+        val round = freshRoundAtBbOption()
+        val actions = round.availableActionsFor(2)!!
+
+        assertTrue(actions.canCheck)
+        assertNull(actions.callAmount)
+        assertEquals(chips(400), actions.minRaiseTo)
+        assertEquals(chips(100_000), actions.maxRaiseTo)
+
+        freshRoundAtBbOption().act(2, BettingAction.RaiseTo(actions.minRaiseTo!!))
+        freshRoundAtBbOption().act(2, BettingAction.RaiseTo(actions.maxRaiseTo!!))
+        val e = assertFailsWith<IllegalBettingActionException> {
+            freshRoundAtBbOption().act(2, BettingAction.RaiseTo(actions.minRaiseTo!! - chips(100)))
+        }
+        assertEquals(HoldemErrorCode.RAISE_TOO_SMALL, e.errorCode)
+    }
+
+    @Test
+    fun `스택보다 큰 벳을 마주하면 콜은 스택 전부이고 레이즈는 불가하다`() {
+        fun freshRound(): BettingRound {
+            val round = BettingRound.open(
+                seats = listOf(seat(1, 100_000), seat(2, 100_000), seat(3, 300), seat(4, 1_500)),
+                bigBlind = chips(200),
+                firstToActSeatNo = 1,
+            )
+            round.act(1, BettingAction.Check)
+            round.act(2, BettingAction.RaiseTo(chips(1_000)))
+            return round
+        }
+
+        val round = freshRound()
+        val actions = round.availableActionsFor(3)!!
+
+        assertFalse(actions.canCheck)
+        assertEquals(chips(300), actions.callAmount)
+        assertNull(actions.minRaiseTo)
+        assertNull(actions.maxRaiseTo)
+
+        // act() 와의 일치 확인: 콜하면 스택 전부를 내고 올인된다.
+        round.act(3, BettingAction.Call)
+        val seat3 = round.seats.first { it.seatNo == 3 }
+        assertEquals(chips(0), seat3.stack)
+        assertEquals(SeatStatus.ALL_IN, seat3.status)
+    }
+
+    @Test
+    fun `스택이 콜과 풀 레이즈 사이면 최소 레이즈와 최대 레이즈가 같은 올인이다`() {
+        fun freshRoundFacingBigBet(): BettingRound {
+            val round = BettingRound.open(
+                seats = listOf(seat(1, 100_000), seat(2, 100_000), seat(3, 300), seat(4, 1_500)),
+                bigBlind = chips(200),
+                firstToActSeatNo = 1,
+            )
+            round.act(1, BettingAction.Check)
+            round.act(2, BettingAction.RaiseTo(chips(1_000)))
+            round.act(3, BettingAction.Call) // 스택 전부, 올인
+            return round
+        }
+
+        val round = freshRoundFacingBigBet()
+        val actions = round.availableActionsFor(4)!!
+
+        assertFalse(actions.canCheck)
+        assertEquals(chips(1_000), actions.callAmount)
+        assertEquals(chips(1_500), actions.minRaiseTo)
+        assertEquals(chips(1_500), actions.maxRaiseTo)
+
+        freshRoundFacingBigBet().act(4, BettingAction.RaiseTo(actions.minRaiseTo!!))
+        freshRoundFacingBigBet().act(4, BettingAction.RaiseTo(actions.maxRaiseTo!!))
+    }
+
+    @Test
+    fun `이미 행동한 좌석은 짧은 올인이 나와도 다시 레이즈할 수 없지만 콜은 가능하다`() {
+        val round = BettingRound.open(
+            seats = listOf(seat(1, 100_000), seat(2, 100_000), seat(3, 100_000), seat(4, 300)),
+            bigBlind = chips(200),
+            firstToActSeatNo = 1,
+        )
+        round.act(1, BettingAction.Check)
+        round.act(2, BettingAction.RaiseTo(chips(200))) // 풀 레이즈
+        round.act(3, BettingAction.Call)
+        round.act(4, BettingAction.RaiseTo(chips(300))) // 짧은 올인, 재오픈 안 됨
+        round.act(1, BettingAction.Call) // 한 바퀴 돌아 다시 행동
+
+        val actions = round.availableActionsFor(2)!!
+
+        assertFalse(actions.canCheck)
+        assertEquals(chips(100), actions.callAmount)
+        assertNull(actions.minRaiseTo)
+        assertNull(actions.maxRaiseTo)
+
+        // act() 와의 일치 확인
+        assertFalse(round.canRaise(2))
+        round.act(2, BettingAction.Call)
+        assertEquals(chips(300), round.seats.first { it.seatNo == 2 }.committed)
+    }
+
+    @Test
+    fun `차례가 아닌 좌석과 종료된 라운드는 availableActionsFor 가 null 이다`() {
+        val round = BettingRound.open(
+            seats = listOf(seat(1, 100_000), seat(2, 100_000)),
+            bigBlind = chips(200),
+            firstToActSeatNo = 1,
+        )
+
+        assertNull(round.availableActionsFor(2))
+
+        round.act(1, BettingAction.Fold)
+        assertTrue(round.isComplete)
+        assertNull(round.availableActionsFor(1))
+        assertNull(round.availableActionsFor(2))
+    }
 }

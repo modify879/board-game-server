@@ -58,10 +58,18 @@ private fun handResultPublicViewOf(result: HandResult): HandResultPublicView {
     return HandResultPublicView(payouts)
 }
 
-/** [seatNo] 자신의 홀카드만 담는다. 다른 좌석의 카드는 이 함수의 인자로도 들어오지 않는다. */
+/** [seatNo] 자신의 홀카드와 지금 할 수 있는 행동만 담는다. 다른 좌석의 카드는 이 함수의 인자로도 들어오지 않는다. */
 fun privateViewOf(tableId: TableId, seatNo: Int, hand: Hand): SeatPrivateView =
     SeatPrivateView(
         tableId = tableId.value,
         seatNo = seatNo,
         holeCards = hand.holeCardsOf(seatNo).map { it.toString() },
+        availableActions = hand.availableActionsFor(seatNo)?.let { actions ->
+            AvailableActionsView(
+                canCheck = actions.canCheck,
+                callAmount = actions.callAmount?.amount,
+                minRaiseTo = actions.minRaiseTo?.amount,
+                maxRaiseTo = actions.maxRaiseTo?.amount,
+            )
+        },
     )

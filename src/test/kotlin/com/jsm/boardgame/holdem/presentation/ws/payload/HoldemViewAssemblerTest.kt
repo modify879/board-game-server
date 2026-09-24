@@ -210,4 +210,47 @@ class HoldemViewAssemblerTest {
             assertFalse(json.contains("\"$card\""), "카드 $card 가 공개 뷰 직렬화 결과에 노출됨: $json")
         }
     }
+
+    @Test
+    fun `차례인 좌석의 개인 뷰에는 availableActions 가 담기고 다른 좌석은 null 이다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+        table.moveButtonToNextOccupiedSeat()
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)),
+            table.buttonSeatNo!!,
+            smallBlindSeatNo = 2,
+            bigBlindSeatNo = 3,
+            table.smallBlind,
+            table.bigBlind,
+            identityShuffler,
+        )
+        val toAct = hand.toActSeatNo!!
+
+        val actingView = privateViewOf(TableId(1), toAct, hand)
+        val otherSeatNo = hand.seatNos.first { it != toAct }
+        val otherView = privateViewOf(TableId(1), otherSeatNo, hand)
+
+        assertTrue(actingView.availableActions != null)
+        assertNull(otherView.availableActions)
+    }
+
+    @Test
+    fun `핸드가 끝나면 개인 뷰의 availableActions 는 null 이다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        table.moveButtonToNextOccupiedSeat()
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
+            table.buttonSeatNo!!,
+            smallBlindSeatNo = 1,
+            bigBlindSeatNo = 2,
+            table.smallBlind,
+            table.bigBlind,
+            identityShuffler,
+        )
+        hand.act(hand.toActSeatNo!!, BettingAction.Fold)
+
+        val view = privateViewOf(TableId(1), 1, hand)
+
+        assertNull(view.availableActions)
+    }
 }
