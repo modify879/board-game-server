@@ -4,6 +4,7 @@ import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.SeatStatus
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.slf4j.LoggerFactory
@@ -11,11 +12,16 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
 
 /**
- * 핸드 종료 정산. StartHandService·PlayActionService 가 공유한다 — 로직을 복제하지 않는다.
- * 참가 좌석의 스택만 테이블에 반영하고 지갑은 건드리지 않는다. 칩은 테이블에 남고
- * 기립할 때만 지갑으로 돌아간다.
+ * 핸드 종료 정산. StartHandService·PlayActionService·ExpireTurnService 가 공유한다 — 로직을
+ * 복제하지 않는다. 참가 좌석의 스택만 테이블에 반영하고 지갑은 건드리지 않는다. 칩은 테이블에
+ * 남고 기립할 때만 지갑으로 돌아간다.
  *
  * 참가 좌석은 핸드가 소유한다 — 핸드 도중 새로 앉은 좌석은 다음 핸드부터 참가한다.
+ *
+ * hand.seatNos 중 이미 점유가 풀린 좌석은 ExpireTurnService 가 1분 무응답 폴드로 즉시 기립시킨
+ * 좌석뿐이다 — 그 좌석은 이 핸드가 끝날 때까지 스택이 더 바뀌지 않으므로 정산에서 건너뛴다.
+ * 폴드가 아닌데 점유가 풀려 있으면 불변식 위반이다(HoldemTable.applyStacks 의 점유 가드는
+ * 그대로 둔다 — 여기서는 넘길 대상 자체를 걸러낸다).
  *
  * 스택 반영 직후, 스택이 0이 된 참가 좌석은 자동으로 기립시킨다(0칩 자동 기립) — 9자리가 칩
  * 없는 사람에게 묶이지 않게 한다. 핸드가 이미 끝난 뒤라 going south(핸드 도중 칩을 빼는 것) 제약과
@@ -30,9 +36,16 @@ class HandSettler(
 ) {
     fun settle(tableId: TableId, table: HoldemTable, hand: Hand) {
         val stacks = hand.seatNos.associateWith { seatNo -> hand.stackOf(seatNo) }
-        table.applyStacks(stacks)
+        val toApply = stacks.filterKeys { seatNo ->
+            val occupied = table.seatAt(seatNo) != null
+            if (!occupied && hand.statusOf(seatNo) != SeatStatus.FOLDED) {
+                error("점유되지 않은 좌석은 폴드 상태여야 한다: seatNo=$seatNo, status=${hand.statusOf(seatNo)}")
+            }
+            occupied
+        }
+        table.applyStacks(toApply)
 
-        for ((seatNo, stack) in stacks) {
+        for ((seatNo, stack) in toApply) {
             if (!stack.isZero()) continue
             val userId = table.seatAt(seatNo)?.userId ?: continue
             table.standUp(userId)

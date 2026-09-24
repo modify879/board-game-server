@@ -106,4 +106,14 @@ class ExpireConnectionServiceTest {
         assertEquals(saved.id, result)
         assertEquals(0, standUpUseCase.calls.size)
     }
+
+    @Test
+    fun `1분 무응답 폴드로 이미 기립한 사용자는 연결 만료 처리도 조용히 끝난다`() {
+        // ExpireTurnService 가 1분 무응답 폴드로 이미 기립시켰다고 가정 — 이 사용자는 이제 어느
+        // 테이블에도 앉아 있지 않다.
+        val result = service.expire(ExpireConnectionCommand(userId = 1))
+
+        assertNull(result)
+        assertEquals(0, standUpUseCase.calls.size)
+    }
 }

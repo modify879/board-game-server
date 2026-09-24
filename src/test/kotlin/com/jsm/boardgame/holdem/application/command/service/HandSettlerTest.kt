@@ -14,8 +14,10 @@ import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 private class HandSettlerFakeTableRepository : HoldemTableRepository {
     private val store = mutableMapOf<Long, HoldemTable>()
@@ -133,5 +135,42 @@ class HandSettlerTest {
         assertNotNull(seat1)
         assertNotNull(seat2)
         assertEquals(Chips.of(20_000), seat1.stack + seat2.stack)
+    }
+
+    @Test
+    fun `핸드 도중 기립한 폴드 좌석은 정산에서 건너뛰고 칩은 보존된다`() {
+        // seat2 는 이미 ExpireTurnService 가 1분 무응답 폴드로 기립시켜 테이블에 없다고 가정한다.
+        val table = seatedTable(1 to 10_000L, 3 to 10_000L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, Chips.of(100), Chips.of(200), identityShuffler)
+        hand.act(1, BettingAction.Call)
+        hand.act(2, BettingAction.Fold)
+        hand.act(3, BettingAction.Fold)
+        handStore.save(tableId, hand)
+        assertTrue(hand.isFinished)
+
+        settler.settle(tableId, table, hand)
+
+        assertNull(handStore.find(tableId))
+        val savedTable = tables.findById(tableId)!!
+        assertNull(savedTable.seatAt(2))
+        val seat1 = savedTable.seatAt(1)!!
+        val seat3 = savedTable.seatAt(3)!!
+        // seat2 몫(hand.stackOf(2))은 정산 이전에 이미 지갑으로 나갔다고 가정한다 — 셋을 합치면 시작 총액과 같다.
+        assertEquals(Chips.of(30_000), seat1.stack + seat3.stack + hand.stackOf(2))
+    }
+
+    @Test
+    fun `점유되지 않았는데 폴드도 아닌 좌석이 섞이면 불변식 위반으로 터진다`() {
+        val table = seatedTable(1 to 10_000L) // seat2 는 애초에 앉지 않았다 - 정상 상황이 아니다.
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
+        hand.act(1, BettingAction.Fold) // 좌석2 가 이겨 핸드는 끝나지만, 좌석2 는 원래 앉아있지도 않았다.
+
+        assertFailsWith<IllegalStateException> {
+            settler.settle(tableId, table, hand)
+        }
     }
 }

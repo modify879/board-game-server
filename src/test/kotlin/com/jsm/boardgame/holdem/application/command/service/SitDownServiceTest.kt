@@ -177,4 +177,45 @@ class SitDownServiceTest {
         assertEquals(true, seat.awaitingBigBlind)
         assertEquals(false, seat.owesImmediatePost)
     }
+
+    @Test
+    fun `진행 중인 핸드의 좌석 번호에는 앉을 수 없다`() {
+        val tableId = createTable()
+        val table = tables.findById(tableId)!!
+        table.sitDown(1, userId = 1L, buyIn = Chips.of(8_000))
+        table.sitDown(2, userId = 2L, buyIn = Chips.of(8_000))
+        tables.save(table)
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(8_000), 2 to Chips.of(8_000)),
+            buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2,
+            HoldemTable.SMALL_BLIND, HoldemTable.BIG_BLIND, Shuffler { it },
+        )
+        handStore.save(tableId, hand)
+
+        val e = assertFailsWith<HandInProgressException> {
+            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 3, seatNo = 1, buyIn = 8_000))
+        }
+        assertEquals(HoldemErrorCode.HAND_IN_PROGRESS, e.errorCode)
+        assertEquals(0, walletTransfer.toGameCalls.size)
+    }
+
+    @Test
+    fun `진행 중인 핸드라도 핸드 참가 좌석이 아닌 빈 좌석에는 앉을 수 있다`() {
+        val tableId = createTable()
+        val table = tables.findById(tableId)!!
+        table.sitDown(1, userId = 1L, buyIn = Chips.of(8_000))
+        table.sitDown(2, userId = 2L, buyIn = Chips.of(8_000))
+        tables.save(table)
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(8_000), 2 to Chips.of(8_000)),
+            buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2,
+            HoldemTable.SMALL_BLIND, HoldemTable.BIG_BLIND, Shuffler { it },
+        )
+        handStore.save(tableId, hand)
+
+        service.sitDown(SitDownCommand(tableId = tableId.value, userId = 3, seatNo = 5, buyIn = 8_000))
+
+        assertEquals(3L, tables.findById(tableId)!!.seatAt(5)!!.userId)
+        assertEquals(1, walletTransfer.toGameCalls.size)
+    }
 }

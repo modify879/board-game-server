@@ -105,7 +105,7 @@ class TurnTimerTest {
     }
 
     @Test
-    fun `차례가 있으면 3분 뒤로 예약된다`() {
+    fun `차례가 있으면 1분 뒤로 예약된다`() {
         val scheduler = TurnTimerFakeTaskScheduler()
         val useCase = TurnTimerFakeExpireTurnUseCase()
         val timer = TurnTimer(scheduler, clock, useCase)
@@ -114,7 +114,7 @@ class TurnTimerTest {
         timer.onHandBroadcastRequested(event(hand))
 
         assertEquals(1, scheduler.scheduledCalls.size)
-        assertEquals(fixedInstant.plus(Duration.ofMinutes(3)), scheduler.scheduledCalls[0].time)
+        assertEquals(fixedInstant.plus(Duration.ofMinutes(1)), scheduler.scheduledCalls[0].time)
     }
 
     @Test

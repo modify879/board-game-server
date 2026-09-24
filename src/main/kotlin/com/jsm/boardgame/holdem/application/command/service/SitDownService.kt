@@ -37,6 +37,13 @@ class SitDownService(
             throw AlreadySeatedException("이미 다른 테이블에 앉아 있는 사용자입니다: userId=${command.userId}")
         }
 
+        // 진행 중인 핸드의 좌석 번호(hand.seatNos)에는 앉을 수 없다 — 그 좌석은 핸드가 끝날 때
+        // HandSettler.settle 이 정산으로 스택을 덮어쓴다. 핸드에 없는 다른 빈 좌석은 핸드 도중에도 앉을 수 있다.
+        val hand = handStore.find(table.id!!)
+        if (hand != null && command.seatNo in hand.seatNos) {
+            throw HandInProgressException("진행 중인 핸드의 좌석에는 앉을 수 없습니다: tableId=${command.tableId}, seatNo=${command.seatNo}")
+        }
+
         // 도메인 검증(좌석 범위·점유·바이인 범위)을 지갑 차감보다 먼저 해서, 좌석이 이미 찼는데
         // 지갑만 빠지는 순서가 생기지 않게 한다.
         table.sitDown(command.seatNo, command.userId, Chips.of(command.buyIn), command.postBlindImmediately)
