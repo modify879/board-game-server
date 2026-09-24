@@ -69,6 +69,7 @@ class HoldemViewAssemblerTest {
     fun `좌석 A 의 개인 뷰에는 좌석 B 의 카드가 들어가지 않는다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         table.moveButtonToNextOccupiedSeat()
+        // 버튼=1(SB) 이라 딜은 2(BB)부터 시작한다 — 1=2s,4s 를 유지하려면 2보다 먼저 딜에 놓아야 한다.
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
             table.buttonSeatNo!!,
@@ -76,7 +77,7 @@ class HoldemViewAssemblerTest {
             bigBlindSeatNo = 2,
             table.smallBlind,
             table.bigBlind,
-            identityShuffler,
+            fixedShuffler("3s", "2s", "5s", "4s"),
         )
 
         val viewA = privateViewOf(TableId(1), 1, hand)
@@ -173,8 +174,8 @@ class HoldemViewAssemblerTest {
     fun `리버에 A 가 베팅하고 B 가 콜해 B 가 이기면 둘 다 공개된다(A 가 순서상 먼저)`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         table.moveButtonToNextOccupiedSeat()
-        // 딜 순서(오름차순 두 바퀴): seat1=Kh,Kd(KK)  seat2=Ah,Ad(AA)  보드=2s,7d,9c,Tc,Jh
-        val shuffler = fixedShuffler("Kh", "Ah", "Kd", "Ad", "2s", "7d", "9c", "Tc", "Jh")
+        // 딜 순서(버튼(1) 다음인 2부터, 버튼이 마지막): seat2=Ah,Ad(AA)  seat1=Kh,Kd(KK)  보드=2s,7d,9c,Tc,Jh
+        val shuffler = fixedShuffler("Ah", "Kh", "Ad", "Kd", "2s", "7d", "9c", "Tc", "Jh")
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
             table.buttonSeatNo!!,
@@ -211,8 +212,8 @@ class HoldemViewAssemblerTest {
     fun `리버에 A 가 베팅하고 B 가 콜했는데 A 가 이기면 A 만 공개되고 B 는 머크한다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         table.moveButtonToNextOccupiedSeat()
-        // 딜 순서: seat1=Ah,Ad(AA)  seat2=Kh,Kd(KK)  보드=2s,7d,9c,Tc,Jh
-        val shuffler = fixedShuffler("Ah", "Kh", "Ad", "Kd", "2s", "7d", "9c", "Tc", "Jh")
+        // 딜 순서(버튼(1) 다음인 2부터, 버튼이 마지막): seat2=Kh,Kd(KK)  seat1=Ah,Ad(AA)  보드=2s,7d,9c,Tc,Jh
+        val shuffler = fixedShuffler("Kh", "Ah", "Kd", "Ad", "2s", "7d", "9c", "Tc", "Jh")
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
             table.buttonSeatNo!!,
@@ -252,8 +253,8 @@ class HoldemViewAssemblerTest {
     fun `리버 베팅 없이 체크로 끝나면 공개 순서는 버튼 왼쪽부터라 진 좌석도 먼저 보여줄 차례면 공개된다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         table.moveButtonToNextOccupiedSeat() // button=1(=SB), BB=2
-        // 딜 순서: seat1=Ah,Ad(AA)  seat2=Kh,Kd(KK)  보드=2s,7d,9c,Tc,Jh — 전부 체크로 통과
-        val shuffler = fixedShuffler("Ah", "Kh", "Ad", "Kd", "2s", "7d", "9c", "Tc", "Jh")
+        // 딜 순서(버튼(1) 다음인 2부터, 버튼이 마지막): seat2=Kh,Kd(KK)  seat1=Ah,Ad(AA)  보드=2s,7d,9c,Tc,Jh — 전부 체크로 통과
+        val shuffler = fixedShuffler("Kh", "Ah", "Kd", "Ad", "2s", "7d", "9c", "Tc", "Jh")
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
             table.buttonSeatNo!!,
@@ -288,8 +289,8 @@ class HoldemViewAssemblerTest {
     fun `삼자 체크다운에서 첫 공개가 약한 패, 다음이 이를 이기면 셋 다 공개된다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
         table.moveButtonToNextOccupiedSeat() // button=1, SB=2, BB=3
-        // 딜 순서: seat1=Kh,Kd(KK)  seat2=Jh,Jd(JJ)  seat3=Qh,Qd(QQ)  보드=2d,7c,9h,4s,5c
-        val shuffler = fixedShuffler("Kh", "Jh", "Qh", "Kd", "Jd", "Qd", "2d", "7c", "9h", "4s", "5c")
+        // 딜 순서(버튼(1) 다음인 2부터 시계방향, 버튼이 마지막): seat2=Jh,Jd(JJ)  seat3=Qh,Qd(QQ)  seat1=Kh,Kd(KK)  보드=2d,7c,9h,4s,5c
+        val shuffler = fixedShuffler("Jh", "Qh", "Kh", "Jd", "Qd", "Kd", "2d", "7c", "9h", "4s", "5c")
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)),
             table.buttonSeatNo!!,
@@ -327,8 +328,8 @@ class HoldemViewAssemblerTest {
     fun `삼자 체크다운에서 두 번째 패가 첫 번째보다 약하면 두 번째는 공개되지 않는다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
         table.moveButtonToNextOccupiedSeat() // button=1, SB=2, BB=3
-        // 딜 순서: seat1=Kh,Kd(KK)  seat2=Qh,Qd(QQ)  seat3=Jh,Jd(JJ)  보드=2d,7c,9h,4s,5c
-        val shuffler = fixedShuffler("Kh", "Qh", "Jh", "Kd", "Qd", "Jd", "2d", "7c", "9h", "4s", "5c")
+        // 딜 순서(버튼(1) 다음인 2부터 시계방향, 버튼이 마지막): seat2=Qh,Qd(QQ)  seat3=Jh,Jd(JJ)  seat1=Kh,Kd(KK)  보드=2d,7c,9h,4s,5c
+        val shuffler = fixedShuffler("Qh", "Jh", "Kh", "Qd", "Jd", "Kd", "2d", "7c", "9h", "4s", "5c")
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)),
             table.buttonSeatNo!!,
