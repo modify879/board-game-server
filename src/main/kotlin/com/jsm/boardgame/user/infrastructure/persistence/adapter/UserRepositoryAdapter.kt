@@ -40,7 +40,7 @@ class UserRepositoryAdapter(
      */
     override fun save(user: User): User =
         try {
-            jpa.save(user.toJpaEntity()).toDomain()
+            jpa.saveAndFlush(user.toJpaEntity()).toDomain()
         } catch (e: DataIntegrityViolationException) {
             throw translate(e)
         }

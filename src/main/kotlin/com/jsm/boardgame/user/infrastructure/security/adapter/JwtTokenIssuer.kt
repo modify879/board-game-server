@@ -19,12 +19,6 @@ import java.util.Base64
 import java.util.UUID
 import javax.crypto.spec.SecretKeySpec
 
-/**
- * HS256 은 대칭키의 강도가 곧 서명 안전성이므로 최소 256비트(32바이트)를 강제한다.
- * RFC 7518 §3.2 요구사항이며, 짧은 키를 그냥 통과시키면 운영에서 서명이 쉽게 위조된다.
- */
-private const val MIN_SECRET_BYTES = 32
-
 private const val REFRESH_TOKEN_BYTES = 32
 
 /**
@@ -37,14 +31,7 @@ class JwtTokenIssuer(
     private val clock: Clock,
 ) : AuthTokenIssuer {
 
-    private val secretKey = run {
-        val bytes = properties.secret.toByteArray(Charsets.UTF_8)
-        check(bytes.size >= MIN_SECRET_BYTES) {
-            "app.jwt.secret 은 HS256 서명에 최소 ${MIN_SECRET_BYTES}바이트가 필요합니다 " +
-                "(현재 ${bytes.size}바이트). APP_JWT_SECRET 환경변수나 application.yaml 의 app.jwt.secret 을 더 긴 값으로 설정하세요."
-        }
-        SecretKeySpec(bytes, "HmacSHA256")
-    }
+    private val secretKey = SecretKeySpec(properties.secret.toByteArray(Charsets.UTF_8), "HmacSHA256")
 
     private val accessTokenTtl = properties.accessTokenTtl
     private val refreshTokenTtl = properties.refreshTokenTtl

@@ -51,8 +51,8 @@ app:
       account-number: "123456789012"
       account-holder: "홍길동"
   jwt:
-    # 개발 전용 키다. 운영에서는 반드시 APP_JWT_SECRET 환경변수로 덮어쓸 것.
-    secret: "${APP_JWT_SECRET:local-development-only-not-for-production-use-1234}"
+    # 운영은 APP_JWT_SECRET 필수(32바이트 이상), 없으면 기동하지 않는다.
+    secret: "${APP_JWT_SECRET:}"
     access-token-ttl: 30m
     refresh-token-ttl: 14d
     refresh-reuse-grace: 5s

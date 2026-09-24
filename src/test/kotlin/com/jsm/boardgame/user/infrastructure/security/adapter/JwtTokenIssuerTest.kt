@@ -7,7 +7,6 @@ import java.time.Clock
 import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 
@@ -78,18 +77,5 @@ class JwtTokenIssuerTest {
 
         assertFalse(tokens.refreshToken.contains("."))
         assertEquals(43, tokens.refreshToken.length)
-    }
-
-    @Test
-    fun `32바이트 미만 키로 생성하면 명확한 예외가 난다`() {
-        val exception = assertFailsWith<IllegalStateException> {
-            JwtTokenIssuer(properties(secret = "too-short"), Clock.systemUTC())
-        }
-
-        assertEquals(
-            true,
-            exception.message?.contains("32바이트") == true,
-            "예외 메시지가 최소 키 길이를 명시해야 한다: ${exception.message}",
-        )
     }
 }

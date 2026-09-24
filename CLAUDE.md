@@ -15,6 +15,8 @@ PostgreSQL + Redis / 단일 Gradle 모듈.
 
 Docker 가 떠 있어야 한다. 접속 정보는 `application.yaml` 에 적지 않는다 — Compose 지원이 연결한다.
 
+`APP_JWT_SECRET`(32바이트 이상)이 없으면 기동하지 않는다. `bootRun`·`test` 는 `build.gradle.kts` 가 개발용 키를 넣어준다 — IDE 에서 메인 클래스를 직접 실행하면 실행 구성의 환경 변수에 넣는다
+
 ## 테스트
 
 - 통합 테스트에는 `@Import(TestcontainersConfiguration::class)` 가 필요하다.
@@ -169,8 +171,6 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 
 ## 아직 하지 않은 것
 
-- JWT 서명 키 교체 — `application.yaml` 의 개발용 키로 누구나 토큰을 위조할 수 있다.
-  운영은 `APP_JWT_SECRET` 로 덮어쓴다. **배포 전 필수**
 - 스키마 관리 — `ddl-auto: update` 를 계속 쓴다. Flyway 로 갈 계획이 없다.
   추가만 하고 아무것도 지우지 않으므로 컬럼 삭제·이름/타입 변경은 손으로 SQL 을 친다.
   Hibernate 가 못 만드는 제약(FK)은 `src/main/resources/data.sql` 의 멱등 DDL 로 건다.

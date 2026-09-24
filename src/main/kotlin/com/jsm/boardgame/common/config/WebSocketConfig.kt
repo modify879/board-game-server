@@ -1,6 +1,7 @@
 package com.jsm.boardgame.common.config
 
 import com.jsm.boardgame.common.web.StompAuthenticationInterceptor
+import com.jsm.boardgame.common.web.StompDestinationGuard
 import com.jsm.boardgame.common.web.StompErrorHandler
 import org.springframework.context.annotation.Configuration
 import org.springframework.messaging.converter.JacksonJsonMessageConverter
@@ -24,6 +25,7 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 @EnableWebSocketMessageBroker
 class WebSocketConfig(
     private val stompAuthenticationInterceptor: StompAuthenticationInterceptor,
+    private val stompDestinationGuard: StompDestinationGuard,
     private val stompErrorHandler: StompErrorHandler,
 ) : WebSocketMessageBrokerConfigurer {
 
@@ -39,7 +41,7 @@ class WebSocketConfig(
     }
 
     override fun configureClientInboundChannel(registration: ChannelRegistration) {
-        registration.interceptors(stompAuthenticationInterceptor)
+        registration.interceptors(stompAuthenticationInterceptor, stompDestinationGuard)
     }
 
     override fun configureMessageConverters(messageConverters: MutableList<MessageConverter>): Boolean {

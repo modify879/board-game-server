@@ -64,6 +64,13 @@ allOpen {
     annotation("jakarta.persistence.Embeddable")
 }
 
+val localJwtSecret = "local-development-only-not-for-production-use-1234"
+
 tasks.withType<Test> {
     useJUnitPlatform()
+    environment("APP_JWT_SECRET", localJwtSecret)
+}
+
+tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
+    environment("APP_JWT_SECRET", localJwtSecret)
 }
