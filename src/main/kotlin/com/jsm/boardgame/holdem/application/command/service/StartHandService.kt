@@ -8,6 +8,7 @@ import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.exception.IllegalHandStateException
+import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
@@ -30,6 +31,8 @@ class StartHandService(
         val tableId = TableId(command.tableId)
         val table = tables.findById(tableId)
             ?: throw TableNotFoundException("테이블을 찾을 수 없습니다: tableId=${command.tableId}")
+        table.seatOf(command.userId)
+            ?: throw NotSeatedException("이 테이블에 앉아 있지 않은 사용자입니다: userId=${command.userId}")
 
         if (handStore.find(tableId) != null) {
             throw HandInProgressException("이미 진행 중인 핸드가 있습니다: tableId=${command.tableId}")

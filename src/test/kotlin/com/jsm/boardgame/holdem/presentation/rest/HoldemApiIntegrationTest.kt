@@ -320,6 +320,21 @@ class HoldemApiIntegrationTest {
         assertThat(balanceOf(ctx.userId)).isEqualTo(15_000L)
     }
 
+    // ---------- POST /api/holdem/tables/{tableId}/hands ----------
+
+    @Test
+    fun `앉지 않은 사용자가 핸드 시작을 요청하면 404와 NOT_SEATED 를 응답한다`() {
+        val (userId, accessToken) = signUpAndLogin()
+        fundWallet(userId, 15_000)
+        val tableId = createTable(accessToken)
+        sitDown(accessToken, tableId, 1, 10_000).andExpect(status().isCreated)
+        val (_, bystanderToken) = signUpAndLogin()
+
+        startHand(bystanderToken, tableId)
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.errorCode").value("NOT_SEATED"))
+    }
+
     // ---------- 그 외 오류 ----------
 
     @Test

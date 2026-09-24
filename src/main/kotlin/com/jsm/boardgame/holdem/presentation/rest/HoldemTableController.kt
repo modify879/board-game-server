@@ -54,8 +54,8 @@ class HoldemTableController(
 
     @PostMapping("/{tableId}/hands")
     @ResponseStatus(HttpStatus.CREATED)
-    fun startHand(@PathVariable tableId: Long) {
-        startHandUseCase.start(StartHandCommand(tableId))
+    fun startHand(@AuthenticationPrincipal jwt: Jwt, @PathVariable tableId: Long) {
+        startHandUseCase.start(StartHandCommand(tableId, jwt.requireUserId()))
     }
 
     @PostMapping("/{tableId}/hands/actions")
