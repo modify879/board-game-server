@@ -29,8 +29,8 @@ Docker 가 떠 있어야 한다. 접속 정보는 `application.yaml` 에 적지 
   이름을 쓰면 `Redeclaration` 이다
 - 예외는 메시지가 아니라 `errorCode` 로 검증한다
 - 테스트 이름은 백틱을 쓴 한국어 문장
-- wallet 통합 테스트는 `UserRepository` 로 **실제 `users` 행을 먼저 만든다**. `fk_wallets_user`
-  때문에 합성 userId 로 지갑을 열면 FK 위반이다. 충전·환전 *요청* 테이블에는 FK 가 없다
+- 지갑을 여는 통합 테스트(wallet, 바이인하는 holdem)는 `UserRepository` 로 **실제 `users` 행을 먼저 만든다**.
+  `fk_wallets_user` 때문에 합성 userId 로 지갑을 열면 FK 위반이다. 충전·환전 *요청* 테이블에는 FK 가 없다
 - 규칙을 테스트로 못 박을 때는 성격이 다른 경로를 여럿 잡는다. 이 저장소에서 세 번
   같은 식으로 뚫렸다 — 사전 체크 경로만 타서 DB 제약 번역이 한 번도 안 돌았다
 
@@ -82,7 +82,7 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 
 `user` 가 참조 구현이다. 새 컨텍스트는 그 파일 배치를 그대로 따른다.
 
-홀덤 전용 규칙은 `.claude/rules/holdem.md` 에 있고 `holdem` 파일을 건드릴 때만 로드된다.
+컨텍스트 전용 규칙은 `.claude/rules/<context>.md` 에 있고 그 컨텍스트 파일을 건드릴 때만 로드된다(`holdem`·`wallet`·`user`).
 
 ## 규칙
 
@@ -108,7 +108,11 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 5. 무작위성은 주입받는다. 각 게임이 자기 `Shuffler`/`DiceRoller` 포트를 정의한다.
    시계는 `common/config` 의 `Clock` 빈 하나를 공유한다 — `Instant.now()` 가 한 곳만 남아도 TTL 테스트가 흔들린다
 6. 히든 정보는 뷰어별로 마스킹한다. WebSocket 으로 도메인 객체나 전체 게임 상태를 내보내지 않는다.
-   `game.viewFor(viewer)` 를 거친다. 브로드캐스트의 기본값은 좌석별로 다른 페이로드다
+   `game.viewFor(viewer)` 를 거친다. 브로드캐스트의 기본값은 뷰어별로 다른 페이로드다
+   - 개인 채널은 `/user/queue/...` 로만 구독한다. 원시 `/queue` 구독은 `StompDestinationGuard` 가 막는다 —
+     열어두면 세션 id 만 알아도 남의 개인 큐를 엿본다
+   - 구독 인가 인터셉터는 목적지를 해석하지 못하면 거부한다(fail-closed). 통과시키면 형식만 비튼 목적지로
+     인가를 건너뛴다
 7. 재화는 원시 타입으로 다루지 않는다. 각 게임이 자기 VO 로 갖고, 게임 간에 공유하지 않는다
 8. 오류는 코드로 계약하고, 문구는 클라이언트가 만든다
    - 예외는 그 실패를 소유한 계층에 둔다. 기준은 "애그리거트가 그 단어를 아는가" —
@@ -146,26 +150,14 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
   실패한다(`HandInProgressJpaEntity`, `WalletAdjustmentKeyJpaEntity`)
 - **같은 트랜잭션에 참여한 `@Transactional` 프록시를 예외가 한 번이라도 넘으면 바깥에서 잡아도 트랜잭션은 rollback-only 다.**
   커밋 시점에 `UnexpectedRollbackException` 으로 터진다. 실패를 기록하고 커밋해야 하면 `noRollbackFor`
-  (`LoginService`), 실패를 격리해야 하면 호출 단위로 `REQUIRES_NEW` 를 쓴다(홀덤 참가 요청 처리)
-- 잔액을 바꾸는 입구는 `Wallet.record()` 하나다. 반환값이 곧 저장할 원장 엔트리라, 원장을 빠뜨리는
-  호출이 존재할 수 없다. 부호는 `Money` 가 아니라 `LedgerEntryType.direction` 이 나른다
-  (`Money` 는 음수를 못 갖는다). 부호 있는 `Long` 이 도메인에 들어오는 자리는 `Adjustment` 하나뿐이다
-- 환전은 요청 시점에 차감한다. 승인은 상태만 바꾼다 — 돈은 이미 나갔다.
-  `ApproveWithdrawalRequestService` 에 `WalletRepository` 가 없는 것은 실수를 막기 위한 것이다
+  (`LoginService`), 실패를 격리해야 하면 호출 단위로 `REQUIRES_NEW` 를 쓴다(`AdmitJoinRequestService`)
 - 남의 리소스는 403 이 아니라 404 다. 서비스가 조회 단계에서 소유자까지 확인한다.
   도메인의 소유자 검사는 불변식으로 남긴다 — "안 쓰이는 코드" 로 보고 지우지 않는다
-- 지갑은 명령 경로에서 lazy 로 만들어진다. 조회 경로에서는 만들지 않는다
-  (`GET /api/wallet` 은 잔액 0). 그래서 "지갑 없음" 에러 코드가 없다
 - 문자열 컬럼은 `text`. 길이 제약이 DB 에 없으므로 VO 가 유일한 방어선이다
 - 외부 리소스는 키만 저장하고 URL 은 presentation 이 조립한다
 - 페이지 응답은 `PagedModel`(`spring.data.web.pageable.serialization-mode: via_dto`)
 - **KDoc 안에 `/api/admin` 와일드카드를 그대로 쓰지 않는다.** 별표-슬래시가 주석을 닫아
   `Unclosed comment` 가 엉뚱한 줄을 가리킨다
-- 액세스 토큰은 JWT, 리프레시 토큰은 불투명하다. 통일하지 않는다. 리프레시 토큰에서 userId 를
-  유도할 수 있게 만들지 않는다(`auth:refresh:{sha256}` 인덱스로만). 그 인덱스는 회전해도 지우지 않고
-  TTL 로만 소멸시킨다 — 지우면 재사용 탐지가 무력화된다
-- 역할 변경은 액세스 토큰 블랙리스트 + 갱신으로 반영한다. 리프레시 토큰은 살려둔다.
-  최초 관리자 한 명만 DB 로 직접 만들고, 이후는 `POST /api/admin/users/{id}/role` 을 쓴다
 - top-level `private` 함수는 이름이 패키지에서 충돌하지 않는 대신 **다른 파일에서 보이지 않는다.**
   파일 간에 헬퍼를 공유할 수 없어 `requireUserId()` 가 컨트롤러마다 복사되어 있다
 
@@ -186,5 +178,3 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
   `application.doesNotDependOn(adapters)` / `domainDoesNotDependOnAdapters()` / `adapters.dontDependOnEachOther()`
 - 클라이언트 single-flight(토큰 갱신 경합), 프로필 이미지 업로드, 닉네임·비밀번호 변경, 회원 탈퇴,
   관리자 화면, Micrometer Tracing
-- 로그인 응답 시간이 아이디 존재 여부를 노출한다 — 더미 해시 방어는 `3e4d64e` 에서 의도적으로
-  제거했다. 되살리려면 위협 모델부터 정해라
