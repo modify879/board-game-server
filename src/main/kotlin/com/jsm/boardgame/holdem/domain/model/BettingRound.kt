@@ -14,6 +14,14 @@ sealed interface BettingAction {
     data class RaiseTo(val amount: Chips) : BettingAction
 }
 
+/** 차례인 좌석이 지금 할 수 있는 것. [BettingRound.availableActionsFor] 참고. */
+data class AvailableActions(
+    val canCheck: Boolean,
+    val callAmount: Chips?,
+    val minRaiseTo: Chips?,
+    val maxRaiseTo: Chips?,
+)
+
 class BettingSeat(
     val seatNo: Int,
     stack: Chips,
@@ -94,12 +102,23 @@ class BettingRound private constructor(
     val toActSeatNo: Int? get() = toAct
     val isComplete: Boolean get() = toAct == null
 
-    fun callAmount(seatNo: Int): Chips {
-        val seat = seatOf(seatNo)
-        return Chips.min(currentBet - seat.committed, seat.stack)
-    }
-
     fun canRaise(seatNo: Int): Boolean = seatNo !in actedSinceLastFullRaise
+
+    /** 차례인 좌석이 지금 할 수 있는 것. 차례가 아니면 null. 판정은 act() 의 검증과 정확히 같아야 한다. */
+    fun availableActionsFor(seatNo: Int): AvailableActions? {
+        if (isComplete || toAct != seatNo) return null
+        val seat = seatOf(seatNo)
+        val canCheck = seat.committed == currentBet
+        val callAmt = if (canCheck) null else Chips.min(currentBet - seat.committed, seat.stack)
+        val maxRaise = seat.committed + seat.stack
+        val raiseAllowed = canRaise(seatNo) && maxRaise > currentBet
+        return AvailableActions(
+            canCheck = canCheck,
+            callAmount = callAmt,
+            minRaiseTo = if (raiseAllowed) Chips.min(minRaiseTo, maxRaise) else null,
+            maxRaiseTo = if (raiseAllowed) maxRaise else null,
+        )
+    }
 
     /**
      * 진행 중 라운드 상태를 그대로 뽑는다. actedSinceLastFullRaise·toAct 까지 담아야

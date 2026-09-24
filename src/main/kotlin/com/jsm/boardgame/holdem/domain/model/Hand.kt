@@ -63,6 +63,8 @@ class Hand private constructor(
 
     val toActSeatNo: Int? get() = currentRound?.toActSeatNo
 
+    fun availableActionsFor(seatNo: Int): AvailableActions? = currentRound?.availableActionsFor(seatNo)
+
     fun holeCardsOf(seatNo: Int): List<Card> = holeCards.getValue(seatNo)
 
     /** 현재 스택. 라운드 진행 중이면 이번 라운드 커밋을 반영한 값, 핸드가 끝났으면 수령액까지 반영된 값. */
