@@ -46,6 +46,7 @@ fun publicViewOf(tableId: TableId, table: HoldemTable, hand: Hand?): TablePublic
         seats = seats,
         result = hand?.let { h -> h.result?.let { r -> handResultPublicViewOf(h, r) } },
         pendingSeatNos = table.pendingSeatNos().sorted(),
+        nextHandAt = table.nextHandAt,
     )
 }
 

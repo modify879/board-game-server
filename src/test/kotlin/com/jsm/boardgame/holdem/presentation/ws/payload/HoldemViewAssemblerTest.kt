@@ -8,6 +8,7 @@ import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.service.Shuffler
+import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -451,5 +452,19 @@ class HoldemViewAssemblerTest {
         val view = privateViewOf(TableId(1), 1, hand)
 
         assertNull(view.availableActions)
+    }
+
+    @Test
+    fun `공개 뷰는 테이블의 nextHandAt 을 담고 ISO-8601 문자열로 직렬화된다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        val scheduledTime = Instant.parse("2026-09-24T12:30:45Z")
+        table.scheduleNextHand(scheduledTime)
+
+        val view = publicViewOf(TableId(1), table, null)
+
+        assertEquals(scheduledTime, view.nextHandAt)
+        val json = objectMapper.writeValueAsString(view)
+        assertTrue(json.contains("\"2026-09-24T12:30:45Z\""), "ISO-8601 형식의 ISO 즉시값이 JSON에 없음: $json")
+        assertFalse(json.contains("1695555045"), "Unix 타임스탬프 숫자가 JSON에 포함됨 — Instant 가 숫자로 직렬화됨: $json")
     }
 }
