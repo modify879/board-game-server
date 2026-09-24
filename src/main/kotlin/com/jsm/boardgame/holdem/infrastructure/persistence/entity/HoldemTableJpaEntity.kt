@@ -11,6 +11,7 @@ import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import jakarta.persistence.Version
+import java.time.Instant
 import org.springframework.data.jpa.repository.JpaRepository
 
 @Entity
@@ -30,12 +31,16 @@ class HoldemTableJpaEntity(
     var smallBlindSeatNo: Int?,
     @Column(name = "big_blind_seat_no")
     var bigBlindSeatNo: Int?,
+    @Column(name = "next_hand_at")
+    var nextHandAt: Instant?,
     @Version
     @Column(name = "version", nullable = false)
     var version: Long = 0,
 )
 
-interface HoldemTableJpaRepository : JpaRepository<HoldemTableJpaEntity, Long>, KotlinJdslJpqlExecutor
+interface HoldemTableJpaRepository : JpaRepository<HoldemTableJpaEntity, Long>, KotlinJdslJpqlExecutor {
+    fun findAllByNextHandAtIsNotNull(): List<HoldemTableJpaEntity>
+}
 
 fun HoldemTableJpaEntity.toDomain(seats: List<HoldemSeatJpaEntity>): HoldemTable =
     HoldemTable.reconstitute(
@@ -48,6 +53,7 @@ fun HoldemTableJpaEntity.toDomain(seats: List<HoldemSeatJpaEntity>): HoldemTable
         version = version,
         smallBlindSeatNo = smallBlindSeatNo,
         bigBlindSeatNo = bigBlindSeatNo,
+        nextHandAt = nextHandAt,
     )
 
 fun HoldemTable.toJpaEntity(): HoldemTableJpaEntity =
@@ -59,5 +65,6 @@ fun HoldemTable.toJpaEntity(): HoldemTableJpaEntity =
         buttonSeatNo = buttonSeatNo,
         smallBlindSeatNo = smallBlindSeatNo,
         bigBlindSeatNo = bigBlindSeatNo,
+        nextHandAt = nextHandAt,
         version = version,
     )

@@ -10,6 +10,9 @@ import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
+import java.time.Clock
+import java.time.Duration
+import java.time.Instant
 
 /**
  * 핸드 종료 정산. StartHandService·PlayActionService·ExpireTurnService 가 공유한다 — 로직을
@@ -27,12 +30,17 @@ import org.springframework.stereotype.Component
  * 없는 사람에게 묶이지 않게 한다. 핸드가 이미 끝난 뒤라 going south(핸드 도중 칩을 빼는 것) 제약과
  * 충돌하지 않는다. 돌려줄 칩이 없으므로 지갑 이체는 부르지 않는다 — 이 클래스는 애초에
  * WalletTransfer 를 주입받지 않는다(StandUpService 가 스택 0일 때 이체를 건너뛰는 것과 같은 이유).
+ *
+ * 정산 뒤 다음 핸드 시작 시각(nextHandAt)을 5초 뒤로 예약한다. DB 에 두는 이유는 재시작해도
+ * 이어지고, 대기 중에는 수동 시작을 막아 다른 좌석의 5초(기립 결정 시간)를 빼앗지 않기
+ * 위해서다. `NextHandTimer` 가 이 값을 보고 `StartScheduledHandUseCase` 를 건다.
  */
 @Component
 class HandSettler(
     private val tables: HoldemTableRepository,
     private val handStore: HandStore,
     private val eventPublisher: ApplicationEventPublisher,
+    private val clock: Clock,
 ) {
     fun settle(tableId: TableId, table: HoldemTable, hand: Hand) {
         val stacks = hand.seatNos.associateWith { seatNo -> hand.stackOf(seatNo) }
@@ -52,6 +60,8 @@ class HandSettler(
             log.info("auto stand-up after 0-stack settle: tableId={}, seatNo={}, userId={}", tableId.value, seatNo, userId)
         }
 
+        table.scheduleNextHand(Instant.now(clock).plus(NEXT_HAND_DELAY))
+
         tables.save(table)
         handStore.remove(tableId)
         // 정산 후에도 hand 를 null 로 넘기지 않는다 — 클라이언트가 쇼다운 결과(showdownRanks/payouts)를
@@ -60,6 +70,7 @@ class HandSettler(
     }
 
     companion object {
+        private val NEXT_HAND_DELAY: Duration = Duration.ofSeconds(5)
         private val log = LoggerFactory.getLogger(HandSettler::class.java)
     }
 }

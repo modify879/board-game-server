@@ -26,6 +26,9 @@ private class CreateTableFakeHoldemTableRepository : HoldemTableRepository {
 
     override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
+    override fun findAllPendingNextHandTableIds(): List<TableId> =
+        stored.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
+
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: run { sequence += 1; TableId(sequence) }
         val saved = HoldemTable.reconstitute(
@@ -36,6 +39,7 @@ private class CreateTableFakeHoldemTableRepository : HoldemTableRepository {
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
             version = table.version,
+            nextHandAt = table.nextHandAt,
         )
         stored[id.value] = saved
         return saved

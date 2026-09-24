@@ -12,6 +12,10 @@ import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
+import java.time.Clock
+import java.time.Duration
+import java.time.Instant
+import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -39,10 +43,13 @@ private class HandSettlerFakeTableRepository : HoldemTableRepository {
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
             version = table.version,
+            nextHandAt = table.nextHandAt,
         )
         store[id.value] = saved
         return saved
     }
+
+    override fun findAllPendingNextHandTableIds(): List<TableId> = store.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
 }
 
 private class HandSettlerFakeHandStore : HandStore {
@@ -73,10 +80,12 @@ class HandSettlerTest {
     private val tables = HandSettlerFakeTableRepository()
     private val handStore = HandSettlerFakeHandStore()
     private val eventPublisher = ApplicationEventPublisher { }
+    private val fixedInstant: Instant = Instant.parse("2026-01-01T00:00:00Z")
+    private val clock: Clock = Clock.fixed(fixedInstant, ZoneOffset.UTC)
 
     // HandSettler 생성자에 WalletTransfer 가 없다 — 자동 기립이 지갑 이체를 부를 방법 자체가 없다
     // (StandUpService 가 스택 0일 때 이체를 건너뛰는 것과 같은 이유).
-    private val settler = HandSettler(tables, handStore, eventPublisher)
+    private val settler = HandSettler(tables, handStore, eventPublisher, clock)
 
     private fun seatedTable(vararg stacks: Pair<Int, Long>): HoldemTable {
         val seats = stacks.associate { (seatNo, stack) ->
@@ -172,5 +181,20 @@ class HandSettlerTest {
         assertFailsWith<IllegalStateException> {
             settler.settle(tableId, table, hand)
         }
+    }
+
+    @Test
+    fun `정산하면 다음 핸드 시작 시각이 5초 뒤로 예약된다`() {
+        val table = seatedTable(1 to 10_000L, 2 to 10_000L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
+        handStore.save(tableId, hand)
+        hand.act(1, BettingAction.Fold)
+
+        settler.settle(tableId, table, hand)
+
+        val savedTable = tables.findById(tableId)!!
+        assertEquals(fixedInstant.plus(Duration.ofSeconds(5)), savedTable.nextHandAt)
     }
 }

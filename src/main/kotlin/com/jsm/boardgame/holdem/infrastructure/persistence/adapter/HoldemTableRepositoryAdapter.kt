@@ -38,6 +38,9 @@ class HoldemTableRepositoryAdapter(
 
     override fun findAllSeatedUserIds(): List<Long> = seatJpa.findAll().map { it.userId }
 
+    override fun findAllPendingNextHandTableIds(): List<TableId> =
+        tableJpa.findAllByNextHandAtIsNotNull().map { TableId(it.id) }
+
     override fun save(table: HoldemTable): HoldemTable {
         val savedTable = try {
             tableJpa.saveAndFlush(table.toJpaEntity())

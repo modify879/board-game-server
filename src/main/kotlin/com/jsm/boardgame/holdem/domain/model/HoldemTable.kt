@@ -6,6 +6,7 @@ import com.jsm.boardgame.holdem.domain.exception.InvalidTableNameException
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.exception.SeatNoOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.SeatTakenException
+import java.time.Instant
 
 @JvmInline value class TableId(val value: Long)
 
@@ -19,6 +20,7 @@ class HoldemTable private constructor(
     bigBlindSeatNo: Int?,
     seats: Map<Int, Seat>,
     val version: Long,
+    nextHandAt: Instant?,
 ) {
     var buttonSeatNo: Int? = buttonSeatNo
         private set
@@ -38,6 +40,9 @@ class HoldemTable private constructor(
         private set
 
     private val seats: MutableMap<Int, Seat> = seats.toMutableMap()
+
+    var nextHandAt: Instant? = nextHandAt
+        private set
 
     fun sitDown(seatNo: Int, userId: Long, buyIn: Chips, postBlindImmediately: Boolean = false): Seat {
         if (seatNo !in 1..MAX_SEATS) {
@@ -209,6 +214,16 @@ class HoldemTable private constructor(
         }
     }
 
+    /** HandSettler 가 핸드 정산 직후 5초 뒤 시각으로 건다. */
+    fun scheduleNextHand(at: Instant) {
+        nextHandAt = at
+    }
+
+    /** HandStarter 가 실제로 핸드를 시작할 때, 또는 후보가 2명 미만으로 떨어졌을 때 부른다. */
+    fun clearNextHand() {
+        nextHandAt = null
+    }
+
     companion object {
         const val MAX_SEATS = 9
         private const val MAX_NAME_LENGTH = 30
@@ -235,6 +250,7 @@ class HoldemTable private constructor(
                 bigBlindSeatNo = null,
                 seats = emptyMap(),
                 version = 0,
+                nextHandAt = null,
             )
         }
 
@@ -249,6 +265,7 @@ class HoldemTable private constructor(
             version: Long,
             smallBlindSeatNo: Int? = null,
             bigBlindSeatNo: Int? = null,
-        ): HoldemTable = HoldemTable(id, name, smallBlind, bigBlind, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, seats, version)
+            nextHandAt: Instant? = null,
+        ): HoldemTable = HoldemTable(id, name, smallBlind, bigBlind, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, seats, version, nextHandAt)
     }
 }

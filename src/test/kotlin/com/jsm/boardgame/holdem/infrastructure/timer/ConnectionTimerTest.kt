@@ -111,6 +111,7 @@ private class ConnectionTimerFakeHoldemTableRepository : HoldemTableRepository {
     override fun findByUserId(userId: Long): HoldemTable? = null
     override fun save(table: HoldemTable): HoldemTable = table
     override fun findAllSeatedUserIds(): List<Long> = seatedUserIds
+    override fun findAllPendingNextHandTableIds(): List<TableId> = emptyList()
 }
 
 class ConnectionTimerTest {

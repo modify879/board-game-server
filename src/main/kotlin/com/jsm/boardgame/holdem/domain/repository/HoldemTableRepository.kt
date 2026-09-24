@@ -16,5 +16,12 @@ interface HoldemTableRepository {
      */
     fun findAllSeatedUserIds(): List<Long>
 
+    /**
+     * `nextHandAt` 이 채워진(=자동 시작을 기다리는) 모든 테이블 id. 재시작 시 NextHandTimer 재무장
+     * 스윕 대상. 기본값으로 빈 목록을 주지 않는다 — 구현을 빠뜨린 걸 컴파일러가 잡아야 스윕이
+     * 조용히 무력화되지 않는다.
+     */
+    fun findAllPendingNextHandTableIds(): List<TableId>
+
     fun save(table: HoldemTable): HoldemTable
 }
