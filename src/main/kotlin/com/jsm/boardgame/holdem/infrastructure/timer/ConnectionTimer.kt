@@ -46,13 +46,13 @@ import java.util.concurrent.atomic.AtomicLong
  * 치우는 경로가 이 부팅 스윕뿐이다.
  *
  * 복구 유예 중인 테이블([HandRecovery] 가 진행 중 핸드를 복구하는 3분 동안)의 참가자는 이 부팅
- * 시딩에서 빠져야 한다 - 서버가 죽어있던 시간은 플레이어 책임이 아니다. 예전에는 이 컴포넌트가
- * `HandRecovery.isAwaitingRecovery(userId)` 를 물어보는 pull 방식이었는데, 복구가 끝났을 때 안
- * 돌아온 사람에게 감시를 새로 걸어야 하는 이번 요구와 합치면(`HandRecovery` 가 이 컴포넌트를
- * 다시 불러야 한다) 순환 빈 의존이 된다. 그래서 방향을 뒤집었다: [suspendWatch] 로 `HandRecovery`
- * 가 유예 대상을 이 컴포넌트에 미리 알려주고(push), [beginWatch]/[cancelWatch] 로 복구가 끝난
- * 결과를 반영하게 한다. 새 포트 인터페이스는 두지 않는다 - 둘 다 같은 infrastructure 계층의
- * 구체 타입이라 직접 의존으로 충분하다.
+ * 시딩에서 빠져야 한다 - 서버가 죽어있던 시간은 플레이어 책임이 아니다. pull 방식
+ * (`HandRecovery.isAwaitingRecovery(userId)` 조회)은 복구가 끝났을 때 안 돌아온 사람에게 감시를
+ * 새로 걸어야 하는 요구와 합치면(`HandRecovery` 가 이 컴포넌트를 다시 불러야 한다) 순환 빈
+ * 의존이 된다. 그래서 [suspendWatch] 로 `HandRecovery` 가 유예 대상을 이 컴포넌트에 미리
+ * 알려주고(push), [beginWatch]/[cancelWatch] 로 복구가 끝난 결과를 반영하게 한다. 새 포트
+ * 인터페이스는 두지 않는다 - 둘 다 같은 infrastructure 계층의 구체 타입이라 직접 의존으로
+ * 충분하다.
  *
  * [onApplicationReady] 와 `HandRecovery.onApplicationReady` 는 같은 `ApplicationReadyEvent` 를
  * 듣는다. `HandRecovery` 쪽이 먼저 실행되어 복구 대상 테이블의 참가자를 [suspendWatch] 로 걸어둬야
@@ -73,10 +73,8 @@ class ConnectionTimer(
     private val scheduled = ConcurrentHashMap<Long, ScheduledExpiry>()
     private val tokens = ConcurrentHashMap<Long, AtomicLong>()
 
-    // 핸드가 끝날 때까지 미뤄둔 퇴장. tableId -> 대기 중인 userId 목록.
     private val pendingStandUps = ConcurrentHashMap<TableId, MutableSet<Long>>()
 
-    // 복구 유예 중이라 연결 감시를 걸면 안 되는 userId 들. HandRecovery 가 채우고 비운다.
     private val suspended = ConcurrentHashMap.newKeySet<Long>()
 
     /** HandRecovery.onApplicationReady(@Order(0)) 다음으로 실행되어야 한다 - 클래스 KDoc 참고. */

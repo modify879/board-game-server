@@ -6,10 +6,6 @@ import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
 /**
  * 관리자가 잔액을 직접 지급·회수할 때의 금액과 사유.
  *
- * 조정은 충전·환전과 달리 애그리거트가 없어서 이 규칙들이 서비스의 `if` 로 흩어져 있었다.
- * 같은 종류의 규칙을 `DepositRequest.request()` 는 도메인 팩토리에서 지키는데 조정만
- * 응용 계층에서 지키는 비대칭이었다.
- *
  * **부호를 받는 유일한 도메인 타입이다.** `Money` 는 음수를 가질 수 없고 방향은
  * [LedgerEntryType] 이 나르므로(원장 합산으로 잔액을 검증할 수 있어야 한다),
  * 부호 있는 원시 Long 이 도메인 안으로 들어오는 자리를 여기 하나로 좁힌다.

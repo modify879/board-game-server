@@ -62,7 +62,6 @@ class RefreshTokenService(
 
         return when (result) {
             is RotationResult.Rotated -> {
-                // 회전 시 아직 살아 있는 액세스 토큰도 함께 끊는다.
                 result.previousAccessTokenId?.let { previousAccessTokenId ->
                     sessions.blacklistAccessToken(previousAccessTokenId, Instant.now(clock).plus(accessTokenTtl))
                 }

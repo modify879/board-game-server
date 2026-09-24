@@ -250,10 +250,8 @@ class HoldemTable private constructor(
     }
 
     /**
-     * 정산 후 좌석의 스택을 갱신한다.
-     *
-     * [stacks] 에 없는 점유 좌석의 스택은 변경되지 않는다.
-     * 핸드가 진행 중에 새로운 사용자가 착석할 수 있기 때문이다.
+     * [stacks] 에 없는 점유 좌석의 스택은 변경되지 않는다 — 그 핸드에 참가하지 않은 좌석(BB 대기)이 있고,
+     * 1분 무응답 기립은 한 좌석만 정산한다.
      */
     fun applyStacks(stacks: Map<Int, Chips>) {
         for ((seatNo, stack) in stacks) {

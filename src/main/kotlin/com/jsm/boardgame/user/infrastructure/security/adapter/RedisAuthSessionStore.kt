@@ -22,10 +22,10 @@ import java.time.Instant
  * 한 번으로 저장한다. Redis 의 SET 은 값 대입과 TTL 설정을 한 명령으로 처리하는 원자적 연산이라
  * "값은 썼는데 TTL 은 못 붙인" 중간 상태가 존재하지 않는다.
  *
- * 예전에는 Redis 해시에 필드들을 [putAll] 로 채운 뒤 별도로 [expire] 를 거는 두 번의 왕복이었다.
- * 그 사이에 프로세스가 죽거나 커넥션이 끊기면 TTL 이 없는 세션 키가 영구히 Redis 에 남는다 —
- * 사용자가 다시 로그인하거나 로그아웃해서 [clear]/[start] 로 키를 덮어쓰기 전까지 정리되지 않는
- * 고아 키 누적 결함이었다. 그래서 반드시 한 번의 명령으로 값과 TTL 을 함께 확정해야 한다.
+ * 필드별로 SET 한 뒤 별도로 EXPIRE 를 거는 두 번의 왕복으로 구현하면, 그 사이에 프로세스가 죽거나
+ * 커넥션이 끊길 때 TTL 이 없는 세션 키가 영구히 Redis 에 남는다 — 사용자가 다시 로그인하거나
+ * 로그아웃해서 [clear]/[start] 로 키를 덮어쓰기 전까지 정리되지 않는 고아 키가 된다. 그래서 반드시
+ * 한 번의 명령으로 값과 TTL 을 함께 확정해야 한다.
  *
  * 필드 구분자 `:` 는 네 필드 중 어디에도 나타나지 않는다 — accessTokenId(UUID: 16진수와 `-`),
  * refreshTokenHash/previousRefreshTokenHash(SHA-256 16진수, 직전 토큰이 없으면 빈 문자열),
@@ -183,7 +183,6 @@ class RedisAuthSessionStore(
         ).joinToString(FIELD_DELIMITER)
     }
 
-    /** 세션 값을 필드로 분리한다. 세션이 없거나 형식이 깨졌으면 null. */
     private fun parseSession(userId: Long): ParsedSession? {
         val value = redisTemplate.opsForValue().get(sessionKey(userId)) ?: return null
         val parts = value.split(FIELD_DELIMITER, limit = 4)

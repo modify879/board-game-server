@@ -4,7 +4,7 @@ import com.jsm.boardgame.holdem.domain.model.TableId
 
 interface ExpireConnectionUseCase {
     /**
-     * 연결 만료를 처리한다. 미착석이거나 즉시 기립했으면 null 을 돌려준다. 핸드가 진행 중이면
+     * 미착석이거나 즉시 기립했으면 null 을 돌려준다. 핸드가 진행 중이면
      * 칩을 들고 나갈 수 없어(going south 방지) 기립시키지 않고, "예약이 필요하다" 는 뜻으로
      * 그 테이블 id 를 돌려준다.
      *

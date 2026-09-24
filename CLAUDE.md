@@ -16,7 +16,7 @@ PostgreSQL + Redis / 단일 Gradle 모듈.
 
 Docker 가 떠 있어야 한다. 접속 정보는 `application.yaml` 에 적지 않는다 — Compose 지원이 연결한다.
 
-`APP_JWT_SECRET`(32바이트 이상)이 없으면 기동하지 않는다. `bootRun`·`test` 는 `build.gradle.kts` 가 개발용 키를 넣어준다 — IDE 에서 메인 클래스를 직접 실행하면 실행 구성의 환경 변수에 넣는다
+`APP_JWT_SECRET`(32바이트 이상)이 없으면 기동하지 않는다. `bootRun`·`test` 는 `build.gradle.kts` 가 개발용 키를 넣어준다 — IDE 에서 메인 클래스를 직접 실행하면 실행 구성의 환경 변수에 넣는다.
 
 ## 테스트
 
@@ -47,7 +47,7 @@ com.jsm.boardgame
     │                port = 유스케이스가 필요로 하는 출력 포트(세션, 토큰, 타 컨텍스트)
     ├── infrastructure/ persistence/{entity,adapter}  security/{adapter,config}  acl/
     │                acl = 타 컨텍스트를 부르는 어댑터. DB 를 안 건드리므로 persistence 가 아니다
-    └── presentation/ config/ exception/ rest/{request,response}  ws/(홀덤 4단계, 아직 없음)
+    └── presentation/ config/ exception/ rest/{request,response}  ws/
 ```
 
 - **한 패키지에 역할이 섞이면 가른다. 크기는 기준이 아니다.** 파일 1개짜리 하위 패키지도 그대로 둔다
@@ -69,14 +69,14 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
   포트를 import 하는 것이라 정상이다. 금지는 반대 방향 하나뿐이다
 - 컨텍스트끼리 서로의 `domain`·`infrastructure` 를 참조하지 않는다.
   필요하면 부르는 쪽이 포트를 소유하고 `infrastructure/acl/` 의 어댑터가 상대의
-  공개 `application` 만 부른다(`wallet/application/port/UserExistence`).
-  교차 import 는 저장소에 이 한 곳뿐이고, 늘어나면 경계를 다시 봐야 한다는 신호다
+  공개 `application` 만 부른다(`wallet/application/port/UserExistence`, `holdem` 의 `WalletTransferAdapter`).
+  교차 import 는 저장소에 이 두 곳뿐이고, 늘어나면 경계를 다시 봐야 한다는 신호다
 
 ## 바운디드 컨텍스트
 
 | 컨텍스트 | 상태 | 책임 |
 |---|---|---|
-| `user` | 구현됨 | 사용자, 인증, 세션, 역할 |
+| `user` | 구현됨 | 사용자, 인증, 세션, 역할, 계정 잠금 |
 | `wallet` | 구현됨 | 잔액·원장, 충전/환전 요청, 관리자 승인·반려·조정 |
 | `holdem` | 구현됨 | 홀덤 규칙 전부. 방/좌석을 자기 안에 둔다 |
 
@@ -141,6 +141,12 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
   flush 되어 CHECK·`@Version` 위반이 `catch` 를 지나친다. INSERT 는 IDENTITY 채번 때문에 우연히
   통과하므로 가입 테스트는 통과하고 잔액 음수 방지만 안 잡힌다. 회귀 테스트는 UPDATE 경로로 잡는다.
   낙관적 락 충돌은 새 코드를 만들지 말고 기존 상태 예외로 번역한다
+- **assigned id 엔티티의 `@Version` 은 nullable(`Long? = null`) 이다.** Spring Data 가 새 행 여부를 버전으로
+  판단한다. `Long = 0` 이면 첫 저장도 `merge` 로 가고, Hibernate 가 없는 행의 merge 를 거부해 INSERT 가 전부
+  실패한다(`HandInProgressJpaEntity`, `WalletAdjustmentKeyJpaEntity`)
+- **같은 트랜잭션에 참여한 `@Transactional` 프록시를 예외가 한 번이라도 넘으면 바깥에서 잡아도 트랜잭션은 rollback-only 다.**
+  커밋 시점에 `UnexpectedRollbackException` 으로 터진다. 실패를 기록하고 커밋해야 하면 `noRollbackFor`
+  (`LoginService`), 실패를 격리해야 하면 호출 단위로 `REQUIRES_NEW` 를 쓴다(홀덤 참가 요청 처리)
 - 잔액을 바꾸는 입구는 `Wallet.record()` 하나다. 반환값이 곧 저장할 원장 엔트리라, 원장을 빠뜨리는
   호출이 존재할 수 없다. 부호는 `Money` 가 아니라 `LedgerEntryType.direction` 이 나른다
   (`Money` 는 음수를 못 갖는다). 부호 있는 `Long` 이 도메인에 들어오는 자리는 `Adjustment` 하나뿐이다

@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional
 
 /**
  * 핸드가 진행 중이면 기립을 거부한다(going south 방지) — "퇴장 예약" 메커니즘은 만들지 않는다,
- * 연결 끊김 타이머는 4단계(홀덤 WS) 몫이다. 기립은 핸드가 없을 때만 일어나므로, 그 뒤
+ * 연결 끊김 타이머는 홀덤 WS 몫이다. 기립은 핸드가 없을 때만 일어나므로, 그 뒤
  * HandStarter.rescheduleOnExit 를 불러 카운트다운을 정리한다(후보 2명 미만이면 취소, 아니면
  * 그대로 둔다 — 기립은 카운트다운을 리셋하지 않는다).
  */

@@ -61,7 +61,7 @@ data class HandResult(
 }
 
 /**
- * 한 핸드(딜부터 정산까지)의 진행. 좌석·테이블은 이 안에 없다(3단계 이전) — 시작 스택과 버튼
+ * 한 핸드(딜부터 정산까지)의 진행. 좌석·테이블은 이 안에 없다 — 시작 스택과 버튼
  * 좌석 번호만 받는다. 포지션 계산은 [start] 에서 한 번 정해서 프리플랍/포스트플랍 각각의
  * 첫 행동 좌석으로 고정한다 — 스트리트마다 다시 계산하지 않는다.
  */
@@ -292,7 +292,6 @@ class Hand private constructor(
 
             val seatNos = stacks.keys.sorted()
 
-            // 불변식 가드 — 있을 수 없는 상태는 조용히 넘어가지 않고 바로 터뜨린다.
             if (seatNos.size == 2) {
                 check(buttonSeatNo == smallBlindSeatNo) {
                     "헤즈업은 버튼이 SB 를 겸해야 한다: buttonSeatNo=$buttonSeatNo, smallBlindSeatNo=$smallBlindSeatNo"

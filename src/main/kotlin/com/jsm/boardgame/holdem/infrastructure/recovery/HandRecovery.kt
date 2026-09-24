@@ -39,14 +39,13 @@ import java.util.concurrent.atomic.AtomicLong
  * 것과 같은 이벤트다.
  *
  * `ConnectionTimer` 는 복구 유예 중인 사용자에게 평소의 연결 타이머를 걸지 않아야 한다(서버가
- * 죽어있던 시간은 플레이어 책임이 아니다). 예전에는 `ConnectionTimer` 가 `isAwaitingRecovery` 로
- * 이 컴포넌트에 물어보는 pull 방식이었는데, 복구가 끝났을 때 안 돌아온 사람에게 연결 타이머를
- * *새로* 걸어야 하는 요구(이 컴포넌트가 `ConnectionTimer` 를 불러야 한다)와 합치면 순환 빈
- * 의존이 된다. 그래서 방향을 뒤집었다 - 이 컴포넌트가 [beginRecovery] 에서
- * `ConnectionTimer.suspendWatch` 로 복구 대상을 미리 알리고(push), [completeRecovery] 에서
- * 결과에 따라 `ConnectionTimer.cancelWatch`(돌아온 사람) / `ConnectionTimer.beginWatch`(안 돌아온
- * 사람) 로 반영한다. 새 포트 인터페이스는 두지 않는다 - 둘 다 같은 infrastructure 계층의 구체
- * 타입이라 직접 의존으로 충분하다.
+ * 죽어있던 시간은 플레이어 책임이 아니다). pull 방식(`ConnectionTimer` 가 `isAwaitingRecovery` 로
+ * 조회)은 복구가 끝났을 때 안 돌아온 사람에게 연결 타이머를 *새로* 걸어야 하는 요구(이 컴포넌트가
+ * `ConnectionTimer` 를 불러야 한다)와 합치면 순환 빈 의존이 된다. 그래서 이 컴포넌트가
+ * [beginRecovery] 에서 `ConnectionTimer.suspendWatch` 로 복구 대상을 미리 알리고(push),
+ * [completeRecovery] 에서 결과에 따라 `ConnectionTimer.cancelWatch`(돌아온 사람) /
+ * `ConnectionTimer.beginWatch`(안 돌아온 사람) 로 반영한다. 새 포트 인터페이스는 두지 않는다 -
+ * 둘 다 같은 infrastructure 계층의 구체 타입이라 직접 의존으로 충분하다.
  *
  * 첫 INSERT(=`HandStore.save` 첫 호출) 전에 죽으면 `holdem_hand_in_progress` 에 행이 아예 없다.
  * 이때 애그리거트(HoldemTable)의 좌석 스택은 핸드 시작 전 값 그대로다 - 핸드가 있었다는 흔적

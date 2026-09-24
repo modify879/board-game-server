@@ -95,8 +95,6 @@ class HoldemStompIntegrationTest {
 
     private val stompClient = WebSocketStompClient(StandardWebSocketClient())
 
-    // ---------- REST 로 사용자/테이블/좌석을 준비하는 헬퍼 (HoldemApiIntegrationTest 와 동일한 방식) ----------
-
     private fun uniqueUsername(): String =
         "u" + UUID.randomUUID().toString().replace("-", "").take(9).lowercase()
 
@@ -211,8 +209,6 @@ class HoldemStompIntegrationTest {
         }
     }
 
-    // ---------- 만료 토큰을 직접 발급하는 헬퍼 (JwtTokenIssuer 와 같은 방식, 과거 시각으로 발급) ----------
-
     private fun expiredTokenFor(userId: Long): String {
         val secretKey = SecretKeySpec(jwtProperties.secret.toByteArray(Charsets.UTF_8), "HmacSHA256")
         val encoder = NimbusJwtEncoder(ImmutableSecret(secretKey))
@@ -227,8 +223,6 @@ class HoldemStompIntegrationTest {
             JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims),
         ).tokenValue
     }
-
-    // ---------- STOMP 연결/구독 헬퍼 ----------
 
     private class CapturingStompSessionHandler : StompSessionHandlerAdapter() {
         val errorFrames = LinkedBlockingQueue<StompHeaders>()
@@ -259,8 +253,6 @@ class HoldemStompIntegrationTest {
         }
         return session to handler
     }
-
-    // ---------- CONNECT 인증 ----------
 
     @Test
     fun `유효한 토큰으로 CONNECT 하면 연결된다`() {
@@ -303,8 +295,6 @@ class HoldemStompIntegrationTest {
         val errorHeaders = handler.errorFrames.poll(5, TimeUnit.SECONDS)
         assertThat(errorHeaders?.getFirst("errorCode")).isEqualTo("AUTHENTICATION_REQUIRED")
     }
-
-    // ---------- SUBSCRIBE 인가: 공개 채널 ----------
 
     @Test
     fun `착석한 테이블의 topic 을 구독하면 성공한다`() {
@@ -357,8 +347,6 @@ class HoldemStompIntegrationTest {
         assertThat(errorHeaders?.getFirst("errorCode")).isEqualTo("ACCESS_DENIED")
     }
 
-    // ---------- SUBSCRIBE 인가: 개인 채널 ----------
-
     @Test
     fun `자기 개인 큐를 구독하면 성공한다`() {
         val seated = seatNewUser()
@@ -406,8 +394,6 @@ class HoldemStompIntegrationTest {
         val errorHeaders = handler.errorFrames.poll(5, TimeUnit.SECONDS)
         assertThat(errorHeaders?.getFirst("errorCode")).isEqualTo("ACCESS_DENIED")
     }
-
-    // ---------- 좌석별 페이로드 ----------
 
     @Test
     fun `구독 중에 핸드를 시작하면 각자 개인 큐로 자기 홀카드만 담긴 페이로드를 받고 공개 채널 원문에는 어느 쪽 카드도 없다`() {
@@ -563,8 +549,6 @@ class HoldemStompIntegrationTest {
         sessionA.disconnect()
         sessionB.disconnect()
     }
-
-    // ---------- 세션 재검증 스윕 ----------
 
     @Test
     fun `로그아웃한 토큰으로 연결된 세션은 재검증 스윕에서 끊긴다`() {
