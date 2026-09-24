@@ -351,6 +351,30 @@ class HoldemStompIntegrationTest {
         assertThat(errorHeaders?.getFirst("errorCode")).isEqualTo("ACCESS_DENIED")
     }
 
+    @Test
+    fun `원시 queue 목적지를 직접 구독하면 거부되고 ACCESS_DENIED 를 응답한다`() {
+        val seated = seatNewUser()
+        val (session, handler) = tryConnect(seated.accessToken)
+        checkNotNull(session)
+
+        session.subscribe("/queue/tables/${seated.tableId}-user${UUID.randomUUID()}", noOpFrameHandler())
+
+        val errorHeaders = handler.errorFrames.poll(5, TimeUnit.SECONDS)
+        assertThat(errorHeaders?.getFirst("errorCode")).isEqualTo("ACCESS_DENIED")
+    }
+
+    @Test
+    fun `테이블 id 가 파싱되지 않는 개인 큐 목적지를 구독하면 거부되고 ACCESS_DENIED 를 응답한다`() {
+        val seated = seatNewUser()
+        val (session, handler) = tryConnect(seated.accessToken)
+        checkNotNull(session)
+
+        session.subscribe("/user/queue/tables/99999999999999999999", noOpFrameHandler())
+
+        val errorHeaders = handler.errorFrames.poll(5, TimeUnit.SECONDS)
+        assertThat(errorHeaders?.getFirst("errorCode")).isEqualTo("ACCESS_DENIED")
+    }
+
     // ---------- 좌석별 페이로드 ----------
 
     @Test

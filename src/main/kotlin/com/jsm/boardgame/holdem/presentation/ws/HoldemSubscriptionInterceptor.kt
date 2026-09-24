@@ -41,7 +41,13 @@ class HoldemSubscriptionInterceptor(
         if (accessor.command != StompCommand.SUBSCRIBE) return message
 
         val destination = accessor.destination ?: return message
-        val tableId = HoldemDestinations.tableIdOf(destination) ?: return message
+        if (!HoldemDestinations.looksLikeTableDestination(destination)) return message
+
+        val tableId = HoldemDestinations.tableIdOf(destination)
+            ?: run {
+                log.warn("subscribe rejected: malformed table destination={}", destination)
+                throw PermissionDeniedException("잘못된 테이블 목적지다")
+            }
 
         val userId = accessor.user?.name?.toLongOrNull()
             ?: run {

@@ -7,11 +7,14 @@ package com.jsm.boardgame.holdem.presentation.ws
  */
 object HoldemDestinations {
 
+    private const val TOPIC_PREFIX = "/topic/tables/"
+    private const val PRIVATE_QUEUE_PREFIX = "/user/queue/tables/"
+
     private val TABLE_ID_PATTERN = Regex("""^/(?:topic|user/queue)/tables/(\d+)$""")
 
-    fun publicTopicOf(tableId: Long): String = "/topic/tables/$tableId"
+    fun publicTopicOf(tableId: Long): String = "$TOPIC_PREFIX$tableId"
 
-    fun privateQueueOf(tableId: Long): String = "/user/queue/tables/$tableId"
+    fun privateQueueOf(tableId: Long): String = "$PRIVATE_QUEUE_PREFIX$tableId"
 
     /**
      * convertAndSendToUser 에 넘길 목적지. 그 메서드는 "/user" 프리픽스를 스스로 붙이므로,
@@ -25,5 +28,13 @@ object HoldemDestinations {
         TABLE_ID_PATTERN.find(destination)?.groupValues?.get(1)?.toLongOrNull()
 
     /** 목적지가 개인 큐(/user/queue/tables/{id})인지. 공개 토픽과 개인 큐를 인가 정책에서 가르는 데 쓴다. */
-    fun isPrivateQueue(destination: String): Boolean = destination.startsWith("/user/queue/")
+    fun isPrivateQueue(destination: String): Boolean = destination.startsWith(PRIVATE_QUEUE_PREFIX)
+
+    /**
+     * 목적지가 홀덤 테이블 구독처럼 보이는지 — tableId 파싱 성공 여부와 무관하다.
+     * 인터셉터가 "홀덤 목적지인데 형식이 깨졌다(오버플로·와일드카드·꼬리 세그먼트 등)"와
+     * "애초에 홀덤 목적지가 아니다"를 구분해 전자만 거부(fail-closed)하는 데 쓴다.
+     */
+    fun looksLikeTableDestination(destination: String): Boolean =
+        destination.startsWith(TOPIC_PREFIX) || destination.startsWith(PRIVATE_QUEUE_PREFIX)
 }
