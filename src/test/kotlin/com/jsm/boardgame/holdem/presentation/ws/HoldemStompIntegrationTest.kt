@@ -60,7 +60,7 @@ import javax.crypto.spec.SecretKeySpec
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
-@TestPropertySource(properties = ["app.holdem.next-hand-delay=1h"])
+@TestPropertySource(properties = ["app.holdem.next-hand-delay=1h", "app.holdem.reveal-timeout=1h"])
 class HoldemStompIntegrationTest {
 
     @Autowired

@@ -5,6 +5,8 @@ import com.jsm.boardgame.holdem.application.exception.HandNotFoundException
 import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
 import com.jsm.boardgame.holdem.application.exception.UnknownActionException
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.OpenShowdown
+import com.jsm.boardgame.holdem.application.port.ShowdownStore
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.exception.IllegalBettingActionException
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
@@ -70,15 +72,24 @@ private class PlayActionFakeHandStore : HandStore {
     override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
 }
 
+private class PlayActionFakeShowdownStore : ShowdownStore {
+    private val store = mutableMapOf<Long, OpenShowdown>()
+    override fun find(tableId: TableId): OpenShowdown? = store[tableId.value]
+    override fun save(tableId: TableId, showdown: OpenShowdown) { store[tableId.value] = showdown }
+    override fun remove(tableId: TableId) { store.remove(tableId.value) }
+}
+
 class PlayActionServiceTest {
 
     private val tables = PlayActionFakeTableRepository()
     private val handStore = PlayActionFakeHandStore()
+    private val showdownStore = PlayActionFakeShowdownStore()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
     private val clock: Clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
     private val nextHandDelay: Duration = Duration.ofSeconds(5)
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
+    private val revealTimeout: Duration = Duration.ofSeconds(10)
+    private val handSettler = HandSettler(tables, handStore, showdownStore, eventPublisher, clock, nextHandDelay, revealTimeout)
     private val service = PlayActionService(tables, handStore, handSettler, eventPublisher)
 
     /** userId = seatNo * 1000 으로 대응시킨다. */

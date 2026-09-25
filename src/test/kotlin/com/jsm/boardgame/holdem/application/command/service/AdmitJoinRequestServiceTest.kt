@@ -2,6 +2,8 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestCommand
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.OpenShowdown
+import com.jsm.boardgame.holdem.application.port.ShowdownStore
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
@@ -93,18 +95,27 @@ private class AdmitJoinRequestFakeWalletTransfer(private val failingUserIds: Set
     }
 }
 
+private class AdmitJoinRequestFakeShowdownStore : ShowdownStore {
+    private val store = mutableMapOf<Long, OpenShowdown>()
+    override fun find(tableId: TableId): OpenShowdown? = store[tableId.value]
+    override fun save(tableId: TableId, showdown: OpenShowdown) { store[tableId.value] = showdown }
+    override fun remove(tableId: TableId) { store.remove(tableId.value) }
+}
+
 class AdmitJoinRequestServiceTest {
 
     private val tables = AdmitJoinRequestFakeTableRepository()
     private val handStore = AdmitJoinRequestFakeHandStore()
+    private val showdownStore = AdmitJoinRequestFakeShowdownStore()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
     private val fixedInstant: Instant = Instant.parse("2026-01-01T00:00:00Z")
     private val clock: Clock = Clock.fixed(fixedInstant, ZoneOffset.UTC)
     private val nextHandDelay: Duration = Duration.ofSeconds(5)
+    private val revealTimeout: Duration = Duration.ofSeconds(10)
     private val walletTransfer = AdmitJoinRequestFakeWalletTransfer()
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
-    private val handStarter = HandStarter(tables, handStore, identityShuffler, handSettler, eventPublisher, clock, nextHandDelay)
+    private val handSettler = HandSettler(tables, handStore, showdownStore, eventPublisher, clock, nextHandDelay, revealTimeout)
+    private val handStarter = HandStarter(tables, handStore, showdownStore, identityShuffler, handSettler, eventPublisher, clock, nextHandDelay)
     private val service = AdmitJoinRequestService(tables, handStore, walletTransfer, handStarter)
 
     private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): TableId {

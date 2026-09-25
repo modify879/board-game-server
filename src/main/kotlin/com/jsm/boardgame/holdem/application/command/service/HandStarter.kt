@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.ShowdownStore
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
@@ -27,6 +28,7 @@ import java.time.Instant
 class HandStarter(
     private val tables: HoldemTableRepository,
     private val handStore: HandStore,
+    private val showdownStore: ShowdownStore,
     private val shuffler: Shuffler,
     private val handSettler: HandSettler,
     private val eventPublisher: ApplicationEventPublisher,
@@ -40,6 +42,9 @@ class HandStarter(
         if (candidateSeatNos.size < 2) {
             return false
         }
+
+        // 새 핸드가 실제로 시작되면 남은 공개 선택 창은 닫는다.
+        showdownStore.remove(tableId)
 
         table.clearNextHand()
 
@@ -110,11 +115,15 @@ class HandStarter(
     }
 
     /** 착석처럼 "들어오는" 좌석 변화 뒤에 부른다(호출 전에 핸드가 없음을 호출자가 확인한다).
-     *  후보가 2명 이상이면 카운트다운을 지금부터 다시 [nextHandDelay] 뒤로 리셋한다 — 이미 걸려
-     *  있던 시각도 덮어쓴다. 저장과 브로드캐스트까지 이 메서드가 책임진다. */
+     *  후보가 2명 이상이면 카운트다운을 [nextHandDelay] 뒤로 당긴다 — 단, 기존 nextHandAt 이 더 늦으면
+     *  줄이지 않는다(`max(기존, now + nextHandDelay)`). 쇼다운 공개 선택 창이 열려 있어 그보다 늦게
+     *  예약돼 있을 수 있는데, 착석이 그 창을 5초로 깎아 먹으면 안 된다. 저장과 브로드캐스트까지 이
+     *  메서드가 책임진다. */
     fun rescheduleOnEntry(tableId: TableId, table: HoldemTable) {
         if (table.candidateSeatNos().size >= 2) {
-            table.scheduleNextHand(Instant.now(clock).plus(nextHandDelay))
+            val proposed = Instant.now(clock).plus(nextHandDelay)
+            val existing = table.nextHandAt
+            table.scheduleNextHand(if (existing != null && existing.isAfter(proposed)) existing else proposed)
         }
         tables.save(table)
         eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, null))

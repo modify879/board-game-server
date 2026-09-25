@@ -47,6 +47,8 @@ fun publicViewOf(tableId: TableId, table: HoldemTable, hand: Hand?): TablePublic
         result = hand?.let { h -> h.result?.let { r -> handResultPublicViewOf(h, r) } },
         pendingSeatNos = table.pendingSeatNos().sorted(),
         nextHandAt = table.nextHandAt,
+        awaitingRevealSeatNos = hand?.awaitingRevealSeatNos?.sorted() ?: emptyList(),
+        revealDeadline = hand?.revealDeadline?.takeIf { hand.awaitingRevealSeatNos.isNotEmpty() },
     )
 }
 
@@ -55,7 +57,7 @@ private fun handResultPublicViewOf(hand: Hand, result: HandResult): HandResultPu
         .filterValues { it.isPositive() }
         .toSortedMap()
         .map { (seatNo, amount) -> PayoutPublicView(seatNo, amount.amount) }
-    val shownHands = result.showdownOrder.filter { it in result.shownSeatNos }.map { seatNo ->
+    val shownHands = result.showdownOrder.filter { it in hand.shownSeatNos }.map { seatNo ->
         ShownHandView(
             seatNo = seatNo,
             holeCards = hand.holeCardsOf(seatNo).map(Card::toString),

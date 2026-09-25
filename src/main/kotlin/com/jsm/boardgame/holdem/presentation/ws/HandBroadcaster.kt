@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
+import com.jsm.boardgame.holdem.application.port.ShowdownStore
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
@@ -21,6 +22,7 @@ import org.springframework.transaction.event.TransactionalEventListener
 class HandBroadcaster(
     private val messagingTemplate: SimpMessagingTemplate,
     private val userRegistry: SimpUserRegistry,
+    private val showdownStore: ShowdownStore,
 ) {
 
     /**
@@ -33,9 +35,13 @@ class HandBroadcaster(
     }
 
     fun publish(tableId: TableId, table: HoldemTable, hand: Hand?) {
+        // 진행 중 핸드가 없어도(hand == null) 쇼다운 공개 선택 창이 열려 있으면 그 핸드로 공개 뷰를
+        // 채운다 — 안 그러면 창이 열린 동안의 착석·기립 브로드캐스트가 결과와 선택 대기 표시를 지운다.
+        // 개인 뷰 전송은 아래에서 원래 hand(null 이면 아무에게도 안 보낸다) 그대로 쓴다.
+        val publicHand = hand ?: showdownStore.find(tableId)?.hand
         messagingTemplate.convertAndSend(
             HoldemDestinations.publicTopicOf(tableId.value),
-            publicViewOf(tableId, table, hand),
+            publicViewOf(tableId, table, publicHand),
         )
 
         hand ?: return

@@ -5,6 +5,8 @@ import com.jsm.boardgame.holdem.application.command.usecase.SitDownOutcome
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
 import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.OpenShowdown
+import com.jsm.boardgame.holdem.application.port.ShowdownStore
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
@@ -85,16 +87,25 @@ private class SitDownFakeWalletTransfer : WalletTransfer {
     }
 }
 
+private class SitDownFakeShowdownStore : ShowdownStore {
+    private val store = mutableMapOf<Long, OpenShowdown>()
+    override fun find(tableId: TableId): OpenShowdown? = store[tableId.value]
+    override fun save(tableId: TableId, showdown: OpenShowdown) { store[tableId.value] = showdown }
+    override fun remove(tableId: TableId) { store.remove(tableId.value) }
+}
+
 class SitDownServiceTest {
 
     private val tables = SitDownFakeHoldemTableRepository()
     private val handStore = SitDownFakeHandStore()
+    private val showdownStore = SitDownFakeShowdownStore()
     private val walletTransfer = SitDownFakeWalletTransfer()
     private val eventPublisher = ApplicationEventPublisher { }
     private val clock: Clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
     private val nextHandDelay: Duration = Duration.ofSeconds(5)
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
-    private val handStarter = HandStarter(tables, handStore, Shuffler { it }, handSettler, eventPublisher, clock, nextHandDelay)
+    private val revealTimeout: Duration = Duration.ofSeconds(10)
+    private val handSettler = HandSettler(tables, handStore, showdownStore, eventPublisher, clock, nextHandDelay, revealTimeout)
+    private val handStarter = HandStarter(tables, handStore, showdownStore, Shuffler { it }, handSettler, eventPublisher, clock, nextHandDelay)
     private val service = SitDownService(tables, handStore, walletTransfer, handStarter, clock)
 
     private fun createTable(): TableId = tables.save(HoldemTable.create("테스트 테이블")).id!!
@@ -259,5 +270,22 @@ class SitDownServiceTest {
 
         assertEquals(SitDownOutcome.SEATED, second)
         assertTrue(tables.findById(tableId)!!.nextHandAt != null)
+    }
+
+    @Test
+    fun `카운트다운 리셋은 이미 걸린 더 늦은 nextHandAt 을 줄이지 않는다`() {
+        val tableId = createTable()
+        service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, seatNo = 1, buyIn = 8_000))
+        service.sitDown(SitDownCommand(tableId = tableId.value, userId = 2, seatNo = 2, buyIn = 8_000))
+
+        // 쇼다운 공개 선택 창 등으로 이미 5초보다 훨씬 뒤로 예약돼 있다고 가정한다.
+        val farFuture = Instant.now(clock).plusSeconds(3_600)
+        var table = tables.findById(tableId)!!
+        table.scheduleNextHand(farFuture)
+        tables.save(table)
+
+        service.sitDown(SitDownCommand(tableId = tableId.value, userId = 3, seatNo = 3, buyIn = 8_000))
+
+        assertEquals(farFuture, tables.findById(tableId)!!.nextHandAt)
     }
 }
