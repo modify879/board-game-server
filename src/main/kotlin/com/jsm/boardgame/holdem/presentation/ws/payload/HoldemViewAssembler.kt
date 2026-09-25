@@ -13,7 +13,7 @@ import com.jsm.boardgame.holdem.domain.model.TableId
  *
  * 스프링 타입을 하나도 받지 않는다 — 그래서 스프링 없이 단위 테스트할 수 있다.
  */
-fun publicViewOf(tableId: TableId, table: HoldemTable, hand: Hand?): TablePublicView {
+fun publicViewOf(tableId: TableId, table: HoldemTable, hand: Hand?, seq: Long): TablePublicView {
     val seats = table.occupiedSeats().map { seat ->
         if (hand != null && seat.seatNo in hand.seatNos) {
             SeatPublicView(
@@ -47,6 +47,7 @@ fun publicViewOf(tableId: TableId, table: HoldemTable, hand: Hand?): TablePublic
         result = hand?.let { h -> h.result?.let { r -> handResultPublicViewOf(h, r) } },
         pendingSeatNos = table.pendingSeatNos().sorted(),
         nextHandAt = table.nextHandAt,
+        seq = seq,
     )
 }
 
@@ -66,7 +67,7 @@ private fun handResultPublicViewOf(hand: Hand, result: HandResult): HandResultPu
 }
 
 /** [seatNo] 자신의 홀카드와 지금 할 수 있는 행동만 담는다. 다른 좌석의 카드는 이 함수의 인자로도 들어오지 않는다. */
-fun privateViewOf(tableId: TableId, seatNo: Int, hand: Hand): SeatPrivateView =
+fun privateViewOf(tableId: TableId, seatNo: Int, hand: Hand, seq: Long): SeatPrivateView =
     SeatPrivateView(
         tableId = tableId.value,
         seatNo = seatNo,
@@ -79,4 +80,5 @@ fun privateViewOf(tableId: TableId, seatNo: Int, hand: Hand): SeatPrivateView =
                 maxRaiseTo = actions.maxRaiseTo?.amount,
             )
         },
+        seq = seq,
     )
