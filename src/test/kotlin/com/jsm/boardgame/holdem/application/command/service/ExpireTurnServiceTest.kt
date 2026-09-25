@@ -2,8 +2,6 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
 import com.jsm.boardgame.holdem.application.port.HandStore
-import com.jsm.boardgame.holdem.application.port.OpenShowdown
-import com.jsm.boardgame.holdem.application.port.ShowdownStore
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -70,13 +68,6 @@ private class ExpireTurnFakeHandStore : HandStore {
     override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
 }
 
-private class ExpireTurnFakeShowdownStore : ShowdownStore {
-    private val store = mutableMapOf<Long, OpenShowdown>()
-    override fun find(tableId: TableId): OpenShowdown? = store[tableId.value]
-    override fun save(tableId: TableId, showdown: OpenShowdown) { store[tableId.value] = showdown }
-    override fun remove(tableId: TableId) { store.remove(tableId.value) }
-}
-
 private class ExpireTurnFakeWalletTransfer : WalletTransfer {
     data class FromGameCall(val userId: Long, val amount: Long, val tableId: Long, val memo: String?)
 
@@ -95,14 +86,12 @@ class ExpireTurnServiceTest {
 
     private val tables = ExpireTurnFakeTableRepository()
     private val handStore = ExpireTurnFakeHandStore()
-    private val showdownStore = ExpireTurnFakeShowdownStore()
     private val walletTransfer = ExpireTurnFakeWalletTransfer()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
     private val clock: Clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
     private val nextHandDelay: Duration = Duration.ofSeconds(5)
-    private val revealTimeout: Duration = Duration.ofSeconds(10)
-    private val handSettler = HandSettler(tables, handStore, showdownStore, eventPublisher, clock, nextHandDelay, revealTimeout)
+    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
     private val service = ExpireTurnService(tables, handStore, handSettler, walletTransfer, eventPublisher)
 
     /** userId = seatNo * 1000 으로 대응시킨다. */

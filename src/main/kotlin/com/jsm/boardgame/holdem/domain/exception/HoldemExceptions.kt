@@ -30,6 +30,3 @@ class NotSeatedException(logMessage: String) : BusinessException(HoldemErrorCode
 class BuyInOutOfRangeException(logMessage: String) : BusinessException(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, logMessage)
 class ConcurrentTableUpdateException(logMessage: String) : BusinessException(HoldemErrorCode.CONCURRENT_TABLE_UPDATE, logMessage)
 class JoinRequestNotFoundException(logMessage: String) : BusinessException(HoldemErrorCode.JOIN_REQUEST_NOT_FOUND, logMessage)
-
-/** 공개 선택 창이 없거나(정산 직후가 아니거나 만료됨) 그 창의 대상 좌석이 아닐 때(RevealHandService). */
-class RevealNotAllowedException(logMessage: String) : BusinessException(HoldemErrorCode.REVEAL_NOT_ALLOWED, logMessage)

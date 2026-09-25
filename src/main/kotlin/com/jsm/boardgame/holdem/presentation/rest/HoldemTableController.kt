@@ -5,13 +5,11 @@ import com.jsm.boardgame.holdem.application.command.usecase.CancelJoinRequestCom
 import com.jsm.boardgame.holdem.application.command.usecase.CancelJoinRequestUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.CreateTableUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.PlayActionUseCase
-import com.jsm.boardgame.holdem.application.command.usecase.RevealHandUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.SitDownOutcome
 import com.jsm.boardgame.holdem.application.command.usecase.SitDownUseCase
 import com.jsm.boardgame.holdem.application.query.service.HoldemTableQueryService
 import com.jsm.boardgame.holdem.presentation.rest.request.CreateTableRequest
 import com.jsm.boardgame.holdem.presentation.rest.request.PlayActionRequest
-import com.jsm.boardgame.holdem.presentation.rest.request.RevealRequest
 import com.jsm.boardgame.holdem.presentation.rest.request.SitDownRequest
 import com.jsm.boardgame.holdem.presentation.rest.response.TableCreatedResponse
 import com.jsm.boardgame.holdem.presentation.rest.response.TableSummaryResponse
@@ -39,7 +37,6 @@ class HoldemTableController(
     private val sitDownUseCase: SitDownUseCase,
     private val cancelJoinRequestUseCase: CancelJoinRequestUseCase,
     private val playActionUseCase: PlayActionUseCase,
-    private val revealHandUseCase: RevealHandUseCase,
     private val holdemTableQueryService: HoldemTableQueryService,
 ) {
 
@@ -70,13 +67,6 @@ class HoldemTableController(
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun playAction(@AuthenticationPrincipal jwt: Jwt, @PathVariable tableId: Long, @RequestBody request: PlayActionRequest) {
         playActionUseCase.play(request.toCommand(tableId, jwt.requireUserId()))
-    }
-
-    // 쇼다운에서 진 좌석의 SHOW/MUCK 선택. 승자는 자동 공개라 이 엔드포인트를 쓰지 않는다.
-    @PostMapping("/{tableId}/hands/reveal")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    fun reveal(@AuthenticationPrincipal jwt: Jwt, @PathVariable tableId: Long, @RequestBody request: RevealRequest) {
-        revealHandUseCase.reveal(request.toCommand(tableId, jwt.requireUserId()))
     }
 }
 
