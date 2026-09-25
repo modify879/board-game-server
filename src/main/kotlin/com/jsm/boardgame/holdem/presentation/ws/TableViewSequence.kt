@@ -9,9 +9,6 @@ import java.util.concurrent.atomic.AtomicLong
  * 테이블별 브로드캐스트 순번. 메모리 전용이다 — 재시작하면 0부터 다시 세지만, 재시작은 모든
  * 소켓을 끊어버리므로 클라이언트는 재구독(재접속 포함) 시 채널별 last seq 를 리셋한다
  * (TablePublicView 의 KDoc 에 적은 클라이언트 계약).
- *
- * // ponytail: 단일 인스턴스 전제 — 인스턴스가 둘 이상이면 인스턴스마다 순번이 따로 늘어 순서
- * 보장이 깨진다. 스케일아웃하면 DB(또는 Redis) 순번으로 옮겨야 한다.
  */
 @Component
 class TableViewSequence {
