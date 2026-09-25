@@ -32,7 +32,6 @@ import org.springframework.messaging.simp.stomp.StompFrameHandler
 import org.springframework.messaging.simp.stomp.StompHeaders
 import org.springframework.messaging.simp.stomp.StompSession
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter
-import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
@@ -60,13 +59,12 @@ import java.util.concurrent.TimeUnit
  * 있는 카드를 그 순서대로 앞에 두고 나머지를 뒤에 붙인다. 이러면 몇 번을 다시 섞어도(재구성해도)
  * 우선순위 카드들의 상대 순서가 항상 그대로 유지된다.
  *
- * next-hand-delay 를 1시간으로 늘려 실제 5초 타이머가 우연히 발화하지 않게 한다 — 다른 holdem
- * 통합 테스트와 같은 이유(HoldemApiIntegrationTest 참고).
+ * build.gradle.kts 가 테스트 전역으로 1h 를 준다 — 실제 5초 타이머가 우연히 발화하지 않는다.
+ * 다른 holdem 통합 테스트와 같은 이유(HoldemApiIntegrationTest 참고).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
-@TestPropertySource(properties = ["app.holdem.next-hand-delay=1h"])
 class HoldemShowdownIntegrationTest {
 
     @TestConfiguration(proxyBeanMethods = false)
