@@ -5,6 +5,8 @@ data class SeatPrivateView(
     val seatNo: Int,
     val holeCards: List<String>,
     val availableActions: AvailableActionsView?,
+    /** 테이블별 단조 증가 순번. 클라이언트 계약은 [TablePublicView.seq] 참고. */
+    val seq: Long,
 )
 
 data class AvailableActionsView(

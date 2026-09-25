@@ -41,7 +41,7 @@ class HoldemViewAssemblerTest {
     fun `핸드가 없으면 공개 뷰는 진행 중이 아니고 좌석은 SITTING_OUT 이다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
 
-        val view = publicViewOf(TableId(1), table, null)
+        val view = publicViewOf(TableId(1), table, null, 1L)
 
         assertFalse(view.handInProgress)
         assertNull(view.street)
@@ -60,7 +60,7 @@ class HoldemViewAssemblerTest {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         table.markPresence(100, SeatPresence.DISCONNECTED)
 
-        val view = publicViewOf(TableId(1), table, null)
+        val view = publicViewOf(TableId(1), table, null, 1L)
 
         assertEquals("DISCONNECTED", view.seats.first { it.seatNo == 1 }.presence)
         assertEquals("SEATED", view.seats.first { it.seatNo == 2 }.presence)
@@ -81,8 +81,8 @@ class HoldemViewAssemblerTest {
             fixedShuffler("3s", "2s", "5s", "4s"),
         )
 
-        val viewA = privateViewOf(TableId(1), 1, hand)
-        val viewB = privateViewOf(TableId(1), 2, hand)
+        val viewA = privateViewOf(TableId(1), 1, hand, 1L)
+        val viewB = privateViewOf(TableId(1), 2, hand, 1L)
 
         assertEquals(listOf("2s", "4s"), viewA.holeCards)
         assertEquals(listOf("3s", "5s"), viewB.holeCards)
@@ -107,7 +107,7 @@ class HoldemViewAssemblerTest {
 
         hand.act(toAct, BettingAction.Fold)
 
-        val view = publicViewOf(TableId(1), table, hand)
+        val view = publicViewOf(TableId(1), table, hand, 1L)
         assertFalse(hand.isFinished)
         assertTrue(view.handInProgress)
         assertEquals("FOLDED", view.seats.first { it.seatNo == toAct }.status)
@@ -135,7 +135,7 @@ class HoldemViewAssemblerTest {
         )
 
         assertTrue(hand.isFinished)
-        val view = publicViewOf(TableId(1), table, hand)
+        val view = publicViewOf(TableId(1), table, hand, 1L)
         assertFalse(view.handInProgress)
         assertNull(view.toActSeatNo)
         assertTrue(view.seats.all { it.status == "ALL_IN" })
@@ -159,7 +159,7 @@ class HoldemViewAssemblerTest {
 
         hand.act(hand.toActSeatNo!!, BettingAction.Fold)
 
-        val view = publicViewOf(TableId(1), table, hand)
+        val view = publicViewOf(TableId(1), table, hand, 1L)
 
         val result = view.result!!
         assertEquals(listOf(PayoutPublicView(seatNo = 2, amount = 300)), result.payouts)
@@ -197,7 +197,7 @@ class HoldemViewAssemblerTest {
         hand.act(2, BettingAction.Call) // B가 콜 -> 쇼다운
 
         assertEquals(1, hand.showdownLeaderSeatNo)
-        val view = publicViewOf(TableId(1), table, hand)
+        val view = publicViewOf(TableId(1), table, hand, 1L)
 
         val result = view.result!!
         assertEquals(
@@ -235,7 +235,7 @@ class HoldemViewAssemblerTest {
         hand.act(2, BettingAction.Call)
 
         assertEquals(1, hand.showdownLeaderSeatNo)
-        val view = publicViewOf(TableId(1), table, hand)
+        val view = publicViewOf(TableId(1), table, hand, 1L)
         val json = objectMapper.writeValueAsString(view)
 
         val result = view.result!!
@@ -274,7 +274,7 @@ class HoldemViewAssemblerTest {
         }
 
         assertNull(hand.showdownLeaderSeatNo) // 리버에 벳/레이즈가 없었다
-        val view = publicViewOf(TableId(1), table, hand)
+        val view = publicViewOf(TableId(1), table, hand, 1L)
 
         val result = view.result!!
         // 버튼(1) 다음 좌석(2, BB)부터 공개 — KK 인 2가 먼저 보여주고 나면, AA 인 1이 이겨서 뒤이어 보여준다.
@@ -312,7 +312,7 @@ class HoldemViewAssemblerTest {
         }
 
         assertNull(hand.showdownLeaderSeatNo)
-        val view = publicViewOf(TableId(1), table, hand)
+        val view = publicViewOf(TableId(1), table, hand, 1L)
 
         val result = view.result!!
         // 버튼(1) 다음부터: 2(JJ, 약한 패, 먼저 공개) -> 3(QQ, JJ를 이겨 공개) -> 1(KK, 둘 다 이겨 공개)
@@ -351,7 +351,7 @@ class HoldemViewAssemblerTest {
         }
 
         assertNull(hand.showdownLeaderSeatNo)
-        val view = publicViewOf(TableId(1), table, hand)
+        val view = publicViewOf(TableId(1), table, hand, 1L)
         val json = objectMapper.writeValueAsString(view)
 
         val result = view.result!!
@@ -395,7 +395,7 @@ class HoldemViewAssemblerTest {
         }
 
         assertNull(hand.showdownLeaderSeatNo) // 포스트플랍 전부 체크
-        val view = publicViewOf(TableId(1), table, hand)
+        val view = publicViewOf(TableId(1), table, hand, 1L)
         val json = objectMapper.writeValueAsString(view)
 
         val result = view.result!!
@@ -428,9 +428,9 @@ class HoldemViewAssemblerTest {
         )
         val toAct = hand.toActSeatNo!!
 
-        val actingView = privateViewOf(TableId(1), toAct, hand)
+        val actingView = privateViewOf(TableId(1), toAct, hand, 1L)
         val otherSeatNo = hand.seatNos.first { it != toAct }
-        val otherView = privateViewOf(TableId(1), otherSeatNo, hand)
+        val otherView = privateViewOf(TableId(1), otherSeatNo, hand, 1L)
 
         assertTrue(actingView.availableActions != null)
         assertNull(otherView.availableActions)
@@ -451,7 +451,7 @@ class HoldemViewAssemblerTest {
         )
         hand.act(hand.toActSeatNo!!, BettingAction.Fold)
 
-        val view = privateViewOf(TableId(1), 1, hand)
+        val view = privateViewOf(TableId(1), 1, hand, 1L)
 
         assertNull(view.availableActions)
     }
@@ -462,11 +462,32 @@ class HoldemViewAssemblerTest {
         val scheduledTime = Instant.parse("2026-09-24T12:30:45Z")
         table.scheduleNextHand(scheduledTime)
 
-        val view = publicViewOf(TableId(1), table, null)
+        val view = publicViewOf(TableId(1), table, null, 1L)
 
         assertEquals(scheduledTime, view.nextHandAt)
         val json = objectMapper.writeValueAsString(view)
         assertTrue(json.contains("\"2026-09-24T12:30:45Z\""), "ISO-8601 형식의 ISO 즉시값이 JSON에 없음: $json")
         assertFalse(json.contains("1695555045"), "Unix 타임스탬프 숫자가 JSON에 포함됨 — Instant 가 숫자로 직렬화됨: $json")
+    }
+
+    @Test
+    fun `seq 인자는 공개 뷰와 개인 뷰에 그대로 실린다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        table.moveButtonToNextOccupiedSeat()
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
+            table.buttonSeatNo!!,
+            smallBlindSeatNo = 1,
+            bigBlindSeatNo = 2,
+            table.smallBlind,
+            table.bigBlind,
+            identityShuffler,
+        )
+
+        val publicView = publicViewOf(TableId(1), table, hand, 42L)
+        val privateView = privateViewOf(TableId(1), 1, hand, 42L)
+
+        assertEquals(42L, publicView.seq)
+        assertEquals(42L, privateView.seq)
     }
 }

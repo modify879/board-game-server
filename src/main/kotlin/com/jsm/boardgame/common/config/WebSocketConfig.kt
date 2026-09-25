@@ -41,6 +41,9 @@ class WebSocketConfig(
         registry.enableSimpleBroker("/topic", "/queue")
         registry.setApplicationDestinationPrefixes("/app")
         registry.setUserDestinationPrefix("/user")
+        // clientOutboundChannel 은 스레드풀이라 기본값으로는 같은 세션으로 보낸 메시지도 순서가
+        // 섞일 수 있다(Spring 문서 "Order of Messages") — 세션별 발행 순서를 보존한다.
+        registry.setPreservePublishOrder(true)
     }
 
     override fun configureClientInboundChannel(registration: ChannelRegistration) {

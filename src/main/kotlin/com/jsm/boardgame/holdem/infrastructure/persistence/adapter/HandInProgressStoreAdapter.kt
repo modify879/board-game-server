@@ -34,7 +34,7 @@ private const val CONSTRAINT_HAND_PK = "holdem_hand_in_progress_pkey"
  * 정산과 삭제는 이미 한 트랜잭션 안에 있다 — 여기서 새로 트랜잭션을 열 필요가 없다.
  *
  * 상태 저장이 브로드캐스트보다 먼저 커밋된다 — `HandBroadcaster` 는
- * `@TransactionalEventListener`(기본 phase `AFTER_COMMIT`)라 이 트랜잭션이 커밋된 뒤에만 나간다.
+ * 순번만 BEFORE_COMMIT 에서 따고 전송은 afterCommit 동기화로 미뤄, 이 트랜잭션이 커밋된 뒤에만 나간다.
  * 순서가 뒤집히면(브로드캐스트가 먼저) 브로드캐스트 직후 죽었을 때 플레이어가 이미 화면으로 본 액션을
  * 서버가 기억하지 못해, 재접속 시 화면이 그 액션 이전으로 되감긴다.
  *

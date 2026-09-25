@@ -450,6 +450,18 @@ class HoldemStompIntegrationTest {
                 .doesNotContain("\"$card\"")
         }
 
+        // 핸드 시작에 이어 액션 하나로 공개 뷰가 한 번 더 나가면, 연달아 받은 두 공개 뷰의 seq 는
+        // 엄격히 증가한다 — BEFORE_COMMIT 에서 순번을 따므로 커밋 순서 = seq 순서다.
+        val firstSeq = JsonPath.read<Number>(publicJson, "$.seq").toLong()
+        val toActSeatNo = JsonPath.read<Int>(publicJson, "$.toActSeatNo")
+        val actingToken = if (toActSeatNo == 1) pair.a.accessToken else pair.b.accessToken
+        authPost("/api/holdem/tables/${pair.tableId}/hands/actions", actingToken, """{"action":"FOLD"}""")
+
+        val secondPublicJson = publicQueueA.poll(5, TimeUnit.SECONDS)
+        assertThat(secondPublicJson).isNotNull()
+        val secondSeq = JsonPath.read<Number>(secondPublicJson, "$.seq").toLong()
+        assertThat(secondSeq).isGreaterThan(firstSeq)
+
         sessionA.disconnect()
         sessionB.disconnect()
     }
