@@ -40,8 +40,6 @@ class HoldemSubscriptionSnapshotListener(
         // 상태를 읽기 전에 seq 를 먼저 읽는다(증가시키지 않는다) — 증가시키면, 지금 커밋
         // 직전인 트랜잭션이 곧 내보낼 더 새로운 상태가 여기서 먼저 딴 더 낮은 seq 로 나가버려
         // 클라이언트가 그 갱신을 old 로 오판해 버린다.
-        // ponytail: 그래도 커밋 직전 트랜잭션과 정확히 겹친 구독은, 이 스냅샷과 같은 seq 의 옛
-        // 상태가 그 트랜잭션의 afterCommit 전송보다 늦게 도착할 수 있다 — 다음 변경에서 바로잡는다.
         val seq = sequence.current(tableId)
         val table = tables.findById(tableId) ?: return
         val hand = handStore.find(tableId)

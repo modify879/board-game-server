@@ -68,7 +68,6 @@ class LoginService(
             val reachedThreshold = loginAttemptLimiter.recordFailure(username, MAX_FAILURES, FAILURE_WINDOW)
             if (reachedThreshold) {
                 user.lock(Instant.now(clock))
-                // ponytail: users 에 버전 컬럼이 없어, 역할 변경 같은 다른 쓰기와 겹치면 나중 저장이 lockedAt 을 덮어쓸 수 있다. 관리자 쓰기와 5번째 실패가 몇 ms 안에 겹칠 때만이고 공격자가 일으킬 수 없으며 돈이 걸리지 않아 받아들였다. 사용자 행을 자주 쓰는 기능(닉네임 변경 등)이 생기면 @Version 을 넣는다.
                 users.save(user)
                 throw AccountLockedException("비밀번호 실패 누적으로 계정이 잠겼습니다: username=${username.value}")
             }

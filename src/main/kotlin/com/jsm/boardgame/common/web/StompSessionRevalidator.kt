@@ -25,10 +25,6 @@ import java.time.Duration
  * 하나 더 만들어 직접 주입받고, `@Scheduled`/`@EnableScheduling` 의 빈 자동 탐색 대신
  * scheduleWithFixedDelay() 로 명시적으로 예약한다 - 컨텍스트에 TaskScheduler 타입 빈이 이미
  * 여러 개 있어(holdem 것 + 브로커 것) `@Scheduled` 가 어떤 걸 고를지 코드만 보고 확신할 수 없다.
- *
- * ponytail: 세션마다 decode + Redis 블랙리스트 조회를 30초마다 반복한다(O(세션 수)). 천장은
- * 한 인스턴스에 세션 수천 개 정도고, 넘어서면 폴링 대신 무효화 이벤트를 세션에 직접 푸시하는
- * 방식으로 올려야 한다.
  */
 @Component
 class StompSessionRevalidator(
