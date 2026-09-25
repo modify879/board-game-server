@@ -174,7 +174,8 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 `master`(배포·태그) ← `release/*` ← `develop` ← `feature/*`. `hotfix/*` 는 `master` 에서 분기해 양쪽에 병합.
 
 - `master` 에 직접 커밋하지 않는다
-- 브랜치는 컨텍스트 접두(`feature/user-signup`), 커밋은 Conventional Commits + 컨텍스트 스코프
+- 작업 브랜치는 **항상 `feature/` 로 시작한다** — 버그 수정·리팩터링·테스트·문서 작업도 예외 없다(`fix/`·`chore/`·`test/`·`docs/` 브랜치를 만들지 않는다). 그 뒤에 컨텍스트 접두를 붙인다(`feature/user-signup`, `feature/holdem-view-seq`)
+- 커밋은 Conventional Commits + 컨텍스트 스코프(`fix(holdem): ...`) — 작업 성격은 브랜치가 아니라 커밋 타입으로 드러낸다
 
 ## 아직 하지 않은 것
 
