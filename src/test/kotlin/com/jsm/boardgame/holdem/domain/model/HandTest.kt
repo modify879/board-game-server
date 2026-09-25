@@ -3,9 +3,11 @@ package com.jsm.boardgame.holdem.domain.model
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.exception.IllegalHandStateException
 import com.jsm.boardgame.holdem.domain.service.Shuffler
+import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class HandTest {
@@ -297,5 +299,129 @@ class HandTest {
         assertEquals(listOf(Card.of("Ah"), Card.of("Kh")), hand.holeCardsOf(4)) // 버튼 다음 참가 좌석 — 매 바퀴 첫 카드
         assertEquals(listOf(Card.of("2c"), Card.of("4c")), hand.holeCardsOf(1))
         assertEquals(listOf(Card.of("3c"), Card.of("5c")), hand.holeCardsOf(2)) // 매 바퀴 마지막 카드
+    }
+
+    /** AA(1)가 KK(2)를 이기는 고정 쇼다운 — 승자는 자동 공개, 진 좌석(2)만 선택권을 갖는다. */
+    private fun finishedTwoSeatShowdown(): Hand {
+        val shuffler = fixedShuffler("Kh", "Ah", "Kd", "Ad", "2s", "7d", "9c", "Tc", "Jh")
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, chips(100), chips(200), shuffler)
+        hand.act(1, BettingAction.Call)
+        hand.act(2, BettingAction.Check)
+        repeat(3) {
+            hand.act(2, BettingAction.Check)
+            hand.act(1, BettingAction.Check)
+        }
+        return hand
+    }
+
+    @Test
+    fun `쇼다운에서 진 좌석이 SHOW 를 고르면 shownSeatNos 에 포함된다`() {
+        val hand = finishedTwoSeatShowdown()
+
+        val opened = hand.openReveal(Instant.parse("2026-01-01T00:00:10Z"))
+        assertTrue(opened)
+        assertEquals(setOf(2), hand.awaitingRevealSeatNos)
+
+        hand.reveal(2, show = true)
+
+        assertEquals(emptySet(), hand.awaitingRevealSeatNos)
+        assertEquals(setOf(1, 2), hand.shownSeatNos)
+    }
+
+    @Test
+    fun `쇼다운에서 진 좌석이 MUCK 을 고르면 shownSeatNos 에서 빠진다`() {
+        val hand = finishedTwoSeatShowdown()
+        hand.openReveal(Instant.parse("2026-01-01T00:00:10Z"))
+
+        hand.reveal(2, show = false)
+
+        assertEquals(setOf(1), hand.shownSeatNos)
+    }
+
+    @Test
+    fun `쇼다운 승자에게 reveal 을 호출하면 REVEAL_NOT_ALLOWED 를 던진다`() {
+        val hand = finishedTwoSeatShowdown()
+        hand.openReveal(Instant.parse("2026-01-01T00:00:10Z"))
+
+        val e = assertFailsWith<IllegalHandStateException> { hand.reveal(1, show = true) }
+
+        assertEquals(HoldemErrorCode.REVEAL_NOT_ALLOWED, e.errorCode)
+    }
+
+    @Test
+    fun `이미 선택한 좌석이 다시 고르면 REVEAL_ALREADY_DECIDED 를 던진다`() {
+        val hand = finishedTwoSeatShowdown()
+        hand.openReveal(Instant.parse("2026-01-01T00:00:10Z"))
+        hand.reveal(2, show = true)
+
+        val e = assertFailsWith<IllegalHandStateException> { hand.reveal(2, show = false) }
+
+        assertEquals(HoldemErrorCode.REVEAL_ALREADY_DECIDED, e.errorCode)
+    }
+
+    @Test
+    fun `muckPendingReveals 는 선택하지 않은 좌석을 전부 MUCK 시킨다`() {
+        val hand = finishedTwoSeatShowdown()
+        hand.openReveal(Instant.parse("2026-01-01T00:00:10Z"))
+
+        hand.muckPendingReveals()
+
+        assertEquals(emptySet(), hand.awaitingRevealSeatNos)
+        assertEquals(setOf(1), hand.shownSeatNos) // 2는 선택하지 않아 머크됐다
+    }
+
+    @Test
+    fun `무승부로 둘 다 팟을 나눠 가지면 자동 공개되고 선택권이 없다`() {
+        val shuffler = fixedShuffler("2c", "4d", "3c", "5d", "As", "Ks", "Qs", "Js", "Ts")
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, chips(100), chips(200), shuffler)
+        hand.act(1, BettingAction.Call)
+        hand.act(2, BettingAction.Check)
+        repeat(3) {
+            hand.act(2, BettingAction.Check)
+            hand.act(1, BettingAction.Check)
+        }
+
+        val opened = hand.openReveal(Instant.parse("2026-01-01T00:00:10Z"))
+
+        assertFalse(opened) // 진 좌석이 없다 — 창을 열 이유가 없다
+        assertEquals(emptySet(), hand.awaitingRevealSeatNos)
+        assertEquals(setOf(1, 2), hand.shownSeatNos)
+        val e = assertFailsWith<IllegalHandStateException> { hand.reveal(1, show = false) }
+        assertEquals(HoldemErrorCode.REVEAL_NOT_ALLOWED, e.errorCode)
+    }
+
+    @Test
+    fun `메인팟은 지고 사이드팟만 이긴 좌석도 자동 공개되고 선택권이 없다`() {
+        val shuffler = fixedShuffler("Kh", "Qh", "Ah", "Kc", "Qc", "Ac", "2d", "7c", "9h", "Jc", "4s")
+        val hand = Hand.start(stacksOf(1 to 1_000, 2 to 5_000, 3 to 5_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), shuffler)
+        hand.act(1, BettingAction.RaiseTo(chips(1_000))) // 숏스택 올인 — AA, 메인팟 승자
+        hand.act(2, BettingAction.RaiseTo(chips(3_000))) // KK, 사이드팟 승자
+        hand.act(3, BettingAction.Call) // QQ, 둘 다에게 진다
+        repeat(3) {
+            hand.act(2, BettingAction.Check)
+            hand.act(3, BettingAction.Check)
+        }
+        assertEquals(setOf(1, 2), hand.result!!.showdownWinners)
+
+        val opened = hand.openReveal(Instant.parse("2026-01-01T00:00:10Z"))
+
+        assertTrue(opened)
+        // 1(메인팟 승자)·2(메인팟은 지지만 사이드팟 승자)는 선택권이 없다 — 진 좌석(3)만 대상이다.
+        assertEquals(setOf(3), hand.awaitingRevealSeatNos)
+        assertEquals(setOf(1, 2), hand.shownSeatNos) // 3이 아직 고르지 않아도 승자들은 이미 공개됐다
+    }
+
+    @Test
+    fun `폴드로 끝난 핸드는 openReveal 이 false 를 반환하고 아무것도 하지 않는다`() {
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
+        hand.act(1, BettingAction.Fold)
+        hand.act(2, BettingAction.Fold)
+        assertTrue(hand.isFinished)
+
+        val opened = hand.openReveal(Instant.parse("2026-01-01T00:00:10Z"))
+
+        assertFalse(opened)
+        assertEquals(emptySet(), hand.awaitingRevealSeatNos)
+        assertEquals(null, hand.revealDeadline)
     }
 }
