@@ -19,7 +19,6 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
-import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
@@ -36,14 +35,13 @@ import java.util.UUID
  * 핸드 내부 베팅 규칙 자체는 도메인 테스트가 맡는다 — 여기는 방 생성·착석·기립·조회의
  * HTTP 계약(상태 코드, errorCode)만 검증한다. 핸드는 시작 직후 상태만 확인하고 끝까지 진행하지 않는다.
  *
- * next-hand-delay 를 1시간으로 늘려 실제 5초 타이머가 테스트 도중 우연히 발화하지 않게 한다 —
- * 핸드 시작은 startHand() 헬퍼가 nextHandAt 을 과거로 강제로 당겨 StartScheduledHandUseCase 를
- * 직접 불러 결정적으로 일으킨다(수동 시작 엔드포인트는 더 이상 없다).
+ * build.gradle.kts 가 테스트 전역으로 1h 를 준다 — 실제 5초 타이머가 테스트 도중 우연히
+ * 발화하지 않는다. 핸드 시작은 startHand() 헬퍼가 nextHandAt 을 과거로 강제로 당겨
+ * StartScheduledHandUseCase 를 직접 불러 결정적으로 일으킨다(수동 시작 엔드포인트는 더 이상 없다).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
-@TestPropertySource(properties = ["app.holdem.next-hand-delay=1h"])
 class HoldemApiIntegrationTest {
 
     @Autowired

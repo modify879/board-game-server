@@ -33,7 +33,6 @@ import org.springframework.security.oauth2.jwt.JwsHeader
 import org.springframework.security.oauth2.jwt.JwtClaimsSet
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder
-import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -53,14 +52,13 @@ import javax.crypto.spec.SecretKeySpec
  * 타이머는 다음 조각이라 여기서 다루지 않는다 —
  * 여기는 CONNECT 관문과 구독 인가만 검증한다.
  *
- * next-hand-delay 를 1시간으로 늘려 실제 5초 타이머가 테스트 도중 우연히 발화하지 않게 한다 — 핸드
- * 시작은 startHandRest() 헬퍼가 nextHandAt 을 과거로 강제로 당겨 StartScheduledHandUseCase 를
- * 직접 불러 결정적으로 일으킨다(수동 시작 엔드포인트는 더 이상 없다).
+ * build.gradle.kts 가 테스트 전역으로 1h 를 준다 — 실제 5초 타이머가 테스트 도중 우연히 발화하지
+ * 않는다. 핸드 시작은 startHandRest() 헬퍼가 nextHandAt 을 과거로 강제로 당겨
+ * StartScheduledHandUseCase 를 직접 불러 결정적으로 일으킨다(수동 시작 엔드포인트는 더 이상 없다).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
-@TestPropertySource(properties = ["app.holdem.next-hand-delay=1h"])
 class HoldemStompIntegrationTest {
 
     @Autowired
@@ -203,12 +201,6 @@ class HoldemStompIntegrationTest {
         return handler to messages
     }
 
-    private fun drainAll(queue: LinkedBlockingQueue<String>) {
-        while (queue.poll(500, TimeUnit.MILLISECONDS) != null) {
-            // 구독 시점에 온 스냅샷 등 이전 메시지를 비운다.
-        }
-    }
-
     private fun expiredTokenFor(userId: Long): String {
         val secretKey = SecretKeySpec(jwtProperties.secret.toByteArray(Charsets.UTF_8), "HmacSHA256")
         val encoder = NimbusJwtEncoder(ImmutableSecret(secretKey))
@@ -261,7 +253,9 @@ class HoldemStompIntegrationTest {
         val (session, handler) = tryConnect(accessToken)
 
         assertThat(session?.isConnected).isTrue()
-        assertThat(handler.errorFrames.poll(1, TimeUnit.SECONDS)).isNull()
+        // CONNECT 단독으로는 반드시 뒤따르는 메시지(센티널)가 없다 — isConnected 자체가 이미
+        // CONNECTED 프레임 수신을 뜻하는 성공 신호다. 아래는 방어적 확인이라 대기를 짧게 둔다.
+        assertThat(handler.errorFrames.poll(300, TimeUnit.MILLISECONDS)).isNull()
         session?.disconnect()
     }
 
@@ -302,9 +296,13 @@ class HoldemStompIntegrationTest {
         val (session, handler) = tryConnect(seated.accessToken)
         checkNotNull(session)
 
-        session.subscribe(HoldemDestinations.publicTopicOf(seated.tableId), noOpFrameHandler())
+        val (publicHandler, publicQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.publicTopicOf(seated.tableId), publicHandler)
 
-        assertThat(handler.errorFrames.poll(1, TimeUnit.SECONDS)).isNull()
+        // 구독이 인가를 통과하면 HoldemSubscriptionSnapshotListener 가 공개 스냅샷을 곧바로
+        // 보낸다(ERROR 는 스냅샷보다 먼저/대신 온다) — 그 수신을 센티널로 삼아 고정 대기를 없앤다.
+        assertThat(publicQueue.poll(5, TimeUnit.SECONDS)).isNotNull()
+        assertThat(handler.errorFrames).isEmpty()
         assertThat(session.isConnected).isTrue()
     }
 
@@ -315,9 +313,11 @@ class HoldemStompIntegrationTest {
         val (session, handler) = tryConnect(other.accessToken)
         checkNotNull(session)
 
-        session.subscribe(HoldemDestinations.publicTopicOf(target.tableId), noOpFrameHandler())
+        val (publicHandler, publicQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.publicTopicOf(target.tableId), publicHandler)
 
-        assertThat(handler.errorFrames.poll(1, TimeUnit.SECONDS)).isNull()
+        assertThat(publicQueue.poll(5, TimeUnit.SECONDS)).isNotNull()
+        assertThat(handler.errorFrames).isEmpty()
         assertThat(session.isConnected).isTrue()
     }
 
@@ -328,9 +328,11 @@ class HoldemStompIntegrationTest {
         val (session, handler) = tryConnect(spectatorToken)
         checkNotNull(session)
 
-        session.subscribe(HoldemDestinations.publicTopicOf(target.tableId), noOpFrameHandler())
+        val (publicHandler, publicQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.publicTopicOf(target.tableId), publicHandler)
 
-        assertThat(handler.errorFrames.poll(1, TimeUnit.SECONDS)).isNull()
+        assertThat(publicQueue.poll(5, TimeUnit.SECONDS)).isNotNull()
+        assertThat(handler.errorFrames).isEmpty()
         assertThat(session.isConnected).isTrue()
     }
 
@@ -355,7 +357,9 @@ class HoldemStompIntegrationTest {
 
         session.subscribe(HoldemDestinations.privateQueueOf(seated.tableId), noOpFrameHandler())
 
-        assertThat(handler.errorFrames.poll(1, TimeUnit.SECONDS)).isNull()
+        // 핸드가 없는 상태의 개인 큐 구독은 그 자체로 반드시 오는 메시지가 없다(개인 뷰는 핸드
+        // 진행 중에만 나간다 — HoldemSubscriptionSnapshotListener 참고) — 센티널이 없어 대기만 줄인다.
+        assertThat(handler.errorFrames.poll(300, TimeUnit.MILLISECONDS)).isNull()
     }
 
     @Test
@@ -411,10 +415,14 @@ class HoldemStompIntegrationTest {
         val (privateHandlerB, privateQueueB) = capturingFrameHandler()
         sessionB.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandlerB)
 
-        // 구독 시점에 온 스냅샷(핸드 없음 상태)을 비운 뒤 핸드를 시작한다.
-        drainAll(publicQueueA)
-        drainAll(privateQueueA)
-        drainAll(privateQueueB)
+        // 구독 시점에 온 스냅샷을 비운 뒤 핸드를 시작한다. HoldemSubscriptionSnapshotListener 는
+        // 목적지(topic 이든 개인 큐든)에 관계없이 구독마다 공개 채널로 한 번씩 스냅샷을 보낸다 —
+        // 이 테이블에 대한 구독은 sessionA 의 topic·개인 큐(2회) + sessionB 의 개인 큐(1회) 로 총
+        // 3번이라, publicQueueA(구독 중)에 정확히 3개가 쌓인다. "더 없다" 를 500ms 대기로
+        // 증명하는 대신 그 개수만 받는다. 핸드가 아직 없으니 개인 큐에는 애초에 아무것도 오지
+        // 않는다(개인 뷰는 핸드 진행 중에만 나간다) — 비울 것이 없다.
+        // 개수를 잘못 세면 여기서 바로 실패하게 한다.
+        repeat(3) { assertThat(publicQueueA.poll(3, TimeUnit.SECONDS)).isNotNull() }
 
         startHandRest(pair.tableId)
 
