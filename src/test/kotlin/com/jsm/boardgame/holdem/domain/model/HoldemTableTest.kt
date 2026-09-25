@@ -82,35 +82,27 @@ class HoldemTableTest {
     }
 
     @Test
-    fun `8000 미만 바이인은 BUY_IN_OUT_OF_RANGE 로 거부된다`() {
+    fun `빅 블라인드 미만 바이인은 BUY_IN_OUT_OF_RANGE 로 거부된다`() {
         val table = newTable()
         val e = assertFailsWith<BuyInOutOfRangeException> {
-            table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(7_900))
+            table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(100))
         }
         assertEquals(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, e.errorCode)
     }
 
     @Test
-    fun `20000 초과 바이인은 BUY_IN_OUT_OF_RANGE 로 거부된다`() {
+    fun `정확히 빅 블라인드인 바이인은 허용된다`() {
         val table = newTable()
-        val e = assertFailsWith<BuyInOutOfRangeException> {
-            table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(20_100))
-        }
-        assertEquals(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, e.errorCode)
+        val seat = table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(200))
+        assertEquals(Chips.of(200), seat.stack)
     }
 
     @Test
-    fun `정확히 8000 바이인은 허용된다`() {
+    fun `상한 없이 아주 큰 바이인도 허용된다`() {
         val table = newTable()
-        val seat = table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(8_000))
-        assertEquals(Chips.of(8_000), seat.stack)
-    }
-
-    @Test
-    fun `정확히 20000 바이인은 허용된다`() {
-        val table = newTable()
-        val seat = table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(20_000))
-        assertEquals(Chips.of(20_000), seat.stack)
+        val bigBuyIn = Chips.of(200_000_000)
+        val seat = table.sitDown(seatNo = 1, userId = 1L, buyIn = bigBuyIn)
+        assertEquals(bigBuyIn, seat.stack)
     }
 
     @Test
@@ -407,13 +399,23 @@ class HoldemTableTest {
     }
 
     @Test
-    fun `requestJoin 은 범위 밖 바이인을 BUY_IN_OUT_OF_RANGE 로 거부한다`() {
+    fun `requestJoin 은 빅 블라인드 미만 바이인을 BUY_IN_OUT_OF_RANGE 로 거부한다`() {
         val table = newTable()
 
         val e = assertFailsWith<BuyInOutOfRangeException> {
             table.requestJoin(userId = 1L, seatNo = 1, buyIn = Chips.of(100), postBlindImmediately = false, requestedAt = Instant.now())
         }
         assertEquals(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, e.errorCode)
+    }
+
+    @Test
+    fun `requestJoin 도 상한 없이 큰 바이인을 허용한다`() {
+        val table = newTable()
+        val bigBuyIn = Chips.of(200_000_000)
+
+        val request = table.requestJoin(userId = 1L, seatNo = 1, buyIn = bigBuyIn, postBlindImmediately = false, requestedAt = Instant.now())
+
+        assertEquals(bigBuyIn, request.buyIn)
     }
 
     @Test

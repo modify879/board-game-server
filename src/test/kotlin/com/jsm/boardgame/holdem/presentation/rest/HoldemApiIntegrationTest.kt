@@ -406,12 +406,12 @@ class HoldemApiIntegrationTest {
     }
 
     @Test
-    fun `바이인이 범위 밖이면 400과 BUY_IN_OUT_OF_RANGE 를 응답한다`() {
+    fun `바이인이 빅 블라인드 미만이면 400과 BUY_IN_OUT_OF_RANGE 를 응답한다`() {
         val (userId, accessToken) = signUpAndLogin()
         fundWallet(userId, 15_000)
         val tableId = createTable(accessToken)
 
-        sitDown(accessToken, tableId, 1, 5_000)
+        sitDown(accessToken, tableId, 1, 100)
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.errorCode").value("BUY_IN_OUT_OF_RANGE"))
     }

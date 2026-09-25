@@ -58,10 +58,8 @@ class HoldemTable private constructor(
         if (seatOf(userId) != null) {
             throw AlreadySeatedException("이미 이 테이블에 앉아 있는 사용자입니다: userId=$userId")
         }
-        val minBuyIn = bigBlind * MIN_BUY_IN_BB
-        val maxBuyIn = bigBlind * MAX_BUY_IN_BB
-        if (buyIn < minBuyIn || buyIn > maxBuyIn) {
-            throw BuyInOutOfRangeException("바이인은 $minBuyIn..$maxBuyIn 범위여야 합니다: $buyIn")
+        if (buyIn < bigBlind) {
+            throw BuyInOutOfRangeException("바이인은 빅 블라인드($bigBlind) 이상이어야 합니다: $buyIn")
         }
 
         val seat = Seat.of(seatNo, userId, buyIn, postBlindImmediately)
@@ -118,10 +116,8 @@ class HoldemTable private constructor(
         if (joinRequests.containsKey(seatNo)) {
             throw SeatTakenException("이미 참가 요청이 있는 좌석입니다: seatNo=$seatNo")
         }
-        val minBuyIn = bigBlind * MIN_BUY_IN_BB
-        val maxBuyIn = bigBlind * MAX_BUY_IN_BB
-        if (buyIn < minBuyIn || buyIn > maxBuyIn) {
-            throw BuyInOutOfRangeException("바이인은 $minBuyIn..$maxBuyIn 범위여야 합니다: $buyIn")
+        if (buyIn < bigBlind) {
+            throw BuyInOutOfRangeException("바이인은 빅 블라인드($bigBlind) 이상이어야 합니다: $buyIn")
         }
         val request = JoinRequest(userId, seatNo, buyIn, postBlindImmediately, requestedAt)
         joinRequests[seatNo] = request
@@ -273,8 +269,6 @@ class HoldemTable private constructor(
     companion object {
         const val MAX_SEATS = 9
         private const val MAX_NAME_LENGTH = 30
-        private const val MIN_BUY_IN_BB = 40
-        private const val MAX_BUY_IN_BB = 100
 
         // 블라인드는 지금 테이블마다 다르게 할 요구가 없어 고정값이다. 필드로 들고 있는 건
         // 나중에 테이블별로 블라인드를 달리할 자리를 남겨두기 위해서다. 별도 Blinds VO 는 아직 안 만든다.
