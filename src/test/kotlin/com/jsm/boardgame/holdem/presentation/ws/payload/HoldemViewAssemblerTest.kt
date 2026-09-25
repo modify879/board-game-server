@@ -172,7 +172,7 @@ class HoldemViewAssemblerTest {
     }
 
     @Test
-    fun `리버에 A 가 베팅하고 B 가 콜해 B 가 이기면 B 만 자동 공개되고 A 가 SHOW 를 고르면 둘 다 공개 순서대로 노출된다`() {
+    fun `리버에 A 가 베팅하고 B 가 콜해 B 가 이기면 둘 다 공개된다(A 가 순서상 먼저)`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         table.moveButtonToNextOccupiedSeat()
         // 딜 순서(버튼(1) 다음인 2부터, 버튼이 마지막): seat2=Ah,Ad(AA)  seat1=Kh,Kd(KK)  보드=2s,7d,9c,Tc,Jh
@@ -194,31 +194,23 @@ class HoldemViewAssemblerTest {
         }
         hand.act(2, BettingAction.Check) // 리버: B(BB, postflop 선첫)가 먼저 체크
         hand.act(1, BettingAction.RaiseTo(Chips.of(200))) // A(버튼/SB)가 베팅
-        hand.act(2, BettingAction.Call) // B가 콜 -> 쇼다운, B(AA)가 이긴다
+        hand.act(2, BettingAction.Call) // B가 콜 -> 쇼다운
 
         assertEquals(1, hand.showdownLeaderSeatNo)
-        hand.openReveal(Instant.parse("2026-01-01T00:00:10Z"))
+        val view = publicViewOf(TableId(1), table, hand)
 
-        // 이긴 B(2)만 자동 공개 — 진 A(1)는 아직 선택하지 않아 빠진다.
-        assertEquals(
-            listOf(ShownHandView(seatNo = 2, holeCards = listOf("Ah", "Ad"), category = "PAIR")),
-            publicViewOf(TableId(1), table, hand).result!!.shownHands,
-        )
-
-        hand.reveal(1, show = true) // A가 SHOW 를 고른다
-
-        // 공개 순서(showdownLeaderSeatNo=1 부터)대로 A, B 둘 다 노출된다.
+        val result = view.result!!
         assertEquals(
             listOf(
                 ShownHandView(seatNo = 1, holeCards = listOf("Kh", "Kd"), category = "PAIR"),
                 ShownHandView(seatNo = 2, holeCards = listOf("Ah", "Ad"), category = "PAIR"),
             ),
-            publicViewOf(TableId(1), table, hand).result!!.shownHands,
+            result.shownHands,
         )
     }
 
     @Test
-    fun `리버에 A 가 베팅하고 B 가 콜했는데 A 가 이기면 A 만 공개되고 B 는 머크한다`() {
+    fun `리버에 A 가 베팅하고 B 가 콜했는데 A 가 이겨도 진 B 의 패가 그대로 공개된다(머크 없음)`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         table.moveButtonToNextOccupiedSeat()
         // 딜 순서(버튼(1) 다음인 2부터, 버튼이 마지막): seat2=Kh,Kd(KK)  seat1=Ah,Ad(AA)  보드=2s,7d,9c,Tc,Jh
@@ -248,18 +240,19 @@ class HoldemViewAssemblerTest {
 
         val result = view.result!!
         assertEquals(
-            listOf(ShownHandView(seatNo = 1, holeCards = listOf("Ah", "Ad"), category = "PAIR")),
+            listOf(
+                ShownHandView(seatNo = 1, holeCards = listOf("Ah", "Ad"), category = "PAIR"),
+                ShownHandView(seatNo = 2, holeCards = listOf("Kh", "Kd"), category = "PAIR"),
+            ),
             result.shownHands,
         )
-        assertTrue(json.contains("\"Ah\""))
-        assertTrue(json.contains("\"Ad\""))
-        for (card in listOf("Kh", "Kd")) {
-            assertFalse(json.contains("\"$card\""), "머크한 좌석의 홀카드 $card 가 공개 뷰 직렬화 결과에 노출됨: $json")
+        for (card in listOf("Ah", "Ad", "Kh", "Kd")) {
+            assertTrue(json.contains("\"$card\""), "쇼다운까지 간 좌석의 홀카드 $card 가 공개 뷰 직렬화 결과에서 빠짐: $json")
         }
     }
 
     @Test
-    fun `리버 베팅 없이 체크로 끝나면 이긴 좌석만 자동 공개되고 진 좌석이 SHOW 를 고르면 공개 순서(버튼 다음 좌석부터)대로 노출된다`() {
+    fun `리버 베팅 없이 체크로 끝나면 공개 순서는 버튼 다음 좌석부터고 쇼다운까지 간 좌석은 순서대로 전원 공개된다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         table.moveButtonToNextOccupiedSeat() // button=1(=SB), BB=2
         // 딜 순서(버튼(1) 다음인 2부터, 버튼이 마지막): seat2=Kh,Kd(KK)  seat1=Ah,Ad(AA)  보드=2s,7d,9c,Tc,Jh — 전부 체크로 통과
@@ -281,28 +274,21 @@ class HoldemViewAssemblerTest {
         }
 
         assertNull(hand.showdownLeaderSeatNo) // 리버에 벳/레이즈가 없었다
-        hand.openReveal(Instant.parse("2026-01-01T00:00:10Z"))
+        val view = publicViewOf(TableId(1), table, hand)
 
-        // AA(1)가 이겨 자동 공개 — 진 KK(2)는 아직 선택하지 않아 빠진다.
-        assertEquals(
-            listOf(ShownHandView(seatNo = 1, holeCards = listOf("Ah", "Ad"), category = "PAIR")),
-            publicViewOf(TableId(1), table, hand).result!!.shownHands,
-        )
-
-        hand.reveal(2, show = true) // 진 좌석도 SHOW 를 고른다
-
-        // 공개 순서는 버튼(1) 다음 좌석(2)부터 — 순서는 그대로 유지되고 둘 다 노출된다.
+        val result = view.result!!
+        // 버튼(1) 다음 좌석(2, BB)부터 공개 — KK 인 2가 먼저 보여주고 나면, AA 인 1이 이겨서 뒤이어 보여준다.
         assertEquals(
             listOf(
                 ShownHandView(seatNo = 2, holeCards = listOf("Kh", "Kd"), category = "PAIR"),
                 ShownHandView(seatNo = 1, holeCards = listOf("Ah", "Ad"), category = "PAIR"),
             ),
-            publicViewOf(TableId(1), table, hand).result!!.shownHands,
+            result.shownHands,
         )
     }
 
     @Test
-    fun `삼자 쇼다운에서는 전체 승자만 자동 공개되고 나머지는 각자 독립적으로 SHOW·MUCK 을 고른다`() {
+    fun `삼자 체크다운은 순서대로 셋 다 공개된다(머크 없음)`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
         table.moveButtonToNextOccupiedSeat() // button=1, SB=2, BB=3
         // 딜 순서(버튼(1) 다음인 2부터 시계방향, 버튼이 마지막): seat2=Jh,Jd(JJ)  seat3=Qh,Qd(QQ)  seat1=Kh,Kd(KK)  보드=2d,7c,9h,4s,5c
@@ -326,35 +312,66 @@ class HoldemViewAssemblerTest {
         }
 
         assertNull(hand.showdownLeaderSeatNo)
-        hand.openReveal(Instant.parse("2026-01-01T00:00:10Z"))
-        assertEquals(setOf(2, 3), hand.awaitingRevealSeatNos) // KK(1)만 이겨서 자동 공개, JJ(2)·QQ(3)는 선택 대상
-
-        assertEquals(
-            listOf(ShownHandView(seatNo = 1, holeCards = listOf("Kh", "Kd"), category = "PAIR")),
-            publicViewOf(TableId(1), table, hand).result!!.shownHands,
-        )
-
-        hand.reveal(3, show = true) // QQ 는 공개
-        hand.reveal(2, show = false) // JJ 는 머크
         val view = publicViewOf(TableId(1), table, hand)
-        val json = objectMapper.writeValueAsString(view)
 
-        // 공개 순서(버튼 다음인 2부터): 2는 머크해 빠지고 3(QQ)·1(KK) 순서로 공개된다.
+        val result = view.result!!
+        // 버튼(1) 다음부터: 2(JJ, 약한 패, 먼저 공개) -> 3(QQ, JJ를 이겨 공개) -> 1(KK, 둘 다 이겨 공개)
         assertEquals(
             listOf(
+                ShownHandView(seatNo = 2, holeCards = listOf("Jh", "Jd"), category = "PAIR"),
                 ShownHandView(seatNo = 3, holeCards = listOf("Qh", "Qd"), category = "PAIR"),
                 ShownHandView(seatNo = 1, holeCards = listOf("Kh", "Kd"), category = "PAIR"),
             ),
-            view.result!!.shownHands,
+            result.shownHands,
+        )
+    }
+
+    @Test
+    fun `삼자 체크다운에서 두 번째 패가 첫 번째보다 약해도 전원 공개된다(머크 없음)`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+        table.moveButtonToNextOccupiedSeat() // button=1, SB=2, BB=3
+        // 딜 순서(버튼(1) 다음인 2부터 시계방향, 버튼이 마지막): seat2=Qh,Qd(QQ)  seat3=Jh,Jd(JJ)  seat1=Kh,Kd(KK)  보드=2d,7c,9h,4s,5c
+        val shuffler = fixedShuffler("Qh", "Jh", "Kh", "Qd", "Jd", "Kd", "2d", "7c", "9h", "4s", "5c")
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)),
+            table.buttonSeatNo!!,
+            smallBlindSeatNo = 2,
+            bigBlindSeatNo = 3,
+            table.smallBlind,
+            table.bigBlind,
+            shuffler,
+        )
+        hand.act(1, BettingAction.Call)
+        hand.act(2, BettingAction.Call)
+        hand.act(3, BettingAction.Check)
+        repeat(3) {
+            hand.act(2, BettingAction.Check)
+            hand.act(3, BettingAction.Check)
+            hand.act(1, BettingAction.Check)
+        }
+
+        assertNull(hand.showdownLeaderSeatNo)
+        val view = publicViewOf(TableId(1), table, hand)
+        val json = objectMapper.writeValueAsString(view)
+
+        val result = view.result!!
+        // 버튼(1) 다음부터: 2(QQ) -> 3(JJ, QQ 보다 약해도 공개된다) -> 1(KK)
+        assertEquals(
+            listOf(
+                ShownHandView(seatNo = 2, holeCards = listOf("Qh", "Qd"), category = "PAIR"),
+                ShownHandView(seatNo = 3, holeCards = listOf("Jh", "Jd"), category = "PAIR"),
+                ShownHandView(seatNo = 1, holeCards = listOf("Kh", "Kd"), category = "PAIR"),
+            ),
+            result.shownHands,
         )
         for (card in listOf("Jh", "Jd")) {
-            assertFalse(json.contains("\"$card\""), "머크한 좌석(JJ)의 홀카드 $card 가 공개 뷰 직렬화 결과에 노출됨: $json")
+            assertTrue(json.contains("\"$card\""), "쇼다운까지 간 좌석(JJ)의 홀카드 $card 가 공개 뷰 직렬화 결과에서 빠짐: $json")
         }
     }
 
     @Test
-    fun `숏스택 올인의 메인팟은 자신만, 사이드팟은 먼저 겨루는 좌석부터 판정된다`() {
-        // 버튼=3 이라 리더가 null 로 리셋돼도(포스트플랍 전부 체크) 공개 순서는 버튼 다음인 1부터 시작한다.
+    fun `숏스택 올인의 메인팟은 자신만, 사이드팟은 먼저 겨루는 좌석부터 나열되지만 쇼다운까지 간 셋 다 공개된다`() {
+        // 버튼=3 이라 리더가 null 로 리셋돼도(포스트플랍 전부 체크) 나열 순서는 버튼 다음인 1부터 시작한다.
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
         // 딜 순서: seat1=Ah,Ac(AA, 숏스택 올인)  seat2=Kh,Kc(KK)  seat3=Qh,Qc(QQ)  보드=2d,7c,9h,Jc,4s
         val shuffler = fixedShuffler("Ah", "Kh", "Qh", "Ac", "Kc", "Qc", "2d", "7c", "9h", "Jc", "4s")
@@ -382,17 +399,17 @@ class HoldemViewAssemblerTest {
         val json = objectMapper.writeValueAsString(view)
 
         val result = view.result!!
-        // 공개 순서 1,2,3: 1(AA)은 메인팟만 자격 -> 공개. 2(KK)는 사이드팟을 처음 겨뤄 공개.
-        // 3(QQ)은 사이드팟에서 2(KK)보다 약해 머크.
+        // 나열 순서 1,2,3 — 사이드팟에서 진 3(QQ)도 쇼다운까지 갔으므로 전원 공개된다.
         assertEquals(
             listOf(
                 ShownHandView(seatNo = 1, holeCards = listOf("Ah", "Ac"), category = "PAIR"),
                 ShownHandView(seatNo = 2, holeCards = listOf("Kh", "Kc"), category = "PAIR"),
+                ShownHandView(seatNo = 3, holeCards = listOf("Qh", "Qc"), category = "PAIR"),
             ),
             result.shownHands,
         )
         for (card in listOf("Qh", "Qc")) {
-            assertFalse(json.contains("\"$card\""), "머크한 좌석(QQ)의 홀카드 $card 가 공개 뷰 직렬화 결과에 노출됨: $json")
+            assertTrue(json.contains("\"$card\""), "쇼다운까지 간 좌석(QQ)의 홀카드 $card 가 공개 뷰 직렬화 결과에서 빠짐: $json")
         }
     }
 
@@ -451,44 +468,5 @@ class HoldemViewAssemblerTest {
         val json = objectMapper.writeValueAsString(view)
         assertTrue(json.contains("\"2026-09-24T12:30:45Z\""), "ISO-8601 형식의 ISO 즉시값이 JSON에 없음: $json")
         assertFalse(json.contains("1695555045"), "Unix 타임스탬프 숫자가 JSON에 포함됨 — Instant 가 숫자로 직렬화됨: $json")
-    }
-
-    @Test
-    fun `진 좌석이 선택을 기다리는 중 revealDeadline 은 hand 값과 같고, 모두 결정하면 null 이다`() {
-        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        table.moveButtonToNextOccupiedSeat()
-        val shuffler = fixedShuffler("Ah", "Kh", "Ad", "Kd", "2s", "7d", "9c", "Tc", "Jh")
-        val hand = Hand.start(
-            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
-            table.buttonSeatNo!!,
-            smallBlindSeatNo = 1,
-            bigBlindSeatNo = 2,
-            table.smallBlind,
-            table.bigBlind,
-            shuffler,
-        )
-        hand.act(1, BettingAction.Call)
-        hand.act(2, BettingAction.Check)
-        repeat(2) {
-            hand.act(2, BettingAction.Check)
-            hand.act(1, BettingAction.Check)
-        }
-        hand.act(2, BettingAction.Check)
-        hand.act(1, BettingAction.RaiseTo(Chips.of(200)))
-        hand.act(2, BettingAction.Call)
-
-        val revealDeadline = Instant.parse("2026-01-01T00:00:10Z")
-        hand.openReveal(revealDeadline)
-
-        // 진 좌석(1)이 선택 대상일 때 revealDeadline 은 hand 값과 같다
-        var view = publicViewOf(TableId(1), table, hand)
-        assertEquals(1, view.awaitingRevealSeatNos.size)
-        assertEquals(revealDeadline, view.revealDeadline)
-
-        // 진 좌석이 선택하면 awaitingRevealSeatNos 가 비고 revealDeadline 도 null 이 된다
-        hand.reveal(1, show = true)
-        view = publicViewOf(TableId(1), table, hand)
-        assertEquals(emptyList(), view.awaitingRevealSeatNos)
-        assertNull(view.revealDeadline)
     }
 }

@@ -3,8 +3,6 @@ package com.jsm.boardgame.holdem.application.command.service
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
 import com.jsm.boardgame.holdem.application.port.HandStore
-import com.jsm.boardgame.holdem.application.port.OpenShowdown
-import com.jsm.boardgame.holdem.application.port.ShowdownStore
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
@@ -83,25 +81,16 @@ private class StandUpFakeWalletTransfer : WalletTransfer {
     }
 }
 
-private class StandUpFakeShowdownStore : ShowdownStore {
-    private val store = mutableMapOf<Long, OpenShowdown>()
-    override fun find(tableId: TableId): OpenShowdown? = store[tableId.value]
-    override fun save(tableId: TableId, showdown: OpenShowdown) { store[tableId.value] = showdown }
-    override fun remove(tableId: TableId) { store.remove(tableId.value) }
-}
-
 class StandUpServiceTest {
 
     private val tables = StandUpFakeHoldemTableRepository()
     private val handStore = StandUpFakeHandStore()
-    private val showdownStore = StandUpFakeShowdownStore()
     private val walletTransfer = StandUpFakeWalletTransfer()
     private val eventPublisher = ApplicationEventPublisher { }
     private val clock: Clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
     private val nextHandDelay: Duration = Duration.ofSeconds(5)
-    private val revealTimeout: Duration = Duration.ofSeconds(10)
-    private val handSettler = HandSettler(tables, handStore, showdownStore, eventPublisher, clock, nextHandDelay, revealTimeout)
-    private val handStarter = HandStarter(tables, handStore, showdownStore, Shuffler { it }, handSettler, eventPublisher, clock, nextHandDelay)
+    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
+    private val handStarter = HandStarter(tables, handStore, Shuffler { it }, handSettler, eventPublisher, clock, nextHandDelay)
     private val service = StandUpService(tables, handStore, walletTransfer, handStarter)
 
     @Test

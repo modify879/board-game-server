@@ -2,8 +2,6 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.HandStore
-import com.jsm.boardgame.holdem.application.port.OpenShowdown
-import com.jsm.boardgame.holdem.application.port.ShowdownStore
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Card
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -83,13 +81,6 @@ private val bustingHandOrder: List<Card> = listOf(
 private val bustingShuffler = Shuffler { full -> bustingHandOrder + full.filterNot { it in bustingHandOrder } }
 private val identityShuffler = Shuffler { it }
 
-private class HandSettlerFakeShowdownStore : ShowdownStore {
-    private val store = mutableMapOf<Long, OpenShowdown>()
-    override fun find(tableId: TableId): OpenShowdown? = store[tableId.value]
-    override fun save(tableId: TableId, showdown: OpenShowdown) { store[tableId.value] = showdown }
-    override fun remove(tableId: TableId) { store.remove(tableId.value) }
-}
-
 private class HandSettlerFakeEventPublisher : ApplicationEventPublisher {
     val events = mutableListOf<Any>()
     override fun publishEvent(event: Any) { events += event }
@@ -99,13 +90,11 @@ class HandSettlerTest {
 
     private val tables = HandSettlerFakeTableRepository()
     private val handStore = HandSettlerFakeHandStore()
-    private val showdownStore = HandSettlerFakeShowdownStore()
     private val eventPublisher = HandSettlerFakeEventPublisher()
     private val fixedInstant: Instant = Instant.parse("2026-01-01T00:00:00Z")
     private val clock: Clock = Clock.fixed(fixedInstant, ZoneOffset.UTC)
     private val nextHandDelay: Duration = Duration.ofSeconds(5)
-    private val revealTimeout: Duration = Duration.ofSeconds(10)
-    private val settler = HandSettler(tables, handStore, showdownStore, eventPublisher, clock, nextHandDelay, revealTimeout)
+    private val settler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
 
     private fun seatedTable(vararg stacks: Pair<Int, Long>): HoldemTable {
         val seats = stacks.associate { (seatNo, stack) ->
@@ -142,28 +131,6 @@ class HandSettlerTest {
         assertNotNull(survivor)
         assertEquals(Chips.of(400), survivor.stack)
         assertNull(savedTable.seatAt(2))
-    }
-
-    @Test
-    fun `쇼다운으로 끝나면 진 좌석에게 공개 선택 창이 열리고 다음 핸드는 제한시간 뒤로 미뤄지며 0칩 기립한 좌석도 선택권을 그대로 갖는다`() {
-        val table = seatedTable(1 to 200L, 2 to 200L)
-        val tableId = table.id!!
-        val stacks = mapOf(1 to Chips.of(200), 2 to Chips.of(200))
-        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), bustingShuffler)
-        handStore.save(tableId, hand)
-        hand.act(1, BettingAction.Call) // 둘 다 올인 — 좌석 2(무패)가 진다.
-
-        settler.settle(tableId, table, hand)
-
-        // 좌석 2는 이미 0칩으로 기립됐지만(위 테스트) seatNoByUserId 는 기립 전에 잡혀 그대로 선택권이 있다.
-        assertNull(tables.findById(tableId)!!.seatAt(2))
-        val open = showdownStore.find(tableId)
-        assertNotNull(open)
-        assertEquals(mapOf(2000L to 2), open.seatNoByUserId)
-        assertEquals(setOf(2), hand.awaitingRevealSeatNos)
-
-        val savedTable = tables.findById(tableId)!!
-        assertEquals(fixedInstant.plus(revealTimeout).plus(nextHandDelay), savedTable.nextHandAt)
     }
 
     @Test

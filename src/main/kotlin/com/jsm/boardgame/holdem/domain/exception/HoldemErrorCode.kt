@@ -34,8 +34,6 @@ enum class HoldemErrorCode(override val kind: ErrorKind) : ErrorCode {
     HAND_NOT_FOUND(ErrorKind.NOT_FOUND),
     UNKNOWN_ACTION(ErrorKind.INVALID),
     CONCURRENT_TABLE_UPDATE(ErrorKind.CONFLICT),
-    REVEAL_NOT_ALLOWED(ErrorKind.CONFLICT),
-    REVEAL_ALREADY_DECIDED(ErrorKind.CONFLICT),
     ;
 
     override val code: String get() = name

@@ -1,7 +1,6 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
 import com.jsm.boardgame.holdem.application.port.HandStore
-import com.jsm.boardgame.holdem.application.port.ShowdownStore
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.presentation.ws.payload.privateViewOf
@@ -27,7 +26,6 @@ import org.springframework.web.socket.messaging.SessionSubscribeEvent
 class HoldemSubscriptionSnapshotListener(
     private val tables: HoldemTableRepository,
     private val handStore: HandStore,
-    private val showdownStore: ShowdownStore,
     private val messagingTemplate: SimpMessagingTemplate,
 ) {
 
@@ -40,11 +38,8 @@ class HoldemSubscriptionSnapshotListener(
 
         val table = tables.findById(tableId) ?: return
         val hand = handStore.find(tableId)
-        // 진행 중 핸드가 없어도 쇼다운 공개 선택 창이 열려 있으면 공개 뷰에 한해 그 핸드를 쓴다 —
-        // 재접속 스냅샷이 결과와 선택 대기 표시를 지우면 안 된다.
-        val publicHand = hand ?: showdownStore.find(tableId)?.hand
 
-        messagingTemplate.convertAndSend(HoldemDestinations.publicTopicOf(rawTableId), publicViewOf(tableId, table, publicHand))
+        messagingTemplate.convertAndSend(HoldemDestinations.publicTopicOf(rawTableId), publicViewOf(tableId, table, hand))
 
         // 관전자(좌석 없음)는 여기서 끝난다 — 개인 뷰는 그 사용자가 이 테이블에 착석해 있을 때만 나간다.
         val seat = table.seatOf(userId) ?: return

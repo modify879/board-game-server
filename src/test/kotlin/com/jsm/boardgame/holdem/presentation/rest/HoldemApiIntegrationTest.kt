@@ -43,7 +43,7 @@ import java.util.UUID
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
-@TestPropertySource(properties = ["app.holdem.next-hand-delay=1h", "app.holdem.reveal-timeout=1h"])
+@TestPropertySource(properties = ["app.holdem.next-hand-delay=1h"])
 class HoldemApiIntegrationTest {
 
     @Autowired

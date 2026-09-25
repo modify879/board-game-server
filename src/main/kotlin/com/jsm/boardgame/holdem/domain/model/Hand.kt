@@ -3,18 +3,15 @@ package com.jsm.boardgame.holdem.domain.model
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.exception.IllegalHandStateException
 import com.jsm.boardgame.holdem.domain.service.Shuffler
-import java.time.Instant
 
 enum class Street { PREFLOP, FLOP, TURN, RIVER }
-
-/** 쇼다운에서 진 좌석의 공개 선택 상태. 승자는 이 상태를 갖지 않는다(자동 공개라 선택지가 없다). */
-private enum class RevealChoice { PENDING, SHOW, MUCK }
 
 /**
  * @param payouts 좌석별 최종 수령액. 언콜드 벳 반환분도 포함한다
  * @param showdownRanks 쇼다운을 하지 않고 폴드로 끝났으면 빈 맵
- * @param showdownOrder 쇼다운에서 패를 공개하는 순서로만 쓰인다(TDA 17: 마지막 라운드의 마지막
- *   공격자부터, 없으면 버튼 다음 좌석부터). 폴드로 끝났으면 빈 리스트
+ * @param showdownOrder 공개된 패를 나열하는 순서(TDA 17: 마지막 라운드의 마지막 공격자부터, 없으면 버튼
+ *   다음 좌석부터). 쇼다운까지 간 좌석은 전원 공개하므로(머크 없음) 이 순서는 공개 여부가 아니라
+ *   나열 순서에만 쓰인다. 폴드로 끝났으면 빈 리스트
  */
 data class HandResult(
     val payouts: Map<Int, Chips>,
@@ -22,7 +19,7 @@ data class HandResult(
     val showdownRanks: Map<Int, HandRank>,
     val showdownOrder: List<Int>,
 ) {
-    /** 팟을 하나라도 이긴(무승부·사이드팟 포함) 좌석 — 자동 공개 대상(사용자 결정). */
+    /** 두 좌석 이상이 겨룬 팟에서 이긴 좌석. 반드시 [shownSeatNos] 에 포함된다(팟을 가져가려면 공개해야 한다, TDA 13). */
     val showdownWinners: Set<Int>
         get() {
             if (showdownRanks.isEmpty()) return emptySet()
@@ -34,6 +31,10 @@ data class HandResult(
             }
             return winners
         }
+
+    /** 쇼다운까지 간 좌석은 전원 공개한다(사용자 결정 — 머크 없음). */
+    val shownSeatNos: Set<Int>
+        get() = showdownRanks.keys
 }
 
 /**
@@ -64,14 +65,6 @@ class Hand private constructor(
     val board: List<Card> get() = boardCards.toList()
 
     var result: HandResult? = null
-        private set
-
-    /** 쇼다운에서 진 좌석의 공개 선택 상태. [openReveal] 이 채우고, 승자는 여기 들어오지 않는다. */
-    private val revealChoices = mutableMapOf<Int, RevealChoice>()
-
-    /** 공개 선택 제한시간. 창이 열려 있지 않으면 null. 재시작하면 사라진다(메모리 전용, 사용자 결정) —
-     * 이 필드는 스냅샷/복원 대상이 아니다(끝난 핸드는 애초에 저장 대상이 아니다). */
-    var revealDeadline: Instant? = null
         private set
 
     /**
@@ -108,53 +101,6 @@ class Hand private constructor(
         val accumulated = totalContributed.values.fold(Chips.ZERO) { acc, c -> acc + c }
         val inFlight = currentRound?.seats?.fold(Chips.ZERO) { acc, s -> acc + s.committed } ?: Chips.ZERO
         return accumulated + inFlight
-    }
-
-    /** 아직 SHOW/MUCK 을 고르지 않은 좌석(공개 선택 대기). 창이 안 열려 있으면 빈 집합. */
-    val awaitingRevealSeatNos: Set<Int>
-        get() = revealChoices.filterValues { it == RevealChoice.PENDING }.keys
-
-    /** 실제로 패를 공개하는 좌석 — 팟을 하나라도 이긴 좌석(자동 공개) + SHOW 를 고른 좌석. */
-    val shownSeatNos: Set<Int>
-        get() = (result?.showdownWinners ?: emptySet()) + revealChoices.filterValues { it == RevealChoice.SHOW }.keys
-
-    /**
-     * 쇼다운에서 진 좌석의 공개 선택 창을 연다. 끝난 쇼다운 핸드에서만 의미가 있다 — 아직 안 끝났거나
-     * (호출자가 정산 직후에만 부른다) 폴드로 끝났거나 전원이 팟을 나눠 가져 진 좌석이 없으면 아무것도
-     * 하지 않고 false 를 돌려준다. 진 좌석 = [HandResult.showdownRanks] 중 [HandResult.showdownWinners] 가
-     * 아닌 좌석.
-     */
-    fun openReveal(deadline: Instant): Boolean {
-        val handResult = result ?: return false
-        val losingSeatNos = handResult.showdownRanks.keys - handResult.showdownWinners
-        if (losingSeatNos.isEmpty()) return false
-        for (seatNo in losingSeatNos) revealChoices[seatNo] = RevealChoice.PENDING
-        revealDeadline = deadline
-        return true
-    }
-
-    /**
-     * 진 좌석의 SHOW/MUCK 선택. 창이 열려 있지 않거나 그 좌석이 대상이 아니면(승자 포함)
-     * REVEAL_NOT_ALLOWED, 이미 골랐으면 REVEAL_ALREADY_DECIDED.
-     */
-    fun reveal(seatNo: Int, show: Boolean) {
-        val choice = revealChoices[seatNo]
-            ?: throw IllegalHandStateException(
-                HoldemErrorCode.REVEAL_NOT_ALLOWED,
-                "공개 선택 대상이 아닙니다: seatNo=$seatNo",
-            )
-        if (choice != RevealChoice.PENDING) {
-            throw IllegalHandStateException(
-                HoldemErrorCode.REVEAL_ALREADY_DECIDED,
-                "이미 공개 여부를 선택했습니다: seatNo=$seatNo, choice=$choice",
-            )
-        }
-        revealChoices[seatNo] = if (show) RevealChoice.SHOW else RevealChoice.MUCK
-    }
-
-    /** 제한시간 만료 — 아직 선택하지 않은 좌석은 전부 MUCK. */
-    fun muckPendingReveals() {
-        revealChoices.replaceAll { _, choice -> if (choice == RevealChoice.PENDING) RevealChoice.MUCK else choice }
     }
 
     /**
@@ -283,8 +229,9 @@ class Hand private constructor(
     private fun seatOrderFromButton(): List<Int> = seatOrderFromButton(seatNos, buttonSeatNo)
 
     /**
-     * 쇼다운 공개 순서(TDA 17). [showdownLeaderSeatNo] 부터, 없으면(또는 그 좌석이 폴드했으면) 버튼
-     * 다음 좌석부터, 시계 방향(좌석 번호 오름차순, 순환)으로 폴드하지 않은 좌석만 돈다.
+     * 공개된 패를 나열하는 순서(TDA 17). [showdownLeaderSeatNo] 부터, 없으면(또는 그 좌석이 폴드했으면)
+     * 버튼 다음 좌석부터, 시계 방향(좌석 번호 오름차순, 순환)으로 폴드하지 않은 좌석만 돈다. 쇼다운까지
+     * 간 좌석은 전원 공개하므로 이 순서는 나열 순서일 뿐 공개 여부를 정하지 않는다.
      */
     private fun showdownOrder(liveSeats: Set<Int>): List<Int> {
         if (liveSeats.isEmpty()) return emptyList()

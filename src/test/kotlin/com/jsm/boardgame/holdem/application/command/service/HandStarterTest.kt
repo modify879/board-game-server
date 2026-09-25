@@ -1,8 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.HandStore
-import com.jsm.boardgame.holdem.application.port.OpenShowdown
-import com.jsm.boardgame.holdem.application.port.ShowdownStore
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
@@ -71,25 +69,16 @@ private class HandStarterFakeHandStore : HandStore {
     override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
 }
 
-private class HandStarterFakeShowdownStore : ShowdownStore {
-    private val store = mutableMapOf<Long, OpenShowdown>()
-    override fun find(tableId: TableId): OpenShowdown? = store[tableId.value]
-    override fun save(tableId: TableId, showdown: OpenShowdown) { store[tableId.value] = showdown }
-    override fun remove(tableId: TableId) { store.remove(tableId.value) }
-}
-
 class HandStarterTest {
 
     private val tables = HandStarterFakeTableRepository()
     private val handStore = HandStarterFakeHandStore()
-    private val showdownStore = HandStarterFakeShowdownStore()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
     private val clock: Clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
     private val nextHandDelay: Duration = Duration.ofSeconds(5)
-    private val revealTimeout: Duration = Duration.ofSeconds(10)
-    private val handSettler = HandSettler(tables, handStore, showdownStore, eventPublisher, clock, nextHandDelay, revealTimeout)
-    private val handStarter = HandStarter(tables, handStore, showdownStore, identityShuffler, handSettler, eventPublisher, clock, nextHandDelay)
+    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
+    private val handStarter = HandStarter(tables, handStore, identityShuffler, handSettler, eventPublisher, clock, nextHandDelay)
 
     private fun start(tableId: TableId) {
         val table = tables.findById(tableId)!!
@@ -126,21 +115,6 @@ class HandStarterTest {
         val hand = handStore.find(tableId)
         assertNotNull(hand)
         assertEquals(false, hand.isFinished)
-    }
-
-    @Test
-    fun `핸드가 시작되면 남아있던 공개 선택 창을 닫는다`() {
-        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        val staleHand = Hand.start(
-            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
-            buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2,
-            Chips.of(100), Chips.of(200), identityShuffler,
-        )
-        showdownStore.save(tableId, OpenShowdown(staleHand, emptyMap()))
-
-        start(tableId)
-
-        assertNull(showdownStore.find(tableId))
     }
 
     @Test
