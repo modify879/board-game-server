@@ -70,7 +70,27 @@ class HandTest {
         assertEquals(chips(300), hand.result!!.payouts.getValue(3))
         assertEquals(emptyMap(), hand.result!!.showdownRanks)
         assertEquals(emptySet(), hand.result!!.showdownWinners)
+        assertEquals(emptySet(), hand.result!!.shownSeatNos) // 모두 폴드한 판은 공개하지 않는다
         assertEquals(chips(30_000), sumStacks(listOf(1, 2, 3), hand))
+    }
+
+    @Test
+    fun `한 좌석이 폴드하고 나머지 둘이 쇼다운까지 가면 폴드한 좌석은 shownSeatNos 에 없고 나머지 둘은 있다`() {
+        // 딜 순서(버튼(1) 다음인 2부터 시계방향, 버튼이 마지막): seat2=Kh,Kd(KK)  seat3=Ah,Ad(AA)  seat1=Qh,Qd(QQ, 프리플랍 폴드)  보드=2s,7d,9c,Tc,Jh
+        val shuffler = fixedShuffler("Kh", "Ah", "Qh", "Kd", "Ad", "Qd", "2s", "7d", "9c", "Tc", "Jh")
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), shuffler)
+
+        hand.act(1, BettingAction.Fold) // UTG(=버튼)가 프리플랍에서 폴드
+        hand.act(2, BettingAction.Call)
+        hand.act(3, BettingAction.Check)
+        repeat(3) {
+            hand.act(2, BettingAction.Check)
+            hand.act(3, BettingAction.Check)
+        }
+
+        assertTrue(hand.isFinished)
+        assertEquals(setOf(2, 3), hand.result!!.shownSeatNos)
+        assertTrue(1 !in hand.result!!.shownSeatNos)
     }
 
     @Test
@@ -112,7 +132,7 @@ class HandTest {
         assertTrue(hand.isFinished)
         assertEquals(listOf(Card.of("2s"), Card.of("7d"), Card.of("9c"), Card.of("Tc"), Card.of("Jh")), hand.board)
         assertEquals(HandCategory.PAIR, hand.result!!.showdownRanks.getValue(1).category)
-        assertEquals(setOf(1), hand.result!!.showdownWinners) // 이긴 좌석만 패를 공개한다
+        assertEquals(setOf(1), hand.result!!.showdownWinners) // 쇼다운 승자(팟을 가져가는 좌석)는 seat1 뿐이다
         assertEquals(chips(10_200), hand.stackOf(1)) // AA가 KK를 이겨 팟(400) 전부를 가져간다
         assertEquals(chips(9_800), hand.stackOf(2))
         assertEquals(chips(20_000), sumStacks(listOf(1, 2), hand))
@@ -157,6 +177,7 @@ class HandTest {
         assertTrue(hand.isFinished)
         assertEquals(2, hand.result!!.pots.size)
         assertEquals(setOf(1, 2), hand.result!!.showdownWinners) // 메인팟·사이드팟 승자 모두 포함, QQ는 빠진다
+        assertEquals(setOf(1, 2, 3), hand.result!!.shownSeatNos) // 쇼다운까지 간 좌석은 전원 공개한다(머크 없음), QQ(3)도 포함
         assertEquals(chips(3_000), hand.stackOf(1)) // 메인팟(3,000) 승자 = AA
         assertEquals(chips(6_000), hand.stackOf(2)) // 사이드팟(4,000) 승자 = KK
         assertEquals(chips(2_000), hand.stackOf(3)) // QQ는 둘 다 못 이겨 못 가져간다

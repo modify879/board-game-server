@@ -9,8 +9,9 @@ enum class Street { PREFLOP, FLOP, TURN, RIVER }
 /**
  * @param payouts 좌석별 최종 수령액. 언콜드 벳 반환분도 포함한다
  * @param showdownRanks 쇼다운을 하지 않고 폴드로 끝났으면 빈 맵
- * @param showdownOrder 쇼다운 공개 순서(TDA 17: 마지막 라운드의 마지막 공격자부터, 없으면 버튼 다음 좌석부터).
- *   폴드로 끝났으면 빈 리스트
+ * @param showdownOrder 공개된 패를 나열하는 순서(TDA 17: 마지막 라운드의 마지막 공격자부터, 없으면 버튼
+ *   다음 좌석부터). 쇼다운까지 간 좌석은 전원 공개하므로(머크 없음) 이 순서는 공개 여부가 아니라
+ *   나열 순서에만 쓰인다. 폴드로 끝났으면 빈 리스트
  */
 data class HandResult(
     val payouts: Map<Int, Chips>,
@@ -31,33 +32,9 @@ data class HandResult(
             return winners
         }
 
-    /**
-     * 실제로 패를 공개하는 좌석. [showdownOrder] 를 따라가며 겨루는 팟(자격자 2명 이상)마다 판정한다 —
-     * 그 팟에서 아직 아무도 공개하지 않았거나(TDA 17: 먼저 공개할 차례) 지금까지 그 팟에서 공개된
-     * 최고 패를 이기거나 비기면 공개하고, 아니면 머크한다. 사이드팟은 팟마다 따로 판정한다(TDA 21).
-     */
+    /** 쇼다운까지 간 좌석은 전원 공개한다(사용자 결정 — 머크 없음). */
     val shownSeatNos: Set<Int>
-        get() {
-            val shown = mutableSetOf<Int>()
-            val bestShownRankByPot = mutableMapOf<SidePot, HandRank>()
-            for (seatNo in showdownOrder) {
-                val rank = showdownRanks[seatNo] ?: continue
-                var shows = false
-                for (pot in pots) {
-                    if (pot.eligibleSeats.size < 2 || seatNo !in pot.eligibleSeats) continue
-                    val bestSoFar = bestShownRankByPot[pot]
-                    if (bestSoFar == null || rank >= bestSoFar) {
-                        shows = true
-                        if (bestSoFar == null || rank > bestSoFar) bestShownRankByPot[pot] = rank
-                    }
-                }
-                if (shows) shown += seatNo
-            }
-            check(showdownWinners.all { it in shown }) {
-                "쇼다운 승자는 반드시 패를 공개해야 한다: winners=$showdownWinners, shown=$shown"
-            }
-            return shown
-        }
+        get() = showdownRanks.keys
 }
 
 /**
@@ -252,8 +229,9 @@ class Hand private constructor(
     private fun seatOrderFromButton(): List<Int> = seatOrderFromButton(seatNos, buttonSeatNo)
 
     /**
-     * 쇼다운 공개 순서(TDA 17). [showdownLeaderSeatNo] 부터, 없으면(또는 그 좌석이 폴드했으면) 버튼
-     * 다음 좌석부터, 시계 방향(좌석 번호 오름차순, 순환)으로 폴드하지 않은 좌석만 돈다.
+     * 공개된 패를 나열하는 순서(TDA 17). [showdownLeaderSeatNo] 부터, 없으면(또는 그 좌석이 폴드했으면)
+     * 버튼 다음 좌석부터, 시계 방향(좌석 번호 오름차순, 순환)으로 폴드하지 않은 좌석만 돈다. 쇼다운까지
+     * 간 좌석은 전원 공개하므로 이 순서는 나열 순서일 뿐 공개 여부를 정하지 않는다.
      */
     private fun showdownOrder(liveSeats: Set<Int>): List<Int> {
         if (liveSeats.isEmpty()) return emptyList()

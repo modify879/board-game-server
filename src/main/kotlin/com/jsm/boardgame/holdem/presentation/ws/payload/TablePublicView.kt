@@ -6,10 +6,10 @@ import java.time.Instant
  * 브로드캐스트 전용. 홀카드를 담을 필드가 아예 없다 — 이게 이 타입의 존재 이유다.
  * 여기에 카드 필드를 추가하지 마라. 추가하는 순간 규칙 6의 컴파일러 보장이 사라진다.
  * 유일한 예외는 [result] 의 [HandResultPublicView.shownHands] 다 — 핸드가 끝났고 쇼다운이 벌어졌을 때만,
- * [com.jsm.boardgame.holdem.domain.model.HandResult.shownSeatNos] 로만 채워진다(TDA 17 순서대로 공개
- * 판정한 결과 — 이긴 좌석만이 아니라, 먼저 보여줄 차례였거나 그때까지 공개된 최고 패를 이기거나
- * 비긴 좌석도 포함한다). 그 외 어떤 카드 성격의 필드도 이 파일에 추가하지 마라 — 추가하는 순간
- * 관전이 정보 유출이 된다.
+ * [com.jsm.boardgame.holdem.domain.model.HandResult.shownSeatNos] 로만 채워진다 — 쇼다운까지 간 좌석은
+ * 전원 공개한다(사용자 결정, 머크 없음). 나열 순서만 TDA 17(마지막 라운드의 마지막 공격자부터, 없으면
+ * 버튼 다음 좌석부터)을 따른다. 그 외 어떤 카드 성격의 필드도 이 파일에 추가하지 마라 — 추가하는
+ * 순간 관전이 정보 유출이 된다.
  */
 data class TablePublicView(
     val tableId: Long,
@@ -40,9 +40,9 @@ data class HandResultPublicView(val payouts: List<PayoutPublicView>, val shownHa
 data class PayoutPublicView(val seatNo: Int, val amount: Long)
 
 /**
- * 쇼다운에서 패를 공개하는 좌석의 패 — 이겼다고 다는 아니다. TDA 17 순서상 먼저 보여줄 차례였거나
- * 그때까지의 최고 패를 이기거나 비긴 좌석도 포함한다. 공개 뷰에서 카드를 담을 수 있는 유일한 타입이다 —
- * [com.jsm.boardgame.holdem.domain.model.HandResult.shownSeatNos] 로만 만든다. 머크한 좌석·폴드
- * 승리·진행 중 핸드의 카드는 여기 오지 않는다.
+ * 쇼다운까지 간 좌석 전원의 패 — 이겼는지 여부와 무관하다(사용자 결정, 머크 없음). 나열 순서는
+ * TDA 17(마지막 라운드의 마지막 공격자부터, 없으면 버튼 다음 좌석부터)을 따른다. 공개 뷰에서 카드를
+ * 담을 수 있는 유일한 타입이다 — [com.jsm.boardgame.holdem.domain.model.HandResult.shownSeatNos] 로만
+ * 만든다. 폴드한 좌석·폴드 승리·진행 중 핸드의 카드는 여기 오지 않는다.
  */
 data class ShownHandView(val seatNo: Int, val holeCards: List<String>, val category: String)

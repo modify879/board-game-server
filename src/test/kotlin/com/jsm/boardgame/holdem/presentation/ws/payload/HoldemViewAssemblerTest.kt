@@ -210,7 +210,7 @@ class HoldemViewAssemblerTest {
     }
 
     @Test
-    fun `리버에 A 가 베팅하고 B 가 콜했는데 A 가 이기면 A 만 공개되고 B 는 머크한다`() {
+    fun `리버에 A 가 베팅하고 B 가 콜했는데 A 가 이겨도 진 B 의 패가 그대로 공개된다(머크 없음)`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         table.moveButtonToNextOccupiedSeat()
         // 딜 순서(버튼(1) 다음인 2부터, 버튼이 마지막): seat2=Kh,Kd(KK)  seat1=Ah,Ad(AA)  보드=2s,7d,9c,Tc,Jh
@@ -240,18 +240,19 @@ class HoldemViewAssemblerTest {
 
         val result = view.result!!
         assertEquals(
-            listOf(ShownHandView(seatNo = 1, holeCards = listOf("Ah", "Ad"), category = "PAIR")),
+            listOf(
+                ShownHandView(seatNo = 1, holeCards = listOf("Ah", "Ad"), category = "PAIR"),
+                ShownHandView(seatNo = 2, holeCards = listOf("Kh", "Kd"), category = "PAIR"),
+            ),
             result.shownHands,
         )
-        assertTrue(json.contains("\"Ah\""))
-        assertTrue(json.contains("\"Ad\""))
-        for (card in listOf("Kh", "Kd")) {
-            assertFalse(json.contains("\"$card\""), "머크한 좌석의 홀카드 $card 가 공개 뷰 직렬화 결과에 노출됨: $json")
+        for (card in listOf("Ah", "Ad", "Kh", "Kd")) {
+            assertTrue(json.contains("\"$card\""), "쇼다운까지 간 좌석의 홀카드 $card 가 공개 뷰 직렬화 결과에서 빠짐: $json")
         }
     }
 
     @Test
-    fun `리버 베팅 없이 체크로 끝나면 공개 순서는 버튼 왼쪽부터라 진 좌석도 먼저 보여줄 차례면 공개된다`() {
+    fun `리버 베팅 없이 체크로 끝나면 공개 순서는 버튼 다음 좌석부터고 쇼다운까지 간 좌석은 순서대로 전원 공개된다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         table.moveButtonToNextOccupiedSeat() // button=1(=SB), BB=2
         // 딜 순서(버튼(1) 다음인 2부터, 버튼이 마지막): seat2=Kh,Kd(KK)  seat1=Ah,Ad(AA)  보드=2s,7d,9c,Tc,Jh — 전부 체크로 통과
@@ -287,7 +288,7 @@ class HoldemViewAssemblerTest {
     }
 
     @Test
-    fun `삼자 체크다운에서 첫 공개가 약한 패, 다음이 이를 이기면 셋 다 공개된다`() {
+    fun `삼자 체크다운은 순서대로 셋 다 공개된다(머크 없음)`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
         table.moveButtonToNextOccupiedSeat() // button=1, SB=2, BB=3
         // 딜 순서(버튼(1) 다음인 2부터 시계방향, 버튼이 마지막): seat2=Jh,Jd(JJ)  seat3=Qh,Qd(QQ)  seat1=Kh,Kd(KK)  보드=2d,7c,9h,4s,5c
@@ -326,7 +327,7 @@ class HoldemViewAssemblerTest {
     }
 
     @Test
-    fun `삼자 체크다운에서 두 번째 패가 첫 번째보다 약하면 두 번째는 공개되지 않는다`() {
+    fun `삼자 체크다운에서 두 번째 패가 첫 번째보다 약해도 전원 공개된다(머크 없음)`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
         table.moveButtonToNextOccupiedSeat() // button=1, SB=2, BB=3
         // 딜 순서(버튼(1) 다음인 2부터 시계방향, 버튼이 마지막): seat2=Qh,Qd(QQ)  seat3=Jh,Jd(JJ)  seat1=Kh,Kd(KK)  보드=2d,7c,9h,4s,5c
@@ -354,22 +355,23 @@ class HoldemViewAssemblerTest {
         val json = objectMapper.writeValueAsString(view)
 
         val result = view.result!!
-        // 버튼(1) 다음부터: 2(QQ, 먼저 공개) -> 3(JJ, QQ 보다 약해 머크) -> 1(KK, QQ를 이겨 공개)
+        // 버튼(1) 다음부터: 2(QQ) -> 3(JJ, QQ 보다 약해도 공개된다) -> 1(KK)
         assertEquals(
             listOf(
                 ShownHandView(seatNo = 2, holeCards = listOf("Qh", "Qd"), category = "PAIR"),
+                ShownHandView(seatNo = 3, holeCards = listOf("Jh", "Jd"), category = "PAIR"),
                 ShownHandView(seatNo = 1, holeCards = listOf("Kh", "Kd"), category = "PAIR"),
             ),
             result.shownHands,
         )
         for (card in listOf("Jh", "Jd")) {
-            assertFalse(json.contains("\"$card\""), "머크한 좌석(JJ)의 홀카드 $card 가 공개 뷰 직렬화 결과에 노출됨: $json")
+            assertTrue(json.contains("\"$card\""), "쇼다운까지 간 좌석(JJ)의 홀카드 $card 가 공개 뷰 직렬화 결과에서 빠짐: $json")
         }
     }
 
     @Test
-    fun `숏스택 올인의 메인팟은 자신만, 사이드팟은 먼저 겨루는 좌석부터 판정된다`() {
-        // 버튼=3 이라 리더가 null 로 리셋돼도(포스트플랍 전부 체크) 공개 순서는 버튼 다음인 1부터 시작한다.
+    fun `숏스택 올인의 메인팟은 자신만, 사이드팟은 먼저 겨루는 좌석부터 나열되지만 쇼다운까지 간 셋 다 공개된다`() {
+        // 버튼=3 이라 리더가 null 로 리셋돼도(포스트플랍 전부 체크) 나열 순서는 버튼 다음인 1부터 시작한다.
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
         // 딜 순서: seat1=Ah,Ac(AA, 숏스택 올인)  seat2=Kh,Kc(KK)  seat3=Qh,Qc(QQ)  보드=2d,7c,9h,Jc,4s
         val shuffler = fixedShuffler("Ah", "Kh", "Qh", "Ac", "Kc", "Qc", "2d", "7c", "9h", "Jc", "4s")
@@ -397,17 +399,17 @@ class HoldemViewAssemblerTest {
         val json = objectMapper.writeValueAsString(view)
 
         val result = view.result!!
-        // 공개 순서 1,2,3: 1(AA)은 메인팟만 자격 -> 공개. 2(KK)는 사이드팟을 처음 겨뤄 공개.
-        // 3(QQ)은 사이드팟에서 2(KK)보다 약해 머크.
+        // 나열 순서 1,2,3 — 사이드팟에서 진 3(QQ)도 쇼다운까지 갔으므로 전원 공개된다.
         assertEquals(
             listOf(
                 ShownHandView(seatNo = 1, holeCards = listOf("Ah", "Ac"), category = "PAIR"),
                 ShownHandView(seatNo = 2, holeCards = listOf("Kh", "Kc"), category = "PAIR"),
+                ShownHandView(seatNo = 3, holeCards = listOf("Qh", "Qc"), category = "PAIR"),
             ),
             result.shownHands,
         )
         for (card in listOf("Qh", "Qc")) {
-            assertFalse(json.contains("\"$card\""), "머크한 좌석(QQ)의 홀카드 $card 가 공개 뷰 직렬화 결과에 노출됨: $json")
+            assertTrue(json.contains("\"$card\""), "쇼다운까지 간 좌석(QQ)의 홀카드 $card 가 공개 뷰 직렬화 결과에서 빠짐: $json")
         }
     }
 
