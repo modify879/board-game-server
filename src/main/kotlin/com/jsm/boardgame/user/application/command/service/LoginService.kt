@@ -89,6 +89,7 @@ class LoginService(
             accessToken = tokens.accessToken,
             refreshToken = tokens.refreshToken,
             accessTokenExpiresAt = tokens.accessTokenExpiresAt,
+            refreshTokenExpiresAt = tokens.refreshTokenExpiresAt,
         )
     }
 

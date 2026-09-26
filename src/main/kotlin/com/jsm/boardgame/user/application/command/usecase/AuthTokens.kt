@@ -10,4 +10,5 @@ data class AuthTokens(
     val accessToken: String,
     val refreshToken: String,
     val accessTokenExpiresAt: Instant,
+    val refreshTokenExpiresAt: Instant,
 )

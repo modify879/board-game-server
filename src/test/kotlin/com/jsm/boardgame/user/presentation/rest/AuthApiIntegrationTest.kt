@@ -4,6 +4,7 @@ import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
+import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -74,11 +75,11 @@ class AuthApiIntegrationTest {
                 .content("""{"username":"$username","password":"$password"}"""),
         )
 
-    private fun refresh(refreshToken: String): ResultActions =
+    private fun refresh(refreshToken: String?): ResultActions =
         mockMvc.perform(
-            post("/api/auth/refresh")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""{"refreshToken":"$refreshToken"}"""),
+            post("/api/auth/refresh").let { builder ->
+                if (refreshToken != null) builder.cookie(Cookie("refresh_token", refreshToken)) else builder
+            },
         )
 
     private fun logout(accessToken: String): ResultActions =
@@ -98,8 +99,16 @@ class AuthApiIntegrationTest {
     private fun accessTokenOf(result: ResultActions): String =
         JsonPath.read<String>(result.andReturn().response.contentAsString, "$.accessToken")
 
+    private fun setCookieHeaderOf(result: ResultActions): String =
+        result.andReturn().response.getHeader(HttpHeaders.SET_COOKIE)
+            ?: error("Set-Cookie 헤더가 없다")
+
     private fun refreshTokenOf(result: ResultActions): String =
-        JsonPath.read<String>(result.andReturn().response.contentAsString, "$.refreshToken")
+        setCookieHeaderOf(result).substringAfter("refresh_token=").substringBefore(";")
+
+    private fun maxAgeOf(setCookieHeader: String): Long =
+        Regex("Max-Age=(\\d+)").find(setCookieHeader)?.groupValues?.get(1)?.toLong()
+            ?: error("Set-Cookie 에 Max-Age 가 없다: $setCookieHeader")
 
     @Test
     fun `정상적으로 로그인하면 200 과 함께 액세스 리프레시 토큰을 응답한다`() {
@@ -110,7 +119,6 @@ class AuthApiIntegrationTest {
         login(username, password)
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.accessToken").isNotEmpty)
-            .andExpect(jsonPath("$.refreshToken").isNotEmpty)
             .andExpect(jsonPath("$.accessTokenExpiresAt").isNotEmpty)
     }
 
@@ -225,10 +233,9 @@ class AuthApiIntegrationTest {
 
         val refreshResult = refresh(oldRefreshToken)
             .andExpect(status().isOk)
-            .andReturn()
 
-        val newAccessToken = JsonPath.read<String>(refreshResult.response.contentAsString, "$.accessToken")
-        val newRefreshToken = JsonPath.read<String>(refreshResult.response.contentAsString, "$.refreshToken")
+        val newAccessToken = accessTokenOf(refreshResult)
+        val newRefreshToken = refreshTokenOf(refreshResult)
 
         assertThat(newAccessToken).isNotEqualTo(oldAccessToken)
         assertThat(newRefreshToken).isNotEqualTo(oldRefreshToken)
@@ -338,5 +345,67 @@ class AuthApiIntegrationTest {
 
         getProfile(id, firstAccessToken)
             .andExpect(status().isUnauthorized)
+    }
+
+    @Test
+    fun `로그인하면 리프레시 토큰은 지정된 속성의 쿠키로만 오고 응답 본문에는 없다`() {
+        val username = uniqueUsername()
+        val password = "password123"
+        signUp(signUpBody(username = username, password = password)).andExpect(status().isCreated)
+
+        val loginResult = login(username, password)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.refreshToken").doesNotExist())
+
+        val setCookie = setCookieHeaderOf(loginResult)
+        assertThat(setCookie).contains("refresh_token=")
+        assertThat(setCookie).contains("Path=/api/auth")
+        assertThat(setCookie).contains("HttpOnly")
+        assertThat(setCookie).contains("Secure")
+        assertThat(setCookie).contains("SameSite=Strict")
+        assertThat(maxAgeOf(setCookie)).isPositive()
+    }
+
+    @Test
+    fun `리프레시 쿠키로 갱신하면 새 액세스 토큰이 발급되고 쿠키가 회전한다`() {
+        val username = uniqueUsername()
+        val password = "password123"
+        signUp(signUpBody(username = username, password = password)).andExpect(status().isCreated)
+
+        val loginResult = login(username, password).andExpect(status().isOk)
+        val oldAccessToken = accessTokenOf(loginResult)
+        val oldRefreshToken = refreshTokenOf(loginResult)
+
+        val refreshResult = refresh(oldRefreshToken)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.accessToken").isNotEmpty)
+            .andExpect(jsonPath("$.refreshToken").doesNotExist())
+
+        assertThat(accessTokenOf(refreshResult)).isNotEqualTo(oldAccessToken)
+        assertThat(refreshTokenOf(refreshResult)).isNotEqualTo(oldRefreshToken)
+    }
+
+    @Test
+    fun `리프레시 쿠키 없이 갱신을 요청하면 401 과 REFRESH_TOKEN_INVALID 를 응답한다`() {
+        refresh(refreshToken = null)
+            .andExpect(status().isUnauthorized)
+            .andExpect(jsonPath("$.errorCode").value("REFRESH_TOKEN_INVALID"))
+    }
+
+    @Test
+    fun `로그아웃하면 리프레시 쿠키도 Max-Age 0 으로 만료시킨다`() {
+        val username = uniqueUsername()
+        val password = "password123"
+        signUp(signUpBody(username = username, password = password)).andExpect(status().isCreated)
+
+        val loginResult = login(username, password).andExpect(status().isOk)
+        val accessToken = accessTokenOf(loginResult)
+
+        val logoutResult = logout(accessToken).andExpect(status().isNoContent)
+
+        val setCookie = setCookieHeaderOf(logoutResult)
+        assertThat(setCookie).contains("refresh_token=")
+        assertThat(setCookie).contains("Path=/api/auth")
+        assertThat(maxAgeOf(setCookie)).isZero()
     }
 }
