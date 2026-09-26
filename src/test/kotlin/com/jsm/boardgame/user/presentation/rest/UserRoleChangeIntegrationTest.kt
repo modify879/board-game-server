@@ -5,6 +5,7 @@ import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.domain.model.UserRole
 import com.jsm.boardgame.user.domain.repository.UserRepository
+import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -70,11 +71,14 @@ class UserRoleChangeIntegrationTest {
     private fun accessTokenOf(result: ResultActions): String =
         JsonPath.read<String>(result.andReturn().response.contentAsString, "$.accessToken")
 
+    private fun refreshTokenOf(result: ResultActions): String =
+        (result.andReturn().response.getHeader(HttpHeaders.SET_COOKIE) ?: error("Set-Cookie 헤더가 없다"))
+            .substringAfter("refresh_token=")
+            .substringBefore(";")
+
     private fun refresh(refreshToken: String): ResultActions =
         mockMvc.perform(
-            post("/api/auth/refresh")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""{"refreshToken":"$refreshToken"}"""),
+            post("/api/auth/refresh").cookie(Cookie("refresh_token", refreshToken)),
         )
 
     private fun changeRole(targetId: Long, role: String, accessToken: String?): ResultActions {
@@ -152,7 +156,7 @@ class UserRoleChangeIntegrationTest {
             .andExpect(jsonPath("$.errorCode").value("AUTHENTICATION_REQUIRED"))
 
         // 6. B 가 재로그인 없이 refresh 만으로 새 토큰을 받으면 role 클레임이 USER 다.
-        val refreshTokenB = JsonPath.read<String>(reloginB.andReturn().response.contentAsString, "$.refreshToken")
+        val refreshTokenB = refreshTokenOf(reloginB)
         val refreshed = refresh(refreshTokenB).andExpect(status().isOk)
         val newAccessTokenB = accessTokenOf(refreshed)
         assertThat(roleClaimOf(newAccessTokenB)).isEqualTo("USER")
