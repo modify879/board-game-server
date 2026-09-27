@@ -18,8 +18,8 @@ class StompRealtimeConnections(
     private val stompSessionRegistry: StompSessionRegistry,
 ) : RealtimeConnections {
 
-    override fun closeNow(accessTokenId: String) {
-        stompSessionRegistry.closeNow(accessTokenId)
+    override fun closeAllOf(userId: Long) {
+        stompSessionRegistry.closeAllOf(userId)
     }
 
     override fun closeAfterGrace(accessTokenId: String) {

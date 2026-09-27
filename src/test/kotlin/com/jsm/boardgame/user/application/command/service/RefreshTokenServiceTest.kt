@@ -54,9 +54,9 @@ private class RefreshFakeAuthTokenIssuer : AuthTokenIssuer {
 }
 
 private class RefreshFakeRealtimeConnections : RealtimeConnections {
-    val closeNowCalls = mutableListOf<String>()
+    val closeAllOfCalls = mutableListOf<Long>()
     val closeAfterGraceCalls = mutableListOf<String>()
-    override fun closeNow(accessTokenId: String) { closeNowCalls += accessTokenId }
+    override fun closeAllOf(userId: Long) { closeAllOfCalls += userId }
     override fun closeAfterGrace(accessTokenId: String) { closeAfterGraceCalls += accessTokenId }
 }
 
@@ -271,7 +271,7 @@ class RefreshTokenServiceTest {
         // 재사용 탐지로 세션 전체가 폐기됐으므로, 아직 회수하지 않은 최신 토큰마저 통하지 않는다.
         assertFalse(sessions.matchesRefreshToken(userId, rotatedAgain.refreshToken))
         assertNull(sessions.currentAccessTokenId(userId))
-        assertTrue(realtimeConnections.closeNowCalls.contains(rotatedAgainAccessTokenId))
+        assertTrue(realtimeConnections.closeAllOfCalls.contains(userId))
     }
 
     @Test

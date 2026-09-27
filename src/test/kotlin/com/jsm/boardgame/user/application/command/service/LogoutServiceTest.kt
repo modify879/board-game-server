@@ -74,14 +74,14 @@ private class LogoutFakeAuthSessionStore : AuthSessionStore {
 }
 
 private class LogoutFakeRealtimeConnections : RealtimeConnections {
-    val closeNowCalls = mutableListOf<String>()
+    val closeAllOfCalls = mutableListOf<Long>()
     val closeAfterGraceCalls = mutableListOf<String>()
-    override fun closeNow(accessTokenId: String) { closeNowCalls += accessTokenId }
+    override fun closeAllOf(userId: Long) { closeAllOfCalls += userId }
     override fun closeAfterGrace(accessTokenId: String) { closeAfterGraceCalls += accessTokenId }
 }
 
 private class LogoutRefreshFakeRealtimeConnections : RealtimeConnections {
-    override fun closeNow(accessTokenId: String) {}
+    override fun closeAllOf(userId: Long) {}
     override fun closeAfterGrace(accessTokenId: String) {}
 }
 
@@ -147,7 +147,7 @@ class LogoutServiceTest {
         service.logout(1L)
 
         assertTrue(sessions.isAccessTokenBlacklisted(issued.accessTokenId))
-        assertTrue(realtimeConnections.closeNowCalls.contains(issued.accessTokenId))
+        assertTrue(realtimeConnections.closeAllOfCalls.contains(1L))
     }
 
     @Test

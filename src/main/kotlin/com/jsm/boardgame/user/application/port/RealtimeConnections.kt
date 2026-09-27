@@ -7,8 +7,12 @@ package com.jsm.boardgame.user.application.port
  * 그 인프라를 부른다.
  */
 interface RealtimeConnections {
-    /** 그 액세스 토큰으로 연결된 세션을 즉시 닫는다. */
-    fun closeNow(accessTokenId: String)
+    /**
+     * 그 사용자로 연결된 세션을 전부 즉시 닫는다. 단일 기기 정책이라 즉시 폐기는 "이 사용자의
+     * 연결 전부"다 — jti 로 찾으면 인밴드 갱신과 경합해 놓친다(세션이 이미 새 토큰으로
+     * 옮겨간 뒤라 옛 jti 로는 못 찾는다).
+     */
+    fun closeAllOf(userId: Long)
 
     /**
      * 그 액세스 토큰으로 연결된 세션을 유예를 두고 닫는다 — 리프레시 성공 직후처럼 클라이언트가

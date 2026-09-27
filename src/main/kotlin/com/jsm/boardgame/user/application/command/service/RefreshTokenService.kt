@@ -92,7 +92,7 @@ class RefreshTokenService(
                 if (currentAccessTokenId != null) {
                     sessions.blacklistAccessToken(currentAccessTokenId, Instant.now(clock).plus(accessTokenTtl))
                     // 소켓을 닫는 것은 상태 방송이 아니다 — 커밋 전에 불러도 규칙 6을 어기지 않는다.
-                    realtimeConnections.closeNow(currentAccessTokenId)
+                    realtimeConnections.closeAllOf(userId)
                     sessions.clear(userId)
                     throw InvalidRefreshTokenException("리프레시 토큰 재사용 탐지: userId=$userId — 세션 전체 폐기")
                 } else {

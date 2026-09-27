@@ -84,7 +84,7 @@ class LoginService(
         sessions.currentAccessTokenId(userId)?.let { previousAccessTokenId ->
             sessions.blacklistAccessToken(previousAccessTokenId, Instant.now(clock).plus(accessTokenTtl))
             // 소켓을 닫는 것은 상태 방송이 아니다 — 커밋 전에 불러도 규칙 6을 어기지 않는다.
-            realtimeConnections.closeNow(previousAccessTokenId)
+            realtimeConnections.closeAllOf(userId)
         }
 
         val tokens = tokenIssuer.issue(userId, user.role)
