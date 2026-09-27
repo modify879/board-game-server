@@ -25,7 +25,6 @@ class DepositRequestTest {
             processedBy = null,
             processedAt = null,
             rejectionReason = null,
-            version = 0,
         )
 
     @Test

@@ -47,7 +47,6 @@ class CancelDepositRequestServiceTest {
             processedBy = null,
             processedAt = null,
             rejectionReason = null,
-            version = 0,
         ).also { depositRequests.put(it) }
 
     @Test

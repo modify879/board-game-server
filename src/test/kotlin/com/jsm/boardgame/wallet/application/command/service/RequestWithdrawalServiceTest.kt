@@ -41,7 +41,6 @@ private class RequestFakeWithdrawalRequestRepository : WithdrawalRequestReposito
                 processedBy = request.processedBy,
                 processedAt = request.processedAt,
                 rejectionReason = request.rejectionReason,
-                version = request.version,
             )
         } else {
             request
@@ -60,7 +59,7 @@ private class RequestFakeWalletRepository : WalletRepository {
     override fun save(wallet: Wallet): Wallet {
         val saved = if (wallet.id == null) {
             sequence += 1
-            Wallet.reconstitute(id = WalletId(sequence), userId = wallet.userId, balance = wallet.balance, version = wallet.version)
+            Wallet.reconstitute(id = WalletId(sequence), userId = wallet.userId, balance = wallet.balance)
         } else {
             wallet
         }
@@ -101,7 +100,7 @@ class RequestWithdrawalServiceTest {
     private val service = RequestWithdrawalService(withdrawalRequests, wallets, ledger, clock)
 
     private fun walletWithBalance(userId: Long, balance: Long) {
-        wallets.stored[userId] = Wallet.reconstitute(id = WalletId(userId), userId = userId, balance = Money.of(balance), version = 0)
+        wallets.stored[userId] = Wallet.reconstitute(id = WalletId(userId), userId = userId, balance = Money.of(balance))
     }
 
     @Test

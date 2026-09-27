@@ -13,7 +13,6 @@ class Wallet private constructor(
     // user 컨텍스트의 UserId 를 쓰지 않는다 — 컨텍스트끼리 domain 을 참조하지 않는다(규칙 1).
     val userId: Long,
     balance: Money,
-    val version: Long,
 ) {
     var balance: Money = balance
         private set
@@ -57,10 +56,10 @@ class Wallet private constructor(
 
     companion object {
         /** 신규 개설. 잔액 0, 아직 저장되지 않아 id 는 null 이다. */
-        fun open(userId: Long): Wallet = Wallet(id = null, userId = userId, balance = Money.ZERO, version = 0)
+        fun open(userId: Long): Wallet = Wallet(id = null, userId = userId, balance = Money.ZERO)
 
         /** 영속 복원 전용 — 검증하지 않는다. */
-        fun reconstitute(id: WalletId, userId: Long, balance: Money, version: Long): Wallet =
-            Wallet(id = id, userId = userId, balance = balance, version = version)
+        fun reconstitute(id: WalletId, userId: Long, balance: Money): Wallet =
+            Wallet(id = id, userId = userId, balance = balance)
     }
 }

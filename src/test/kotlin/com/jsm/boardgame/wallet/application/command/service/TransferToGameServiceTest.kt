@@ -29,7 +29,7 @@ private class TransferToGameFakeWalletRepository : WalletRepository {
     override fun save(wallet: Wallet): Wallet {
         val saved = if (wallet.id == null) {
             sequence += 1
-            Wallet.reconstitute(id = WalletId(sequence), userId = wallet.userId, balance = wallet.balance, version = wallet.version)
+            Wallet.reconstitute(id = WalletId(sequence), userId = wallet.userId, balance = wallet.balance)
         } else {
             wallet
         }
@@ -70,7 +70,7 @@ class TransferToGameServiceTest {
 
     @Test
     fun `바이인이면 잔액이 줄고 GAME_BUY_IN 엔트리가 balanceAfter 와 함께 남는다`() {
-        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(10_000), version = 0)
+        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(10_000))
 
         service.transfer(TransferToGameCommand(userId = 1, amount = 3_000, gameTableId = 7, memo = "holdem"))
 
@@ -83,7 +83,7 @@ class TransferToGameServiceTest {
 
     @Test
     fun `reference 가 GAME_TABLE 타입과 gameTableId 를 담는다`() {
-        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(10_000), version = 0)
+        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(10_000))
 
         service.transfer(TransferToGameCommand(userId = 1, amount = 1_000, gameTableId = 42, memo = null))
 
@@ -94,7 +94,7 @@ class TransferToGameServiceTest {
 
     @Test
     fun `잔액보다 큰 바이인이면 INSUFFICIENT_BALANCE`() {
-        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(1_000), version = 0)
+        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(1_000))
 
         val e = assertFailsWith<InsufficientBalanceException> {
             service.transfer(TransferToGameCommand(userId = 1, amount = 5_000, gameTableId = 7, memo = null))

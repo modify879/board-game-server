@@ -12,9 +12,13 @@ import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Index
+import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
-import jakarta.persistence.Version
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 
 @Entity
@@ -59,15 +63,21 @@ class WithdrawalRequestJpaEntity(
 
     @Column(name = "rejection_reason", columnDefinition = "text")
     var rejectionReason: String?,
-
-    @Version
-    @Column(name = "version", nullable = false)
-    var version: Long = 0,
 )
 
 interface WithdrawalRequestJpaRepository :
     JpaRepository<WithdrawalRequestJpaEntity, Long>,
-    KotlinJdslJpqlExecutor
+    KotlinJdslJpqlExecutor {
+
+    /**
+     * 명령 경로 전용 — 잠금 순서(요청 행 → 지갑 행)의 첫 자리다. `findById` 대신 이 메서드를 쓴다.
+     * `@Transactional` 이 필요한 이유는 `WalletJpaRepository.findByUserIdForUpdate` 와 같다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Transactional
+    @Query("select w from WithdrawalRequestJpaEntity w where w.id = :id")
+    fun findByIdForUpdate(@Param("id") id: Long): WithdrawalRequestJpaEntity?
+}
 
 fun WithdrawalRequestJpaEntity.toDomain(): WithdrawalRequest =
     WithdrawalRequest.reconstitute(
@@ -80,7 +90,6 @@ fun WithdrawalRequestJpaEntity.toDomain(): WithdrawalRequest =
         processedBy = processedBy,
         processedAt = processedAt,
         rejectionReason = rejectionReason,
-        version = version,
     )
 
 fun WithdrawalRequest.toJpaEntity(): WithdrawalRequestJpaEntity =
@@ -96,5 +105,4 @@ fun WithdrawalRequest.toJpaEntity(): WithdrawalRequestJpaEntity =
         processedBy = processedBy,
         processedAt = processedAt,
         rejectionReason = rejectionReason,
-        version = version,
     )

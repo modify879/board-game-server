@@ -17,7 +17,8 @@ import java.time.Instant
 
 /**
  * 상태를 바꾸고 WITHDRAWAL_REFUND 로 환급한다. 요청 저장을 지갑 반영보다 먼저 하는 이유는
- * RejectWithdrawalRequestService 와 같다 — 동시 취소가 두 번 환급된 뒤에야 충돌을 알게 되는 것을 막는다.
+ * RejectWithdrawalRequestService 와 같다 — findById 의 행 잠금이 동시 취소를 블록하고,
+ * 잠금이 풀리면 이미 처리된 상태를 보고 떨어져 두 번 환급되는 것을 막는다.
  */
 @Service
 @Transactional

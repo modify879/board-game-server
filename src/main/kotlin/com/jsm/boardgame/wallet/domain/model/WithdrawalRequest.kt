@@ -22,7 +22,6 @@ class WithdrawalRequest private constructor(
     processedBy: Long?,
     processedAt: Instant?,
     rejectionReason: String?,
-    val version: Long,
 ) {
     var status: WithdrawalRequestStatus = status
         private set
@@ -92,7 +91,6 @@ class WithdrawalRequest private constructor(
                 processedBy = null,
                 processedAt = null,
                 rejectionReason = null,
-                version = 0,
             )
         }
 
@@ -107,7 +105,6 @@ class WithdrawalRequest private constructor(
             processedBy: Long?,
             processedAt: Instant?,
             rejectionReason: String?,
-            version: Long,
         ): WithdrawalRequest = WithdrawalRequest(
             id = id,
             userId = userId,
@@ -118,7 +115,6 @@ class WithdrawalRequest private constructor(
             processedBy = processedBy,
             processedAt = processedAt,
             rejectionReason = rejectionReason,
-            version = version,
         )
     }
 }

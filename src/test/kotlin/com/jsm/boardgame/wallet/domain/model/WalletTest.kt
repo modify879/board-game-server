@@ -14,7 +14,7 @@ class WalletTest {
     private val now = Instant.parse("2026-01-01T00:00:00Z")
 
     private fun savedWallet(balance: Money = Money.ZERO): Wallet =
-        Wallet.reconstitute(id = WalletId(1), userId = 1, balance = balance, version = 0)
+        Wallet.reconstitute(id = WalletId(1), userId = 1, balance = balance)
 
     @Test
     fun `open 은 잔액 0, id null 인 지갑을 만든다`() {

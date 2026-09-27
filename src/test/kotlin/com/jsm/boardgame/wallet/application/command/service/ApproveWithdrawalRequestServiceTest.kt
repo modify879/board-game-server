@@ -52,7 +52,6 @@ class ApproveWithdrawalRequestServiceTest {
             processedBy = null,
             processedAt = null,
             rejectionReason = null,
-            version = 0,
         ).also { withdrawalRequests.put(it) }
 
     @Test

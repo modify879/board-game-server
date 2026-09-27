@@ -47,7 +47,6 @@ class RejectDepositRequestServiceTest {
             processedBy = null,
             processedAt = null,
             rejectionReason = null,
-            version = 0,
         )
         depositRequests.put(request)
 
