@@ -1,127 +1,165 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.common.error.ErrorCode
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestCommand
+import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestResult
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestUseCase
-import com.jsm.boardgame.holdem.application.command.usecase.DropJoinRequestCommand
-import com.jsm.boardgame.holdem.application.command.usecase.DropJoinRequestUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.ProcessJoinRequestsCommand
-import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
+import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
+import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
+import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.ConcurrentTableUpdateException
+import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
-import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
-import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
-import java.time.Instant
+import com.jsm.boardgame.holdem.infrastructure.queue.InMemoryJoinQueue
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-private class ProcessJoinRequestsFakeTableRepository : HoldemTableRepository {
-    private val store = mutableMapOf<Long, HoldemTable>()
-    override fun findById(id: TableId): HoldemTable? = store[id.value]
-    override fun findByUserId(userId: Long): HoldemTable? = null
-    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
-    override fun findAllSeatedUserIds(): List<Long> = emptyList()
-    override fun findAllPendingNextHandTableIds(): List<TableId> = emptyList()
-    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> =
-        store.values.filter { it.pendingJoinRequests().isNotEmpty() }.mapNotNull { it.id }
-    override fun save(table: HoldemTable): HoldemTable { store[table.id!!.value] = table; return table }
-    fun put(table: HoldemTable) { store[table.id!!.value] = table }
-}
-
-private class ProcessJoinRequestsFakeAdmitUseCase(private val failingUserIds: Set<Long> = emptySet()) : AdmitJoinRequestUseCase {
+/** userId 당 하나의 스크립트를 등록한다 — 이 서비스는 userId 마다 admit 을 한 번만 부른다
+ *  (성공하면 대기열에서 빠지고, 실패해도 버려지거나 루프가 멈춘다). */
+private class ProcessJoinRequestsFakeAdmitUseCase(
+    private val scripts: Map<Long, () -> AdmitJoinRequestResult>,
+) : AdmitJoinRequestUseCase {
     val calls = mutableListOf<AdmitJoinRequestCommand>()
-    override fun admit(command: AdmitJoinRequestCommand) {
+    override fun admit(command: AdmitJoinRequestCommand): AdmitJoinRequestResult {
         calls += command
-        if (command.userId in failingUserIds) {
-            throw AlreadySeatedException("test 용 실패: userId=${command.userId}")
-        }
+        val script = scripts[command.userId] ?: error("스크립트가 없는 userId: ${command.userId}")
+        return script()
     }
 }
 
-private class ProcessJoinRequestsFakeDropUseCase : DropJoinRequestUseCase {
-    val calls = mutableListOf<DropJoinRequestCommand>()
-    override fun drop(command: DropJoinRequestCommand) { calls += command }
+private class ProcessJoinRequestsFakeJoinQueueNotifier : JoinQueueNotifier {
+    data class Seated(val tableId: TableId, val userId: Long, val seatNo: Int)
+    data class Dropped(val tableId: TableId, val userId: Long, val errorCode: ErrorCode)
+
+    val seatedCalls = mutableListOf<Seated>()
+    val droppedCalls = mutableListOf<Dropped>()
+    val positionsCalls = mutableListOf<Pair<TableId, List<JoinQueueEntry>>>()
+
+    override fun notifySeated(tableId: TableId, userId: Long, seatNo: Int) {
+        seatedCalls += Seated(tableId, userId, seatNo)
+    }
+
+    override fun notifyDropped(tableId: TableId, userId: Long, errorCode: ErrorCode) {
+        droppedCalls += Dropped(tableId, userId, errorCode)
+    }
+
+    override fun notifyPositions(tableId: TableId, entries: List<JoinQueueEntry>) {
+        positionsCalls += tableId to entries
+    }
 }
 
 class ProcessJoinRequestsServiceTest {
 
-    private val baseInstant: Instant = Instant.parse("2026-01-01T00:00:00Z")
-
-    private fun tableWithPendingRequests(vararg userIds: Long): HoldemTable {
-        val table = HoldemTable.reconstitute(
-            id = TableId(1),
-            name = "test-table",
-            smallBlind = Chips.of(100),
-            bigBlind = Chips.of(200),
-            buttonSeatNo = null,
-            seats = emptyMap(),
-            version = 0,
-        )
-        userIds.forEachIndexed { idx, userId ->
-            table.requestJoin(
-                userId = userId,
-                seatNo = idx + 1,
-                buyIn = Chips.of(8_000),
-                postBlindImmediately = false,
-                requestedAt = baseInstant.plusSeconds(idx.toLong()),
-            )
-        }
-        return table
-    }
+    private val tableId = TableId(1)
 
     @Test
-    fun `한 요청이 실패해도 나머지 요청은 계속 처리된다`() {
-        val tables = ProcessJoinRequestsFakeTableRepository()
-        tables.put(tableWithPendingRequests(101L, 102L, 103L))
-        val admit = ProcessJoinRequestsFakeAdmitUseCase(failingUserIds = setOf(102L))
-        val drop = ProcessJoinRequestsFakeDropUseCase()
-        val service = ProcessJoinRequestsService(tables, admit, drop)
+    fun `대기열 맨 앞부터 순서대로 좌석에 앉히고 완료되면 대기열이 빈다`() {
+        val queue = InMemoryJoinQueue()
+        queue.enqueue(tableId, 101L, Chips.of(8_000), false)
+        queue.enqueue(tableId, 102L, Chips.of(8_000), false)
+        queue.enqueue(tableId, 103L, Chips.of(8_000), false)
+        val admit = ProcessJoinRequestsFakeAdmitUseCase(
+            mapOf(
+                101L to { AdmitJoinRequestResult.Seated(1) },
+                102L to { AdmitJoinRequestResult.Seated(2) },
+                103L to { AdmitJoinRequestResult.Seated(3) },
+            ),
+        )
+        val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
+        val service = ProcessJoinRequestsService(queue, admit, notifier)
 
-        service.process(ProcessJoinRequestsCommand(1L))
+        service.process(ProcessJoinRequestsCommand(tableId.value))
 
         assertEquals(listOf(101L, 102L, 103L), admit.calls.map { it.userId })
+        assertNull(queue.peekHead(tableId))
+        assertEquals(
+            listOf(
+                ProcessJoinRequestsFakeJoinQueueNotifier.Seated(tableId, 101L, 1),
+                ProcessJoinRequestsFakeJoinQueueNotifier.Seated(tableId, 102L, 2),
+                ProcessJoinRequestsFakeJoinQueueNotifier.Seated(tableId, 103L, 3),
+            ),
+            notifier.seatedCalls,
+        )
+        assertEquals(3, notifier.positionsCalls.size)
+        assertEquals(emptyList(), notifier.positionsCalls.last().second)
     }
 
     @Test
-    fun `실패한 요청은 버려진다`() {
-        val tables = ProcessJoinRequestsFakeTableRepository()
-        tables.put(tableWithPendingRequests(101L, 102L, 103L))
-        val admit = ProcessJoinRequestsFakeAdmitUseCase(failingUserIds = setOf(102L))
-        val drop = ProcessJoinRequestsFakeDropUseCase()
-        val service = ProcessJoinRequestsService(tables, admit, drop)
+    fun `핸드가 진행 중이면 대기열을 그대로 두고 처리를 멈춘다`() {
+        val queue = InMemoryJoinQueue()
+        queue.enqueue(tableId, 101L, Chips.of(8_000), false)
+        val admit = ProcessJoinRequestsFakeAdmitUseCase(mapOf(101L to { AdmitJoinRequestResult.Blocked }))
+        val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
+        val service = ProcessJoinRequestsService(queue, admit, notifier)
 
-        service.process(ProcessJoinRequestsCommand(1L))
+        service.process(ProcessJoinRequestsCommand(tableId.value))
 
-        assertEquals(listOf(102L), drop.calls.map { it.userId })
+        assertEquals(101L, queue.peekHead(tableId)?.userId)
+        assertTrue(notifier.seatedCalls.isEmpty())
+        assertTrue(notifier.droppedCalls.isEmpty())
+    }
+
+    // 테이블이 가득 찬 경우도 AdmitJoinRequestUseCase 가 같은 Blocked 를 돌려주므로
+    // 서비스 입장에서는 위 테스트와 동일한 경로다 — 별도 테스트를 추가하지 않는다.
+
+    @Test
+    fun `지갑 실패로 앞사람이 버려져도 다음 사람은 계속 처리된다`() {
+        val queue = InMemoryJoinQueue()
+        queue.enqueue(tableId, 101L, Chips.of(8_000), false)
+        queue.enqueue(tableId, 102L, Chips.of(8_000), false)
+        val admit = ProcessJoinRequestsFakeAdmitUseCase(
+            mapOf(
+                101L to { throw BuyInOutOfRangeException("wallet failure simulation") },
+                102L to { AdmitJoinRequestResult.Seated(1) },
+            ),
+        )
+        val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
+        val service = ProcessJoinRequestsService(queue, admit, notifier)
+
+        service.process(ProcessJoinRequestsCommand(tableId.value))
+
+        assertFalse(queue.isQueued(101L))
+        assertEquals(
+            listOf(ProcessJoinRequestsFakeJoinQueueNotifier.Dropped(tableId, 101L, HoldemErrorCode.BUY_IN_OUT_OF_RANGE)),
+            notifier.droppedCalls,
+        )
+        assertEquals(
+            listOf(ProcessJoinRequestsFakeJoinQueueNotifier.Seated(tableId, 102L, 1)),
+            notifier.seatedCalls,
+        )
+        assertNull(queue.peekHead(tableId))
     }
 
     @Test
-    fun `테이블이 없으면 아무 일도 하지 않는다`() {
-        val tables = ProcessJoinRequestsFakeTableRepository()
-        val admit = ProcessJoinRequestsFakeAdmitUseCase()
-        val drop = ProcessJoinRequestsFakeDropUseCase()
-        val service = ProcessJoinRequestsService(tables, admit, drop)
+    fun `경합 예외가 나면 같은 head 를 다시 시도해 결국 착석시킨다`() {
+        val queue = InMemoryJoinQueue()
+        queue.enqueue(tableId, 101L, Chips.of(8_000), false)
+        var attempts = 0
+        val admit = ProcessJoinRequestsFakeAdmitUseCase(
+            mapOf(
+                101L to {
+                    attempts++
+                    if (attempts == 1) throw ConcurrentTableUpdateException("competing update")
+                    AdmitJoinRequestResult.Seated(1)
+                },
+            ),
+        )
+        val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
+        val service = ProcessJoinRequestsService(queue, admit, notifier)
 
-        service.process(ProcessJoinRequestsCommand(999L))
+        service.process(ProcessJoinRequestsCommand(tableId.value))
 
-        assertTrue(admit.calls.isEmpty())
-    }
-
-    @Test
-    fun `경합으로 실패하면 버리지 않는다`() {
-        val tables = ProcessJoinRequestsFakeTableRepository()
-        tables.put(tableWithPendingRequests(101L))
-        val admit = object : AdmitJoinRequestUseCase {
-            override fun admit(command: AdmitJoinRequestCommand) {
-                throw ConcurrentTableUpdateException("경합")
-            }
-        }
-        val drop = ProcessJoinRequestsFakeDropUseCase()
-        val service = ProcessJoinRequestsService(tables, admit, drop)
-
-        service.process(ProcessJoinRequestsCommand(1L))
-
-        assertTrue(drop.calls.isEmpty())
+        assertEquals(listOf(101L, 101L), admit.calls.map { it.userId })
+        assertEquals(
+            listOf(ProcessJoinRequestsFakeJoinQueueNotifier.Seated(tableId, 101L, 1)),
+            notifier.seatedCalls,
+        )
+        assertTrue(notifier.droppedCalls.isEmpty())
+        assertNull(queue.peekHead(tableId))
     }
 }

@@ -169,8 +169,22 @@ class HoldemShowdownIntegrationTest {
         return JsonPath.read<Int>(result.response.contentAsString, "$.tableId").toLong()
     }
 
-    private fun sitDown(accessToken: String, tableId: Long, seatNo: Int, buyIn: Long): ResultActions =
-        authPost("/api/holdem/tables/$tableId/seats", accessToken, """{"seatNo":$seatNo,"buyIn":$buyIn}""")
+    /** SitDownService 가 STOMP 연결이 없는 사용자를 대기열에 넣지 않는다(NOT_CONNECTED) — 실제
+     *  STOMP CONNECT 를 열어 SimpUserRegistry 에 이 사용자를 등록시킨다. 구독은 필요 없다. */
+    private fun connectStomp(accessToken: String) {
+        val connectHeaders = StompHeaders()
+        connectHeaders.add("Authorization", "Bearer $accessToken")
+        val handler = object : StompSessionHandlerAdapter() {}
+        val future = stompClient.connectAsync("ws://localhost:$port/ws", null, connectHeaders, handler)
+        future.get(5, TimeUnit.SECONDS)
+        // ponytail: session left open, cleaned up when the test JVM/context shuts down.
+    }
+
+    /** 좌석은 고를 수 없다(항상 대기열, FIFO) — POST 전에 STOMP 로 먼저 연결한다. */
+    private fun sitDown(accessToken: String, tableId: Long, buyIn: Long): ResultActions {
+        connectStomp(accessToken)
+        return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{"buyIn":$buyIn}""")
+    }
 
     /** 수동 시작 엔드포인트가 없으므로 nextHandAt 을 과거로 당겨 시스템 진입점을 직접 불러 결정적으로 시작시킨다. */
     private fun startHand(tableId: Long) {
@@ -210,8 +224,8 @@ class HoldemShowdownIntegrationTest {
         fundWallet(userIdA, 15_000)
         fundWallet(userIdB, 15_000)
         val tableId = createTable(tokenA)
-        sitDown(tokenA, tableId, 1, 10_000).andExpect(status().isCreated)
-        sitDown(tokenB, tableId, 2, 10_000).andExpect(status().isCreated)
+        sitDown(tokenA, tableId, 10_000).andExpect(status().isAccepted)
+        sitDown(tokenB, tableId, 10_000).andExpect(status().isAccepted)
 
         // 새 테이블의 첫 헤즈업 핸드는 HoldemTable.advanceBlinds 가 결정적으로 정한다:
         // 좌석1(버튼/SB, 낮은 좌석 번호) = 포켓 에이스, 좌석2(BB) = 2-3 오프수트.
@@ -246,8 +260,8 @@ class HoldemShowdownIntegrationTest {
         fundWallet(userIdA, 25_000)
         fundWallet(userIdB, 5_000)
         val tableId = createTable(tokenA)
-        sitDown(tokenA, tableId, 1, 20_000).andExpect(status().isCreated)
-        sitDown(tokenB, tableId, 2, 1_000).andExpect(status().isCreated)
+        sitDown(tokenA, tableId, 20_000).andExpect(status().isAccepted)
+        sitDown(tokenB, tableId, 1_000).andExpect(status().isAccepted)
 
         // 좌석2(BB, 숏스택)가 킹 페어로 이기게, 좌석1(버튼, 빅스택)은 하이카드로 지게 고정한다.
         fixDeckOrder("Ks", "7c", "Kh", "8d", "2h", "3c", "4d", "9s", "Td")
@@ -323,8 +337,8 @@ class HoldemShowdownIntegrationTest {
         fundWallet(userIdA, 15_000)
         fundWallet(userIdB, 15_000)
         val tableId = createTable(tokenA)
-        sitDown(tokenA, tableId, 1, 10_000).andExpect(status().isCreated)
-        sitDown(tokenB, tableId, 2, 10_000).andExpect(status().isCreated)
+        sitDown(tokenA, tableId, 10_000).andExpect(status().isAccepted)
+        sitDown(tokenB, tableId, 10_000).andExpect(status().isAccepted)
 
         val session = tryConnect(tokenA)
         val (publicHandler, publicQueue) = capturingFrameHandler()

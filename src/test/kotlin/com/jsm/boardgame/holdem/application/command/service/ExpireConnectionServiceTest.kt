@@ -22,14 +22,10 @@ private class ExpireConnectionFakeHoldemTableRepository : HoldemTableRepository 
 
     override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
-    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
-
     override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllPendingNextHandTableIds(): List<TableId> =
         stored.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
-
-    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: run { sequence += 1; TableId(sequence) }
@@ -81,7 +77,7 @@ class ExpireConnectionServiceTest {
     @Test
     fun `핸드가 없으면 즉시 기립시키고 null 을 돌려준다`() {
         val table = tables.save(HoldemTable.create("테스트 테이블"))
-        table.sitDown(1, 1, Chips.of(8_000))
+        table.sitDown(1, Chips.of(8_000))
         tables.save(table)
 
         val result = service.expire(ExpireConnectionCommand(userId = 1))
@@ -94,7 +90,7 @@ class ExpireConnectionServiceTest {
     @Test
     fun `핸드가 진행 중이면 즉시 기립시키지 않고 테이블 id 를 돌려준다`() {
         val table = tables.save(HoldemTable.create("테스트 테이블"))
-        table.sitDown(1, 1, Chips.of(8_000))
+        table.sitDown(1, Chips.of(8_000))
         val saved = tables.save(table)
         handStore.save(
             saved.id!!,

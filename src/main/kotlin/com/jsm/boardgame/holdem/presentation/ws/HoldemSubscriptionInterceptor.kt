@@ -26,6 +26,11 @@ import org.springframework.stereotype.Component
  * 개인 큐(/user/queue/tables/{id})는 여전히 좌석에 묶인다 — SeatPrivateView 는 자기 홀카드를
  * 담으므로, 그 테이블에 앉은 사용자만 구독할 수 있어야 한다.
  *
+ * 착석 대기열 채널(/user/queue/holdem/join-queue)은 좌석 검사가 없다 — 공개 토픽과 인가 강도는
+ * 같지만(인증만 있으면 됨), convertAndSendToUser 로 사용자별로 배달된다는 점이 다르다. 아직
+ * 어느 테이블에도 앉지 않은 사용자가 대기열에 들어가려는 시점에 구독하는 채널이라 좌석을
+ * 전제로 할 수 없다.
+ *
  * userId 는 CONNECT 단계에서 StompAuthenticationInterceptor 가 세팅한 인증 주체를 그대로 쓴다
  * (STOMP 세션이 CONNECT 이후 모든 프레임에 그 주체를 자동으로 실어준다).
  */
@@ -40,6 +45,16 @@ class HoldemSubscriptionInterceptor(
         if (accessor.command != StompCommand.SUBSCRIBE) return message
 
         val destination = accessor.destination ?: return message
+
+        if (destination == HoldemDestinations.joinQueueDestination()) {
+            accessor.user?.name?.toLongOrNull()
+                ?: run {
+                    log.warn("subscribe rejected: no authenticated user, destination={}", destination)
+                    throw AuthenticationRequiredException("구독하려면 인증이 필요하다")
+                }
+            return message
+        }
+
         if (!HoldemDestinations.looksLikeTableDestination(destination)) return message
 
         val tableId = HoldemDestinations.tableIdOf(destination)

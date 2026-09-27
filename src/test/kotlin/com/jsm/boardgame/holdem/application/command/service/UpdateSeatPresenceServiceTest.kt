@@ -17,14 +17,10 @@ private class UpdateSeatPresenceFakeHoldemTableRepository : HoldemTableRepositor
 
     override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
-    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
-
     override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllPendingNextHandTableIds(): List<TableId> =
         stored.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
-
-    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: run { sequence += 1; TableId(sequence) }
@@ -51,7 +47,7 @@ class UpdateSeatPresenceServiceTest {
     @Test
     fun `착석한 사용자의 좌석 연결 상태를 바꾼다`() {
         val table = tables.save(HoldemTable.create("테스트 테이블"))
-        table.sitDown(1, 1, Chips.of(8_000))
+        table.sitDown(1, Chips.of(8_000))
         val saved = tables.save(table)
 
         service.update(UpdateSeatPresenceCommand(userId = 1, presence = "DISCONNECTED"))

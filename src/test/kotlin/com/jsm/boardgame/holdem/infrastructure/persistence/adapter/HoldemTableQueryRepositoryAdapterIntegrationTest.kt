@@ -51,13 +51,13 @@ class HoldemTableQueryRepositoryAdapterIntegrationTest {
     fun `findSeatOf - 사용자가 앉아 있으면 tableId, seatNo 를 반환한다`() {
         val userId = uniqueUserId()
         val table = HoldemTable.create("q1")
-        table.sitDown(4, userId, buyIn)
+        table.sitDown(userId, buyIn)
         val saved = tables.save(table)
 
         val found = tableQuery.findSeatOf(userId)
 
         assertEquals(saved.id!!.value, found?.tableId)
-        assertEquals(4, found?.seatNo)
+        assertEquals(1, found?.seatNo)
     }
 
     @Test
@@ -73,8 +73,8 @@ class HoldemTableQueryRepositoryAdapterIntegrationTest {
         val userB = uniqueUserId()
 
         val table1 = HoldemTable.create("q2")
-        table1.sitDown(1, userA, buyIn)
-        table1.sitDown(2, userB, buyIn)
+        table1.sitDown(userA, buyIn)
+        table1.sitDown(userB, buyIn)
         val saved1 = tables.save(table1)
 
         val table2 = HoldemTable.create("q3")

@@ -154,8 +154,12 @@ class HoldemStompIntegrationTest {
         return JsonPath.read<Int>(result.response.contentAsString, "$.tableId").toLong()
     }
 
-    private fun sitDown(accessToken: String, tableId: Long, seatNo: Int, buyIn: Long): ResultActions =
-        authPost("/api/holdem/tables/$tableId/seats", accessToken, """{"seatNo":$seatNo,"buyIn":$buyIn}""")
+    // 착석은 이제 반드시 STOMP 연결이 있어야 대기열에 들어간다(SitDownService) — 이 헬퍼가 그
+    // 연결을 먼저 만든다. 반환된 세션은 쓰지 않는다(연결 자체가 목적이라 fire-and-forget).
+    private fun sitDown(accessToken: String, tableId: Long, buyIn: Long): ResultActions {
+        tryConnect(accessToken)
+        return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{"buyIn":$buyIn}""")
+    }
 
     private data class SeatedUser(val userId: Long, val accessToken: String, val tableId: Long)
 
@@ -163,7 +167,7 @@ class HoldemStompIntegrationTest {
         val (userId, accessToken) = signUpAndLogin()
         fundWallet(userId, fundAmount)
         val tableId = createTable(accessToken)
-        sitDown(accessToken, tableId, 1, buyIn).andExpect(status().isCreated)
+        sitDown(accessToken, tableId, buyIn).andExpect(status().isAccepted)
         return SeatedUser(userId, accessToken, tableId)
     }
 
@@ -173,11 +177,11 @@ class HoldemStompIntegrationTest {
         val (userIdA, tokenA) = signUpAndLogin()
         fundWallet(userIdA, fundAmount)
         val tableId = createTable(tokenA)
-        sitDown(tokenA, tableId, 1, buyIn).andExpect(status().isCreated)
+        sitDown(tokenA, tableId, buyIn).andExpect(status().isAccepted)
 
         val (userIdB, tokenB) = signUpAndLogin()
         fundWallet(userIdB, fundAmount)
-        sitDown(tokenB, tableId, 2, buyIn).andExpect(status().isCreated)
+        sitDown(tokenB, tableId, buyIn).andExpect(status().isAccepted)
 
         return TablePair(tableId, SeatedUser(userIdA, tokenA, tableId), SeatedUser(userIdB, tokenB, tableId))
     }
@@ -359,6 +363,17 @@ class HoldemStompIntegrationTest {
 
         // 핸드가 없는 상태의 개인 큐 구독은 그 자체로 반드시 오는 메시지가 없다(개인 뷰는 핸드
         // 진행 중에만 나간다 — HoldemSubscriptionSnapshotListener 참고) — 센티널이 없어 대기만 줄인다.
+        assertThat(handler.errorFrames.poll(300, TimeUnit.MILLISECONDS)).isNull()
+    }
+
+    @Test
+    fun `대기열 개인 채널을 구독하면 성공한다`() {
+        val (_, accessToken) = signUpAndLogin()
+        val (session, handler) = tryConnect(accessToken)
+        checkNotNull(session)
+
+        session.subscribe(HoldemDestinations.joinQueueDestination(), noOpFrameHandler())
+
         assertThat(handler.errorFrames.poll(300, TimeUnit.MILLISECONDS)).isNull()
     }
 

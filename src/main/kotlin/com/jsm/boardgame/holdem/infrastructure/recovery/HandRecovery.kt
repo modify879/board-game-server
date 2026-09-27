@@ -2,8 +2,6 @@ package com.jsm.boardgame.holdem.infrastructure.recovery
 
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
-import com.jsm.boardgame.holdem.application.command.usecase.ProcessJoinRequestsCommand
-import com.jsm.boardgame.holdem.application.command.usecase.ProcessJoinRequestsUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandUseCase
 import com.jsm.boardgame.holdem.application.port.HandStore
@@ -58,7 +56,8 @@ import java.util.concurrent.atomic.AtomicLong
  * `nextHandAt` 이 채워진 테이블 중 진행 중 핸드가 없는 것만 재무장한다 — 핸드가 있으면 그 핸드가
  * 끝날 때 `HandSettler` 가 다시 스케줄하거나, 이미 진행 중인 복구 흐름이 처리한다.
  *
- * 같은 이유로, 대기 중인 참가 요청이 처리되지 못한 테이블(이벤트로 처리될 적에 프로세스가 죽은 경우)도 부팅 시 같은 방식으로 훑는다.
+ * 착석 대기열은 이제 인메모리(JoinQueue)라 여기서 훑을 게 없다 — 좌석 배정 전이라 재시작하면
+ * 그냥 비워지는 게 맞는 동작이다(돈이 걸려 있지 않다).
  */
 @Component
 class HandRecovery(
@@ -70,7 +69,6 @@ class HandRecovery(
     private val cancelHandUseCase: CancelHandUseCase,
     private val connectionTimer: ConnectionTimer,
     private val nextHandTimer: NextHandTimer,
-    private val processJoinRequestsUseCase: ProcessJoinRequestsUseCase,
 ) {
     private class PendingRecovery(
         val allUserIds: Set<Long>,
@@ -95,15 +93,6 @@ class HandRecovery(
         }
 
         rearmPendingNextHandTimers()
-        processPendingJoinRequests()
-    }
-
-    private fun processPendingJoinRequests() {
-        val tableIds = tables.findAllTableIdsWithPendingJoinRequests()
-        for (tableId in tableIds) {
-            if (handStore.find(tableId) != null) continue
-            processJoinRequestsUseCase.process(ProcessJoinRequestsCommand(tableId.value))
-        }
     }
 
     private fun rearmPendingNextHandTimers() {

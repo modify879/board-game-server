@@ -1,103 +1,72 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.common.error.ErrorCode
 import com.jsm.boardgame.holdem.application.command.usecase.CancelJoinRequestCommand
-import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
+import com.jsm.boardgame.holdem.application.exception.JoinRequestNotFoundException
+import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
+import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
-import com.jsm.boardgame.holdem.domain.exception.JoinRequestNotFoundException
 import com.jsm.boardgame.holdem.domain.model.Chips
-import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
-import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
-import java.time.Instant
+import com.jsm.boardgame.holdem.infrastructure.queue.InMemoryJoinQueue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-private class CancelJoinRequestFakeTableRepository : HoldemTableRepository {
-    val stored = mutableMapOf<Long, HoldemTable>()
-    private var sequence = 0L
+private class CancelJoinRequestFakeJoinQueueNotifier : JoinQueueNotifier {
+    val positionsCalls = mutableListOf<Pair<TableId, List<JoinQueueEntry>>>()
 
-    override fun findById(id: TableId): HoldemTable? = stored[id.value]
+    override fun notifySeated(tableId: TableId, userId: Long, seatNo: Int) {}
 
-    override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
+    override fun notifyDropped(tableId: TableId, userId: Long, errorCode: ErrorCode) {}
 
-    override fun findByPendingJoinUserId(userId: Long): HoldemTable? =
-        stored.values.find { table -> table.pendingJoinRequests().any { it.userId == userId } }
-
-    override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
-
-    override fun findAllPendingNextHandTableIds(): List<TableId> =
-        stored.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
-
-    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
-
-    override fun save(table: HoldemTable): HoldemTable {
-        val id = table.id ?: run { sequence += 1; TableId(sequence) }
-        val saved = HoldemTable.reconstitute(
-            id = id,
-            name = table.name,
-            smallBlind = table.smallBlind,
-            bigBlind = table.bigBlind,
-            buttonSeatNo = table.buttonSeatNo,
-            seats = table.occupiedSeats().associateBy { it.seatNo },
-            version = table.version,
-            nextHandAt = table.nextHandAt,
-            joinRequests = table.pendingJoinRequests().associateBy { it.seatNo },
-        )
-        stored[id.value] = saved
-        return saved
+    override fun notifyPositions(tableId: TableId, entries: List<JoinQueueEntry>) {
+        positionsCalls += tableId to entries
     }
 }
 
 class CancelJoinRequestServiceTest {
 
-    private val tables = CancelJoinRequestFakeTableRepository()
-    private val service = CancelJoinRequestService(tables)
-
-    private fun createTable(): TableId = tables.save(HoldemTable.create("테스트 테이블")).id!!
-
     @Test
-    fun `취소하면 대기 중인 참가 요청이 제거된다`() {
-        val tableId = createTable()
-        val table = tables.findById(tableId)!!
-        table.requestJoin(userId = 1L, seatNo = 3, buyIn = Chips.of(10_000), postBlindImmediately = false, requestedAt = Instant.now())
-        tables.save(table)
+    fun `취소하면 대기 중인 항목이 대기열에서 제거되고 남은 사람들의 순번이 알려진다`() {
+        val queue = InMemoryJoinQueue()
+        val notifier = CancelJoinRequestFakeJoinQueueNotifier()
+        val service = CancelJoinRequestService(queue, notifier)
+        val tableId = TableId(1L)
+        queue.enqueue(tableId, userId = 1L, buyIn = Chips.of(10_000), postBlindImmediately = false)
+        queue.enqueue(tableId, userId = 2L, buyIn = Chips.of(10_000), postBlindImmediately = false)
 
         service.cancel(CancelJoinRequestCommand(tableId.value, userId = 1L))
 
-        assertTrue(tables.findById(tableId)!!.pendingJoinRequests().isEmpty())
+        assertTrue(!queue.isQueued(1L))
+        assertEquals(listOf(2L), notifier.positionsCalls.last().second.map { it.userId })
     }
 
     @Test
     fun `대기 중인 요청이 없으면 JOIN_REQUEST_NOT_FOUND 다`() {
-        val tableId = createTable()
+        val queue = InMemoryJoinQueue()
+        val notifier = CancelJoinRequestFakeJoinQueueNotifier()
+        val service = CancelJoinRequestService(queue, notifier)
 
         val e = assertFailsWith<JoinRequestNotFoundException> {
-            service.cancel(CancelJoinRequestCommand(tableId.value, userId = 1L))
+            service.cancel(CancelJoinRequestCommand(999L, userId = 1L))
         }
         assertEquals(HoldemErrorCode.JOIN_REQUEST_NOT_FOUND, e.errorCode)
     }
 
     @Test
-    fun `다른 사용자의 요청은 취소되지 않고 그대로 남는다`() {
-        val tableId = createTable()
-        val table = tables.findById(tableId)!!
-        table.requestJoin(userId = 1L, seatNo = 3, buyIn = Chips.of(10_000), postBlindImmediately = false, requestedAt = Instant.now())
-        tables.save(table)
+    fun `다른 사용자의 취소는 내 대기열 항목에 영향을 주지 않는다`() {
+        val queue = InMemoryJoinQueue()
+        val notifier = CancelJoinRequestFakeJoinQueueNotifier()
+        val service = CancelJoinRequestService(queue, notifier)
+        val tableId = TableId(1L)
+        queue.enqueue(tableId, userId = 1L, buyIn = Chips.of(10_000), postBlindImmediately = false)
+        queue.enqueue(tableId, userId = 2L, buyIn = Chips.of(10_000), postBlindImmediately = false)
 
-        assertFailsWith<JoinRequestNotFoundException> {
-            service.cancel(CancelJoinRequestCommand(tableId.value, userId = 2L))
-        }
+        service.cancel(CancelJoinRequestCommand(tableId.value, userId = 2L))
 
-        assertEquals(1, tables.findById(tableId)!!.pendingJoinRequests().size)
-    }
-
-    @Test
-    fun `존재하지 않는 테이블이면 TABLE_NOT_FOUND 다`() {
-        val e = assertFailsWith<TableNotFoundException> {
-            service.cancel(CancelJoinRequestCommand(999L, userId = 1L))
-        }
-        assertEquals(HoldemErrorCode.TABLE_NOT_FOUND, e.errorCode)
+        assertTrue(queue.isQueued(1L))
+        assertEquals(1L, queue.peekHead(tableId)?.userId)
     }
 }

@@ -3,10 +3,8 @@ package com.jsm.boardgame.holdem.domain.model
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.InvalidTableNameException
-import com.jsm.boardgame.holdem.domain.exception.JoinRequestNotFoundException
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
-import com.jsm.boardgame.holdem.domain.exception.SeatNoOutOfRangeException
-import com.jsm.boardgame.holdem.domain.exception.SeatTakenException
+import com.jsm.boardgame.holdem.domain.exception.TableFullException
 import java.time.Instant
 
 @JvmInline value class TableId(val value: Long)
@@ -22,7 +20,6 @@ class HoldemTable private constructor(
     seats: Map<Int, Seat>,
     val version: Long,
     nextHandAt: Instant?,
-    joinRequests: Map<Int, JoinRequest>,
 ) {
     var buttonSeatNo: Int? = buttonSeatNo
         private set
@@ -46,26 +43,22 @@ class HoldemTable private constructor(
     var nextHandAt: Instant? = nextHandAt
         private set
 
-    private val joinRequests: MutableMap<Int, JoinRequest> = joinRequests.toMutableMap()
-
-    fun sitDown(seatNo: Int, userId: Long, buyIn: Chips, postBlindImmediately: Boolean = false): Seat {
-        if (seatNo !in 1..MAX_SEATS) {
-            throw SeatNoOutOfRangeException("좌석 번호는 1..$MAX_SEATS 여야 합니다: $seatNo")
-        }
-        if (seats.containsKey(seatNo)) {
-            throw SeatTakenException("이미 점유된 좌석입니다: seatNo=$seatNo")
-        }
+    /** 가장 낮은 번호의 빈 좌석에 강제로 앉힌다 — 좌석을 고르지 않는다(FIFO 대기열, ProcessJoinRequestsService). */
+    fun sitDown(userId: Long, buyIn: Chips, postBlindImmediately: Boolean = false): Seat {
         if (seatOf(userId) != null) {
             throw AlreadySeatedException("이미 이 테이블에 앉아 있는 사용자입니다: userId=$userId")
         }
         if (buyIn < bigBlind) {
             throw BuyInOutOfRangeException("바이인은 빅 블라인드($bigBlind) 이상이어야 합니다: $buyIn")
         }
-
+        val seatNo = (1..MAX_SEATS).firstOrNull { it !in seats }
+            ?: throw TableFullException("빈 좌석이 없습니다: tableId=$id")
         val seat = Seat.of(seatNo, userId, buyIn, postBlindImmediately)
         seats[seatNo] = seat
         return seat
     }
+
+    fun hasEmptySeat(): Boolean = seats.size < MAX_SEATS
 
     fun standUp(userId: Long): Chips {
         val seat = seatOf(userId) ?: throw NotSeatedException("이 테이블에 앉아 있지 않은 사용자입니다: userId=$userId")
@@ -96,45 +89,6 @@ class HoldemTable private constructor(
 
     /** 후보 = 점유 좌석 중 스택이 양수인 것. HandStarter 와 카운트다운 리셋 판단이 이 정의를 공유한다. */
     fun candidateSeatNos(): Set<Int> = occupiedSeats().filter { it.stack.isPositive() }.map { it.seatNo }.toSet()
-
-    fun pendingJoinRequests(): List<JoinRequest> = joinRequests.values.sortedBy { it.requestedAt }
-
-    fun pendingSeatNos(): Set<Int> = joinRequests.keys
-
-    /**
-     * 핸드 진행 중에 들어온 착석 요청을 등록한다. sitDown() 과 같은 검증(좌석 범위·바이인 범위)을
-     * 하되, "이미 점유"가 아니라 "이미 점유되었거나 이미 요청됨" 둘 다를 SEAT_TAKEN 으로 막는다 —
-     * 관전자가 같은 빈 좌석을 두 번 찜하지 못하게 한다.
-     */
-    fun requestJoin(userId: Long, seatNo: Int, buyIn: Chips, postBlindImmediately: Boolean, requestedAt: Instant): JoinRequest {
-        if (seatNo !in 1..MAX_SEATS) {
-            throw SeatNoOutOfRangeException("좌석 번호는 1..$MAX_SEATS 여야 합니다: $seatNo")
-        }
-        if (seats.containsKey(seatNo)) {
-            throw SeatTakenException("이미 점유된 좌석입니다: seatNo=$seatNo")
-        }
-        if (joinRequests.containsKey(seatNo)) {
-            throw SeatTakenException("이미 참가 요청이 있는 좌석입니다: seatNo=$seatNo")
-        }
-        if (buyIn < bigBlind) {
-            throw BuyInOutOfRangeException("바이인은 빅 블라인드($bigBlind) 이상이어야 합니다: $buyIn")
-        }
-        val request = JoinRequest(userId, seatNo, buyIn, postBlindImmediately, requestedAt)
-        joinRequests[seatNo] = request
-        return request
-    }
-
-    /** 요청자 본인이 자기 요청을 취소한다. 없으면(다른 사용자 또는 이미 처리/취소됨) 예외. */
-    fun cancelJoinRequest(userId: Long) {
-        val seatNo = joinRequests.values.find { it.userId == userId }?.seatNo
-            ?: throw JoinRequestNotFoundException("취소할 참가 요청이 없습니다: userId=$userId")
-        joinRequests.remove(seatNo)
-    }
-
-    /** HandSettler 가 정산 뒤 요청을 소진할 때 부른다. 처리 성공 여부와 무관하게 항상 제거한다. */
-    fun consumeJoinRequest(seatNo: Int) {
-        joinRequests.remove(seatNo)
-    }
 
     fun moveButtonToNextOccupiedSeat() {
         val occupiedSeatNos = seats.keys.sorted()
@@ -181,8 +135,8 @@ class HoldemTable private constructor(
      *
      * 헤즈업(참가 2명)은 이 불변식을 덮어쓴다 — Robert's Rules, Button and Blind Use: "in heads-up play
      * with two blinds, the small blind is on the button." 버튼이 SB 를 겸하고, BB 는 직전 BB 다음
-     * 참가 좌석으로 정해 TDA Rule 34(같은 좌석이 연속으로 BB 를 내지 않는다)를 지킨다. 헤즈업 분기는
-     * 이 메서드 안에만 둔다 — [Hand.start] 는 여기서 정해진 값을 그대로 받아 쓴다.
+     * 참가 좌석으로 정해 TDA Rule 34(같은 좌석이 연속으로 BB 를 내지 않는다)를 지킨다. 헤즈업 뒤 3인이 되면
+     * 버튼은 "직전 SB" 가 아니라 새 SB 바로 앞 좌석이다 — 헤즈업에서는 버튼이 곧 SB 였다
      */
     fun advanceBlinds(participatingSeatNos: Set<Int>): HandPositions {
         val sorted = participatingSeatNos.sorted()
@@ -291,7 +245,6 @@ class HoldemTable private constructor(
                 seats = emptyMap(),
                 version = 0,
                 nextHandAt = null,
-                joinRequests = emptyMap(),
             )
         }
 
@@ -307,7 +260,6 @@ class HoldemTable private constructor(
             smallBlindSeatNo: Int? = null,
             bigBlindSeatNo: Int? = null,
             nextHandAt: Instant? = null,
-            joinRequests: Map<Int, JoinRequest> = emptyMap(),
-        ): HoldemTable = HoldemTable(id, name, smallBlind, bigBlind, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, seats, version, nextHandAt, joinRequests)
+        ): HoldemTable = HoldemTable(id, name, smallBlind, bigBlind, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, seats, version, nextHandAt)
     }
 }
