@@ -33,7 +33,6 @@ enum class HoldemErrorCode(override val kind: ErrorKind) : ErrorCode {
     HAND_IN_PROGRESS(ErrorKind.CONFLICT),
     HAND_NOT_FOUND(ErrorKind.NOT_FOUND),
     UNKNOWN_ACTION(ErrorKind.INVALID),
-    CONCURRENT_TABLE_UPDATE(ErrorKind.CONFLICT),
     NOT_CONNECTED(ErrorKind.CONFLICT),
     ;
 

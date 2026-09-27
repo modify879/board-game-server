@@ -50,7 +50,6 @@ private class HandStarterFakeTableRepository : HoldemTableRepository {
             bigBlind = table.bigBlind,
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
-            version = table.version,
             smallBlindSeatNo = table.smallBlindSeatNo,
             bigBlindSeatNo = table.bigBlindSeatNo,
             nextHandAt = table.nextHandAt,

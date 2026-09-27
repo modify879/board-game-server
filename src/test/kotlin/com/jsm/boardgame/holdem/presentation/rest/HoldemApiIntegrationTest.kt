@@ -44,8 +44,9 @@ import java.util.concurrent.TimeUnit
  *
  * 착석은 항상 대기열을 거친다(202, `.claude/rules/holdem.md`) — STOMP 연결이 없는 사용자는 대기열에
  * 들어갈 수 없어(NOT_CONNECTED) `sitDown()` 헬퍼가 POST 전에 실제 STOMP CONNECT 를 먼저 연다.
- * 빈 좌석에 핸드가 없으면 `ProcessJoinRequestsService` 가 커밋 후 콜스택 안에서 동기로 좌석을
- * 배정하므로, 그 경우는 202 응답이 돌아온 시점에 이미 착석이 끝나 있다 — 별도 대기가 필요 없다.
+ * 대기열 맨 앞의 착석 처리(`ProcessJoinRequestsService`)는 이제 `TableExecutor.post` 로 비동기
+ * 디스패치된다(`JoinRequestsProcessor`) — 202 응답이 돌아온 시점에 아직 착석이 안 끝났을 수 있다.
+ * 실제 착석·지갑 차감 결과를 확인해야 하는 곳은 `awaitSeated()` 로 폴링해 기다린다.
  *
  * build.gradle.kts 가 테스트 전역으로 1h 를 준다 — 실제 5초 타이머가 테스트 도중 우연히
  * 발화하지 않는다. 핸드 시작은 startHand() 헬퍼가 nextHandAt 을 과거로 강제로 당겨
@@ -182,11 +183,35 @@ class HoldemApiIntegrationTest {
 
     private data class SeatedContext(val tableId: Long, val userId: Long, val accessToken: String)
 
+    /** 착석 처리(ProcessJoinRequestsService)는 이제 TableExecutor.post 로 비동기 디스패치된다
+     *  (JoinRequestsProcessor) — 응답이 돌아온 시점에 아직 안 끝났을 수 있어, 실제 착석을
+     *  기다린다. */
+    private fun awaitSeated(userId: Long, timeoutMs: Long = 5_000) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (holdemTableRepository.findByUserId(userId) != null) return
+            Thread.sleep(20)
+        }
+        error("착석이 시간 안에 끝나지 않았습니다: userId=$userId")
+    }
+
+    /** 잔액 부족 등으로 대기열 항목이 버려지는 경우도 같은 비동기 경로(ProcessJoinRequestsService)를
+     *  거친다 — 착석하지 않고 대기열에서 빠지는 결과를 기다릴 때 쓴다. */
+    private fun awaitDropped(userId: Long, timeoutMs: Long = 5_000) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (!joinQueue.isQueued(userId)) return
+            Thread.sleep(20)
+        }
+        error("대기열 처리가 시간 안에 끝나지 않았습니다: userId=$userId")
+    }
+
     private fun seatedWithoutHand(buyIn: Long = 10_000L, fundAmount: Long = 15_000L): SeatedContext {
         val (userId, accessToken) = signUpAndLogin()
         fundWallet(userId, fundAmount)
         val tableId = createTable(accessToken)
         sitDown(accessToken, tableId, buyIn).andExpect(status().isAccepted)
+        awaitSeated(userId)
         return SeatedContext(tableId, userId, accessToken)
     }
 
@@ -198,7 +223,9 @@ class HoldemApiIntegrationTest {
         fundWallet(userIdB, 15_000)
         val tableId = createTable(accessTokenA)
         sitDown(accessTokenA, tableId, 10_000).andExpect(status().isAccepted)
+        awaitSeated(userIdA)
         sitDown(accessTokenB, tableId, 10_000).andExpect(status().isAccepted)
+        awaitSeated(userIdB)
         startHand(tableId)
         return SeatedContext(tableId, userIdA, accessTokenA)
     }
@@ -349,6 +376,7 @@ class HoldemApiIntegrationTest {
 
         sitDown(accessToken, tableId, 10_000)
             .andExpect(status().isAccepted)
+        awaitSeated(userId)
 
         assertThat(balanceOf(userId)).isEqualTo(5_000L)
     }
@@ -410,6 +438,7 @@ class HoldemApiIntegrationTest {
         authGet("/api/holdem/me/seat", ctx.accessToken)
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.handInProgress").value(false))
+        awaitDropped(spectatorId)
 
         val savedTable = holdemTableRepository.findById(TableId(ctx.tableId))!!
         assertThat(joinQueue.entriesOf(TableId(ctx.tableId))).isEmpty()
@@ -431,6 +460,7 @@ class HoldemApiIntegrationTest {
         authGet("/api/holdem/me/seat", ctx.accessToken)
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.handInProgress").value(false))
+        awaitSeated(requesterId)
 
         val savedTable = holdemTableRepository.findById(TableId(ctx.tableId))!!
         // seatedWithHandInProgress() 가 좌석 1·2 를 채우므로, 폴드로 핸드가 정산된 뒤 대기 중이던

@@ -8,7 +8,6 @@ import com.jsm.boardgame.holdem.application.command.usecase.ProcessJoinRequestsC
 import com.jsm.boardgame.holdem.application.command.usecase.ProcessJoinRequestsUseCase
 import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
-import com.jsm.boardgame.holdem.domain.exception.ConcurrentTableUpdateException
 import com.jsm.boardgame.holdem.domain.model.TableId
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -18,10 +17,10 @@ import org.springframework.stereotype.Service
  * 하나의 실패가 다른 항목 처리에 영향을 주지 않게 하는 것이 AdmitJoinRequestService 의
  * REQUIRES_NEW 격리 목적이라, 이 메서드 전체를 하나의 트랜잭션으로 묶으면 그 목적이 무의미해진다.
  *
- * 테이블별로 JVM 락(블로킹, tryLock 아님)으로 직렬화한다 — tryLock 이면 처리 루프가 막 빠져나가는
- * 순간 들어온 새 항목이 이번에도, 다음 트리거가 올 때까지도 처리되지 않고 방치될 수 있다.
- * 단일 인스턴스 배포를 전제한다(InMemoryJoinQueue 와 같은 전제). 이 락은 JoinQueue 가 갖고 있다
- * (CancelJoinRequestService 와 같은 락을 공유해야 착석 중 취소 경합이 닫힌다).
+ * 직렬화는 이 클래스가 아니라 호출자([com.jsm.boardgame.holdem.infrastructure.timer.JoinRequestsProcessor])
+ * 책임이다 — 그 쪽이 이 메서드 전체를 테이블의 [com.jsm.boardgame.holdem.application.port.TableExecutor]
+ * 스레드에 올려 실행하므로, 같은 테이블에 대한 AdmitJoinRequestService/CancelJoinRequestService 호출과는
+ * 이미 한 스레드 위에서만 순서대로 만난다. 그래서 이 클래스 자체는 락을 갖지 않는다.
  */
 @Service
 class ProcessJoinRequestsService(
@@ -32,37 +31,30 @@ class ProcessJoinRequestsService(
 
     override fun process(command: ProcessJoinRequestsCommand) {
         val tableId = TableId(command.tableId)
-        joinQueue.withTableLock(tableId) processLoop@{
-            while (true) {
-                val head = joinQueue.peekHead(tableId) ?: return@processLoop
+        while (true) {
+            val head = joinQueue.peekHead(tableId) ?: return
 
-                try {
-                    when (
-                        val result = admitJoinRequestUseCase.admit(
-                            AdmitJoinRequestCommand(tableId.value, head.userId, head.buyIn.amount, head.postBlindImmediately),
-                        )
-                    ) {
-                        is AdmitJoinRequestResult.Blocked -> return@processLoop
-                        is AdmitJoinRequestResult.Seated -> {
-                            joinQueue.removeByUserId(head.userId)
-                            notifier.notifySeated(tableId, head.userId, result.seatNo)
-                            notifier.notifyPositions(tableId, joinQueue.entriesOf(tableId))
-                        }
-                    }
-                } catch (e: ConcurrentTableUpdateException) {
-                    // ponytail: 무제한 재시도다 — 경합은 일시적이라고 가정한다. 지속적인 경합이 실제로
-                    // 관찰되면 재시도 횟수 상한을 둔다.
-                    log.info("대기열 처리가 경합해 다시 시도합니다: tableId={}, userId={}", tableId.value, head.userId)
-                    continue
-                } catch (e: BusinessException) {
-                    log.info(
-                        "대기열 항목을 처리하지 못해 버립니다: tableId={}, userId={}, errorCode={}",
-                        tableId.value, head.userId, e.errorCode,
+            try {
+                when (
+                    val result = admitJoinRequestUseCase.admit(
+                        AdmitJoinRequestCommand(tableId.value, head.userId, head.buyIn.amount, head.postBlindImmediately),
                     )
-                    joinQueue.removeByUserId(head.userId)
-                    notifier.notifyDropped(tableId, head.userId, e.errorCode)
-                    notifier.notifyPositions(tableId, joinQueue.entriesOf(tableId))
+                ) {
+                    is AdmitJoinRequestResult.Blocked -> return
+                    is AdmitJoinRequestResult.Seated -> {
+                        joinQueue.removeByUserId(head.userId)
+                        notifier.notifySeated(tableId, head.userId, result.seatNo)
+                        notifier.notifyPositions(tableId, joinQueue.entriesOf(tableId))
+                    }
                 }
+            } catch (e: BusinessException) {
+                log.info(
+                    "대기열 항목을 처리하지 못해 버립니다: tableId={}, userId={}, errorCode={}",
+                    tableId.value, head.userId, e.errorCode,
+                )
+                joinQueue.removeByUserId(head.userId)
+                notifier.notifyDropped(tableId, head.userId, e.errorCode)
+                notifier.notifyPositions(tableId, joinQueue.entriesOf(tableId))
             }
         }
     }

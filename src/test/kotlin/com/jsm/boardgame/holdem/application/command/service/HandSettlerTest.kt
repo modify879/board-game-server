@@ -44,7 +44,6 @@ private class HandSettlerFakeTableRepository : HoldemTableRepository {
             bigBlind = table.bigBlind,
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
-            version = table.version,
             nextHandAt = table.nextHandAt,
         )
         store[id.value] = saved
@@ -103,7 +102,6 @@ class HandSettlerTest {
             bigBlind = Chips.of(200),
             buttonSeatNo = 1,
             seats = seats,
-            version = 0,
         )
         return tables.save(table)
     }

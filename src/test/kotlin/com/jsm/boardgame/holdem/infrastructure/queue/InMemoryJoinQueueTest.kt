@@ -4,9 +4,6 @@ import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.TableId
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -94,34 +91,5 @@ class InMemoryJoinQueueTest {
 
         queue.removeByUserId(userId)
         assertFalse(queue.isQueued(userId))
-    }
-
-    @Test
-    fun `withTableLock 은 같은 테이블에 대해 직렬화한다`() {
-        val queue = InMemoryJoinQueue()
-        val tableId = TableId(1L)
-        val holderEntered = CountDownLatch(1)
-        val releaseHolder = CountDownLatch(1)
-        val secondEntered = CountDownLatch(1)
-
-        val holderThread = thread {
-            queue.withTableLock(tableId) {
-                holderEntered.countDown()
-                releaseHolder.await(5, TimeUnit.SECONDS)
-            }
-        }
-        assertTrue(holderEntered.await(5, TimeUnit.SECONDS))
-
-        val secondThread = thread {
-            queue.withTableLock(tableId) {
-                secondEntered.countDown()
-            }
-        }
-        assertFalse(secondEntered.await(200, TimeUnit.MILLISECONDS))
-
-        releaseHolder.countDown()
-        assertTrue(secondEntered.await(5, TimeUnit.SECONDS))
-        holderThread.join(5_000)
-        secondThread.join(5_000)
     }
 }

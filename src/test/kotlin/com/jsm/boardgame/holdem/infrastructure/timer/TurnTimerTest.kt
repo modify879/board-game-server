@@ -3,7 +3,7 @@ package com.jsm.boardgame.holdem.infrastructure.timer
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
-import com.jsm.boardgame.holdem.domain.exception.ConcurrentTableUpdateException
+import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -66,12 +66,17 @@ private class TurnTimerFakeTaskScheduler : TaskScheduler {
         throw UnsupportedOperationException()
 }
 
-private class TurnTimerFakeExpireTurnUseCase(private val throwConcurrentUpdate: Boolean = false) : ExpireTurnUseCase {
+private class TurnTimerFakeExpireTurnUseCase : ExpireTurnUseCase {
     val calls = mutableListOf<ExpireTurnCommand>()
     override fun expire(command: ExpireTurnCommand) {
-        if (throwConcurrentUpdate) throw ConcurrentTableUpdateException("test")
         calls += command
     }
+}
+
+/** 이 테스트는 실제 동시성을 검증하지 않는다 — 그 테이블 스레드에서 바로 실행한 것처럼 인라인으로 돈다. */
+private class TurnTimerFakeTableExecutor : TableExecutor {
+    override fun <T> call(tableId: TableId, task: () -> T): T = task()
+    override fun post(tableId: TableId, task: () -> Unit) = task()
 }
 
 class TurnTimerTest {
@@ -108,7 +113,7 @@ class TurnTimerTest {
     fun `차례가 있으면 1분 뒤로 예약된다`() {
         val scheduler = TurnTimerFakeTaskScheduler()
         val useCase = TurnTimerFakeExpireTurnUseCase()
-        val timer = TurnTimer(scheduler, clock, useCase)
+        val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor())
         val hand = handWithToAct(1 to 10_000L, 2 to 10_000L)
 
         timer.onHandBroadcastRequested(event(hand))
@@ -121,7 +126,7 @@ class TurnTimerTest {
     fun `다음 이벤트가 오면 이전 예약이 취소되고 다시 잡힌다`() {
         val scheduler = TurnTimerFakeTaskScheduler()
         val useCase = TurnTimerFakeExpireTurnUseCase()
-        val timer = TurnTimer(scheduler, clock, useCase)
+        val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor())
         val hand = handWithToAct(1 to 10_000L, 2 to 10_000L)
 
         timer.onHandBroadcastRequested(event(hand))
@@ -136,7 +141,7 @@ class TurnTimerTest {
     fun `핸드가 null 이면 예약하지 않는다`() {
         val scheduler = TurnTimerFakeTaskScheduler()
         val useCase = TurnTimerFakeExpireTurnUseCase()
-        val timer = TurnTimer(scheduler, clock, useCase)
+        val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor())
 
         timer.onHandBroadcastRequested(event(null))
 
@@ -147,7 +152,7 @@ class TurnTimerTest {
     fun `토큰이 바뀐 뒤 깨어난 stale 작업은 유스케이스를 부르지 않는다`() {
         val scheduler = TurnTimerFakeTaskScheduler()
         val useCase = TurnTimerFakeExpireTurnUseCase()
-        val timer = TurnTimer(scheduler, clock, useCase)
+        val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor())
         val tableId = TableId(1L)
         val hand = handWithToAct(1 to 10_000L, 2 to 10_000L)
 
@@ -163,18 +168,5 @@ class TurnTimerTest {
         fresh.task.run()
         assertEquals(1, useCase.calls.size)
         assertEquals(tableId.value, useCase.calls[0].tableId)
-    }
-
-    @Test
-    fun `유스케이스가 CONCURRENT_TABLE_UPDATE 로 실패해도 만료 작업은 예외를 던지지 않는다`() {
-        val scheduler = TurnTimerFakeTaskScheduler()
-        val useCase = TurnTimerFakeExpireTurnUseCase(throwConcurrentUpdate = true)
-        val timer = TurnTimer(scheduler, clock, useCase)
-        val hand = handWithToAct(1 to 10_000L, 2 to 10_000L)
-
-        timer.onHandBroadcastRequested(event(hand))
-        val scheduledTask = scheduler.scheduledCalls[0]
-
-        scheduledTask.task.run()
     }
 }

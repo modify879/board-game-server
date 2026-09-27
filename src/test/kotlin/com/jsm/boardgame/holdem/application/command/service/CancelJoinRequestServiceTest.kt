@@ -5,6 +5,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.CancelJoinRequestCom
 import com.jsm.boardgame.holdem.application.exception.JoinRequestNotFoundException
 import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
 import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
+import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.TableId
@@ -26,13 +27,19 @@ private class CancelJoinRequestFakeJoinQueueNotifier : JoinQueueNotifier {
     }
 }
 
+/** 이 파일의 테스트는 전부 단일 스레드 순차 호출이라 실제 직렬화가 필요 없다 — 인라인으로 실행한다. */
+private class CancelJoinRequestFakeTableExecutor : TableExecutor {
+    override fun <T> call(tableId: TableId, task: () -> T): T = task()
+    override fun post(tableId: TableId, task: () -> Unit) = task()
+}
+
 class CancelJoinRequestServiceTest {
 
     @Test
     fun `취소하면 대기 중인 항목이 대기열에서 제거되고 남은 사람들의 순번이 알려진다`() {
         val queue = InMemoryJoinQueue()
         val notifier = CancelJoinRequestFakeJoinQueueNotifier()
-        val service = CancelJoinRequestService(queue, notifier)
+        val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
         val tableId = TableId(1L)
         queue.enqueue(tableId, userId = 1L, buyIn = Chips.of(10_000), postBlindImmediately = false)
         queue.enqueue(tableId, userId = 2L, buyIn = Chips.of(10_000), postBlindImmediately = false)
@@ -47,7 +54,7 @@ class CancelJoinRequestServiceTest {
     fun `대기 중인 요청이 없으면 JOIN_REQUEST_NOT_FOUND 다`() {
         val queue = InMemoryJoinQueue()
         val notifier = CancelJoinRequestFakeJoinQueueNotifier()
-        val service = CancelJoinRequestService(queue, notifier)
+        val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
 
         val e = assertFailsWith<JoinRequestNotFoundException> {
             service.cancel(CancelJoinRequestCommand(999L, userId = 1L))
@@ -59,7 +66,7 @@ class CancelJoinRequestServiceTest {
     fun `다른 사용자의 취소는 내 대기열 항목에 영향을 주지 않는다`() {
         val queue = InMemoryJoinQueue()
         val notifier = CancelJoinRequestFakeJoinQueueNotifier()
-        val service = CancelJoinRequestService(queue, notifier)
+        val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
         val tableId = TableId(1L)
         queue.enqueue(tableId, userId = 1L, buyIn = Chips.of(10_000), postBlindImmediately = false)
         queue.enqueue(tableId, userId = 2L, buyIn = Chips.of(10_000), postBlindImmediately = false)
@@ -74,7 +81,7 @@ class CancelJoinRequestServiceTest {
     fun `착석 처리로 이미 제거된 사용자의 취소는 JOIN_REQUEST_NOT_FOUND 다`() {
         val queue = InMemoryJoinQueue()
         val notifier = CancelJoinRequestFakeJoinQueueNotifier()
-        val service = CancelJoinRequestService(queue, notifier)
+        val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
         val tableId = TableId(1L)
         queue.enqueue(tableId, userId = 1L, buyIn = Chips.of(10_000), postBlindImmediately = false)
         queue.removeByUserId(1L)

@@ -18,7 +18,6 @@ class HoldemTable private constructor(
     smallBlindSeatNo: Int?,
     bigBlindSeatNo: Int?,
     seats: Map<Int, Seat>,
-    val version: Long,
     nextHandAt: Instant?,
 ) {
     var buttonSeatNo: Int? = buttonSeatNo
@@ -243,7 +242,6 @@ class HoldemTable private constructor(
                 smallBlindSeatNo = null,
                 bigBlindSeatNo = null,
                 seats = emptyMap(),
-                version = 0,
                 nextHandAt = null,
             )
         }
@@ -256,10 +254,9 @@ class HoldemTable private constructor(
             bigBlind: Chips,
             buttonSeatNo: Int?,
             seats: Map<Int, Seat>,
-            version: Long,
             smallBlindSeatNo: Int? = null,
             bigBlindSeatNo: Int? = null,
             nextHandAt: Instant? = null,
-        ): HoldemTable = HoldemTable(id, name, smallBlind, bigBlind, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, seats, version, nextHandAt)
+        ): HoldemTable = HoldemTable(id, name, smallBlind, bigBlind, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, seats, nextHandAt)
     }
 }

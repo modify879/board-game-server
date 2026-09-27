@@ -22,11 +22,6 @@ import org.springframework.transaction.annotation.Transactional
  * (모든 afterCommit 동기화가 끝나야 해제된다). 기본 REQUIRED 를 쓰면 이미 커밋된 그 트랜잭션에
  * "참가"하려다 "No active transaction" 으로 터진다.
  *
- * [tables.save] 시점에 이 트랜잭션이 읽은 버전과 실제 저장된 버전이 다르면 — 그 사이 기립·핸드
- * 시작·접속 상태 갱신 등 다른 트랜잭션이 같은 테이블 행을 먼저 바꿨다는 뜻이다 — `@Version` 이 그
- * 경합을 잡아 ConcurrentTableUpdateException 을 던진다. 이 착석 트랜잭션은 그대로 롤백되고,
- * 호출자(ProcessJoinRequestsService)가 같은 대기열 head 를 다시 시도한다.
- *
  * 핸드가 진행 중이거나 빈 좌석이 없으면 예외 없이 [AdmitJoinRequestResult.Blocked] 를 돌려준다 —
  * 둘 다 "이 항목은 지금 처리할 수 없으니 대기열에 그대로 둔다" 는 뜻이라 호출자(ProcessJoinRequestsService)
  * 가 루프를 멈추는 신호로 쓴다. 그 외 실패(지갑 부족 등)는 BusinessException 을 그대로 던져

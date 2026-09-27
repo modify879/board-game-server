@@ -3,7 +3,7 @@ package com.jsm.boardgame.holdem.infrastructure.timer
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
-import com.jsm.boardgame.holdem.domain.exception.ConcurrentTableUpdateException
+import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 import org.springframework.scheduling.TaskScheduler
@@ -60,12 +60,17 @@ private class NextHandTimerFakeTaskScheduler : TaskScheduler {
         throw UnsupportedOperationException()
 }
 
-private class NextHandTimerFakeStartScheduledHandUseCase(private val throwConcurrentUpdate: Boolean = false) : StartScheduledHandUseCase {
+private class NextHandTimerFakeStartScheduledHandUseCase : StartScheduledHandUseCase {
     val calls = mutableListOf<StartScheduledHandCommand>()
     override fun start(command: StartScheduledHandCommand) {
-        if (throwConcurrentUpdate) throw ConcurrentTableUpdateException("test")
         calls += command
     }
+}
+
+/** 이 테스트는 실제 동시성을 검증하지 않는다 — 그 테이블 스레드에서 바로 실행한 것처럼 인라인으로 돈다. */
+private class NextHandTimerFakeTableExecutor : TableExecutor {
+    override fun <T> call(tableId: TableId, task: () -> T): T = task()
+    override fun post(tableId: TableId, task: () -> Unit) = task()
 }
 
 class NextHandTimerTest {
@@ -82,7 +87,7 @@ class NextHandTimerTest {
     fun `nextHandAt 이 있는 이벤트를 받으면 그 시각으로 예약된다`() {
         val scheduler = NextHandTimerFakeTaskScheduler()
         val useCase = NextHandTimerFakeStartScheduledHandUseCase()
-        val timer = NextHandTimer(scheduler, useCase)
+        val timer = NextHandTimer(scheduler, useCase, NextHandTimerFakeTableExecutor())
         val at = fixedInstant.plus(Duration.ofSeconds(5))
 
         timer.onHandBroadcastRequested(eventWithNextHandAt(TableId(1L), at))
@@ -95,7 +100,7 @@ class NextHandTimerTest {
     fun `nextHandAt 이 없는 이벤트는 예약하지 않는다`() {
         val scheduler = NextHandTimerFakeTaskScheduler()
         val useCase = NextHandTimerFakeStartScheduledHandUseCase()
-        val timer = NextHandTimer(scheduler, useCase)
+        val timer = NextHandTimer(scheduler, useCase, NextHandTimerFakeTableExecutor())
 
         timer.onHandBroadcastRequested(eventWithNextHandAt(TableId(1L), null))
 
@@ -106,7 +111,7 @@ class NextHandTimerTest {
     fun `같은 테이블에 새 이벤트가 오면 이전 예약이 취소되고 다시 잡힌다`() {
         val scheduler = NextHandTimerFakeTaskScheduler()
         val useCase = NextHandTimerFakeStartScheduledHandUseCase()
-        val timer = NextHandTimer(scheduler, useCase)
+        val timer = NextHandTimer(scheduler, useCase, NextHandTimerFakeTableExecutor())
         val tableId = TableId(1L)
 
         timer.onHandBroadcastRequested(eventWithNextHandAt(tableId, fixedInstant.plus(Duration.ofSeconds(5))))
@@ -121,7 +126,7 @@ class NextHandTimerTest {
     fun `nextHandAt 이 없는 새 이벤트가 오면 기존 예약을 취소만 하고 다시 잡지 않는다`() {
         val scheduler = NextHandTimerFakeTaskScheduler()
         val useCase = NextHandTimerFakeStartScheduledHandUseCase()
-        val timer = NextHandTimer(scheduler, useCase)
+        val timer = NextHandTimer(scheduler, useCase, NextHandTimerFakeTableExecutor())
         val tableId = TableId(1L)
 
         timer.onHandBroadcastRequested(eventWithNextHandAt(tableId, fixedInstant.plus(Duration.ofSeconds(5))))
@@ -136,7 +141,7 @@ class NextHandTimerTest {
     fun `토큰이 바뀐 뒤 깨어난 stale 작업은 유스케이스를 부르지 않는다`() {
         val scheduler = NextHandTimerFakeTaskScheduler()
         val useCase = NextHandTimerFakeStartScheduledHandUseCase()
-        val timer = NextHandTimer(scheduler, useCase)
+        val timer = NextHandTimer(scheduler, useCase, NextHandTimerFakeTableExecutor())
         val tableId = TableId(1L)
 
         timer.scheduleAt(tableId, fixedInstant.plus(Duration.ofSeconds(5)))
@@ -150,16 +155,5 @@ class NextHandTimerTest {
         fresh.task.run()
         assertEquals(1, useCase.calls.size)
         assertEquals(tableId.value, useCase.calls[0].tableId)
-    }
-
-    @Test
-    fun `유스케이스가 CONCURRENT_TABLE_UPDATE 로 실패해도 예약된 작업은 예외를 던지지 않는다`() {
-        val scheduler = NextHandTimerFakeTaskScheduler()
-        val useCase = NextHandTimerFakeStartScheduledHandUseCase(throwConcurrentUpdate = true)
-        val timer = NextHandTimer(scheduler, useCase)
-
-        timer.scheduleAt(TableId(1L), fixedInstant.plus(Duration.ofSeconds(5)))
-
-        scheduler.scheduledCalls[0].task.run() // 예외가 새어나오면 이 줄에서 테스트가 실패한다
     }
 }

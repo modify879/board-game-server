@@ -3,9 +3,8 @@ package com.jsm.boardgame.holdem.infrastructure.timer
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
-import com.jsm.boardgame.holdem.domain.exception.ConcurrentTableUpdateException
+import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.TableId
-import org.slf4j.LoggerFactory
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
 import org.springframework.transaction.event.TransactionalEventListener
@@ -26,6 +25,7 @@ import java.util.concurrent.atomic.AtomicLong
 class NextHandTimer(
     private val taskScheduler: TaskScheduler,
     private val startScheduledHandUseCase: StartScheduledHandUseCase,
+    private val tableExecutor: TableExecutor,
 ) {
     private class ScheduledStart(val future: ScheduledFuture<*>, val token: Long)
 
@@ -47,16 +47,10 @@ class NextHandTimer(
         scheduled[tableId] = ScheduledStart(future, token)
     }
 
+    // TableExecutor 가 이 시작을 그 테이블의 다른 모든 명령과 같은 스레드에 직렬화하므로 더 이상
+    // 경합이 나지 않는다.
     private fun onFire(tableId: TableId, token: Long) {
         if (tokens[tableId]?.get() != token) return
-        try {
-            startScheduledHandUseCase.start(StartScheduledHandCommand(tableId.value))
-        } catch (e: ConcurrentTableUpdateException) {
-            log.info("자동 시작이 다른 트랜잭션과 경합해 무시했습니다: tableId={}", tableId.value)
-        }
-    }
-
-    companion object {
-        private val log = LoggerFactory.getLogger(NextHandTimer::class.java)
+        tableExecutor.call(tableId) { startScheduledHandUseCase.start(StartScheduledHandCommand(tableId.value)) }
     }
 }

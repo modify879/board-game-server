@@ -27,5 +27,4 @@ class SeatTakenException(logMessage: String) : BusinessException(HoldemErrorCode
 class AlreadySeatedException(logMessage: String) : BusinessException(HoldemErrorCode.ALREADY_SEATED, logMessage)
 class NotSeatedException(logMessage: String) : BusinessException(HoldemErrorCode.NOT_SEATED, logMessage)
 class BuyInOutOfRangeException(logMessage: String) : BusinessException(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, logMessage)
-class ConcurrentTableUpdateException(logMessage: String) : BusinessException(HoldemErrorCode.CONCURRENT_TABLE_UPDATE, logMessage)
 class TableFullException(logMessage: String) : BusinessException(HoldemErrorCode.TABLE_FULL, logMessage)

@@ -51,7 +51,6 @@ private class ExpireTurnFakeTableRepository : HoldemTableRepository {
             bigBlind = table.bigBlind,
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
-            version = table.version,
             nextHandAt = table.nextHandAt,
         )
 }

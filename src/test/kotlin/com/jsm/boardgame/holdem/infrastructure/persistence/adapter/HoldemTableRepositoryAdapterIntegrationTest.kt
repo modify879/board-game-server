@@ -2,12 +2,9 @@ package com.jsm.boardgame.holdem.infrastructure.persistence.adapter
 
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
-import com.jsm.boardgame.holdem.domain.exception.ConcurrentTableUpdateException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
-import com.jsm.boardgame.holdem.domain.model.Seat
-import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.infrastructure.persistence.entity.HoldemSeatJpaRepository
 import com.jsm.boardgame.user.domain.model.Nickname
@@ -137,36 +134,6 @@ class HoldemTableRepositoryAdapterIntegrationTest {
 
         val e = assertFailsWith<AlreadySeatedException> { tables.save(table2) }
         assertEquals(HoldemErrorCode.ALREADY_SEATED, e.errorCode)
-    }
-
-    // 좌석만 바뀌고 테이블 행 자체의 컬럼(name/blind/buttonSeatNo)이 그대로면 Hibernate 가
-    // dirty 로 보지 않아 UPDATE 를 생략하고 version 도 그대로다 — 그러면 "stale" 스냅샷이 실은
-    // stale 이 아니게 된다. moveButtonToNextOccupiedSeat() 로 buttonSeatNo 를 실제로 바꿔
-    // 테이블 행 UPDATE 가 진짜 일어나고 version 이 올라가도록 만든다.
-    @Test
-    fun `낙관적 락 경합(stale 버전)은 ConcurrentTableUpdateException 으로 번역된다`() {
-        val userA = uniqueUserId()
-        val userB = uniqueUserId()
-
-        val created = tables.save(HoldemTable.create("t8"))
-        val staleVersion = created.version
-
-        created.sitDown(userA, buyIn)
-        created.moveButtonToNextOccupiedSeat()
-        tables.save(created)
-
-        val staleSnapshot = HoldemTable.reconstitute(
-            id = created.id!!,
-            name = created.name,
-            smallBlind = created.smallBlind,
-            bigBlind = created.bigBlind,
-            buttonSeatNo = null,
-            seats = mapOf(1 to Seat.reconstitute(1, userB, buyIn, SeatPresence.SEATED)),
-            version = staleVersion,
-        )
-
-        val e = assertFailsWith<ConcurrentTableUpdateException> { tables.save(staleSnapshot) }
-        assertEquals(HoldemErrorCode.CONCURRENT_TABLE_UPDATE, e.errorCode)
     }
 
     @Test
