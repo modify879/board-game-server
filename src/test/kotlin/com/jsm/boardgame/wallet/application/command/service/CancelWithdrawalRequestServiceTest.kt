@@ -81,7 +81,7 @@ class CancelWithdrawalRequestServiceTest {
     private val bankAccount = BankAccount.of("국민은행", "123456789012", "홍길동")
 
     private fun heldRequest(id: Long = 1, userId: Long = 1, amount: Long = 10_000): WithdrawalRequest {
-        wallets.stored[userId] = Wallet.reconstitute(id = WalletId(userId), userId = userId, balance = Money.ZERO, version = 0)
+        wallets.stored[userId] = Wallet.reconstitute(id = WalletId(userId), userId = userId, balance = Money.ZERO)
         return WithdrawalRequest.reconstitute(
             id = WithdrawalRequestId(id),
             userId = userId,
@@ -92,7 +92,6 @@ class CancelWithdrawalRequestServiceTest {
             processedBy = null,
             processedAt = null,
             rejectionReason = null,
-            version = 0,
         ).also { withdrawalRequests.put(it) }
     }
 

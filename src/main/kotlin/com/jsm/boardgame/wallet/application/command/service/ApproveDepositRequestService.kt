@@ -31,9 +31,10 @@ class ApproveDepositRequestService(
 
         val creditedAmount = command.creditedAmount ?: request.requestedAmount.amount
 
-        // 1) 요청 상태를 먼저 확정하고 저장한다. 어댑터가 saveAndFlush 하므로 @Version 충돌이
-        //    여기서 터지고, 동시에 들어온 두 번째 승인은 지갑을 건드리기 전에 떨어진다.
-        //    지갑 반영을 먼저 하면 두 번 입금된 뒤에야 충돌을 알게 된다.
+        // 1) 요청 상태를 먼저 확정하고 저장한다. findById 가 요청 행을 잠그므로 동시에 들어온
+        //    두 번째 승인은 여기서 블록되다가, 잠금이 풀리면 requirePending() 이 이미 처리된
+        //    상태를 보고 떨어진다 — 지갑을 건드리기 전이다. 지갑 반영을 먼저 하면 두 번
+        //    입금된 뒤에야 이를 알게 된다.
         request.approve(command.adminUserId, creditedAmount, now)
         depositRequests.save(request)
 

@@ -28,7 +28,7 @@ private class TransferFromGameFakeWalletRepository : WalletRepository {
     override fun save(wallet: Wallet): Wallet {
         val saved = if (wallet.id == null) {
             sequence += 1
-            Wallet.reconstitute(id = WalletId(sequence), userId = wallet.userId, balance = wallet.balance, version = wallet.version)
+            Wallet.reconstitute(id = WalletId(sequence), userId = wallet.userId, balance = wallet.balance)
         } else {
             wallet
         }
@@ -69,7 +69,7 @@ class TransferFromGameServiceTest {
 
     @Test
     fun `캐시아웃이면 잔액이 늘고 GAME_CASH_OUT 엔트리가 balanceAfter 와 함께 남는다`() {
-        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(2_000), version = 0)
+        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(2_000))
 
         service.transfer(TransferFromGameCommand(userId = 1, amount = 5_000, gameTableId = 7, memo = "holdem"))
 

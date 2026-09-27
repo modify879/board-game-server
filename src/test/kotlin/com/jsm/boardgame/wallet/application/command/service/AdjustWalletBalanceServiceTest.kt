@@ -35,7 +35,7 @@ private class AdjustFakeWalletRepository : WalletRepository {
     override fun save(wallet: Wallet): Wallet {
         val saved = if (wallet.id == null) {
             sequence += 1
-            Wallet.reconstitute(id = WalletId(sequence), userId = wallet.userId, balance = wallet.balance, version = wallet.version)
+            Wallet.reconstitute(id = WalletId(sequence), userId = wallet.userId, balance = wallet.balance)
         } else {
             wallet
         }
@@ -113,7 +113,7 @@ class AdjustWalletBalanceServiceTest {
     @Test
     fun `음수 조정이면 ADMIN_ADJUSTMENT_DEBIT 엔트리가 생기고 잔액이 준다`() {
         userExistence.register(1)
-        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(10_000), version = 0)
+        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(10_000))
 
         service.adjust(
             AdjustWalletBalanceCommand(targetUserId = 1, amount = -3_000, reason = "오류 회수", adminUserId = 99, idempotencyKey = "key-2"),
@@ -176,7 +176,7 @@ class AdjustWalletBalanceServiceTest {
     @Test
     fun `잔액보다 큰 음수 조정이면 INSUFFICIENT_BALANCE`() {
         userExistence.register(1)
-        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(1_000), version = 0)
+        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(1_000))
 
         val e = assertFailsWith<InsufficientBalanceException> {
             service.adjust(

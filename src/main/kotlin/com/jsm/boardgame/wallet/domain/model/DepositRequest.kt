@@ -21,7 +21,6 @@ class DepositRequest private constructor(
     processedBy: Long?,
     processedAt: Instant?,
     rejectionReason: String?,
-    val version: Long,
 ) {
     var status: DepositRequestStatus = status
         private set
@@ -99,7 +98,6 @@ class DepositRequest private constructor(
                 processedBy = null,
                 processedAt = null,
                 rejectionReason = null,
-                version = 0,
             )
         }
 
@@ -114,7 +112,6 @@ class DepositRequest private constructor(
             processedBy: Long?,
             processedAt: Instant?,
             rejectionReason: String?,
-            version: Long,
         ): DepositRequest = DepositRequest(
             id = id,
             userId = userId,
@@ -125,7 +122,6 @@ class DepositRequest private constructor(
             processedBy = processedBy,
             processedAt = processedAt,
             rejectionReason = rejectionReason,
-            version = version,
         )
     }
 }

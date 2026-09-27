@@ -58,7 +58,6 @@ class WalletRepositoryAdapterIntegrationTest {
             id = WalletId(0),
             userId = uniqueUserId(),
             balance = Money.reconstitute(-100),
-            version = 0,
         )
 
         val e = assertFailsWith<InsufficientBalanceException> { wallets.save(negative) }
@@ -76,27 +75,10 @@ class WalletRepositoryAdapterIntegrationTest {
             id = saved.id!!,
             userId = saved.userId,
             balance = Money.reconstitute(-100),
-            version = saved.version,
         )
 
         val e = assertFailsWith<InsufficientBalanceException> { wallets.save(negative) }
         assertEquals(WalletErrorCode.INSUFFICIENT_BALANCE, e.errorCode)
-    }
-
-    @Test
-    fun `같은 version 으로 두 번 저장하면 두 번째가 ConcurrentWalletUpdateException`() {
-        val saved = wallets.save(Wallet.open(userId = uniqueUserId()))
-
-        wallets.save(
-            Wallet.reconstitute(id = saved.id!!, userId = saved.userId, balance = Money.of(100), version = saved.version),
-        )
-
-        val e = assertFailsWith<ConcurrentWalletUpdateException> {
-            wallets.save(
-                Wallet.reconstitute(id = saved.id, userId = saved.userId, balance = Money.of(200), version = saved.version),
-            )
-        }
-        assertEquals(WalletErrorCode.CONCURRENT_WALLET_UPDATE, e.errorCode)
     }
 
     @Test
@@ -111,17 +93,16 @@ class WalletRepositoryAdapterIntegrationTest {
     }
 
     @Test
-    fun `저장 후 findByUserId 가 잔액 version 을 그대로 돌려준다`() {
+    fun `저장 후 findByUserId 가 잔액을 그대로 돌려준다`() {
         val userId = uniqueUserId()
         val opened = wallets.save(Wallet.open(userId = userId))
         wallets.save(
-            Wallet.reconstitute(id = opened.id!!, userId = userId, balance = Money.of(500), version = opened.version),
+            Wallet.reconstitute(id = opened.id!!, userId = userId, balance = Money.of(500)),
         )
 
         val found = wallets.findByUserId(userId)
 
         assertEquals(Money.of(500), found?.balance)
-        assertEquals(1L, found?.version)
     }
 
     // 이 테스트가 실패하면 data.sql 이 안 돈 것이다 — fk_wallets_user 가 실제로 걸려 있고

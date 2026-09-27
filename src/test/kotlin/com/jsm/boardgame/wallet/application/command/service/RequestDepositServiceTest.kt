@@ -32,7 +32,6 @@ private class FakeDepositRequestRepository : DepositRequestRepository {
                 processedBy = request.processedBy,
                 processedAt = request.processedAt,
                 rejectionReason = request.rejectionReason,
-                version = request.version,
             )
         } else {
             request

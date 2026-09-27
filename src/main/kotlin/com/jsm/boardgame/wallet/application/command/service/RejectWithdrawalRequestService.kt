@@ -17,8 +17,9 @@ import java.time.Instant
 
 /**
  * 상태를 바꾸고 WITHDRAWAL_REFUND 로 환급한다.
- * 요청 저장을 지갑 반영보다 먼저 한다 — 뒤집으면 동시 반려가 두 번 환급된 뒤에야 충돌을 알게 된다.
- * 충전 승인(ApproveDepositRequestService)과 같은 이유다.
+ * 요청 저장을 지갑 반영보다 먼저 한다 — 뒤집으면 동시 반려가 두 번 환급된 뒤에야 이를 알게 된다.
+ * findById 가 요청 행을 잠가 두 번째 호출은 블록되고, 잠금이 풀리면 이미 처리된 상태를 보고
+ * 떨어진다. 충전 승인(ApproveDepositRequestService)과 같은 이유다.
  */
 @Service
 @Transactional

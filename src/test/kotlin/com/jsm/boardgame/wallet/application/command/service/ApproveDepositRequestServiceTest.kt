@@ -50,7 +50,7 @@ private class ApproveFakeWalletRepository : WalletRepository {
     override fun save(wallet: Wallet): Wallet {
         val saved = if (wallet.id == null) {
             sequence += 1
-            Wallet.reconstitute(id = WalletId(sequence), userId = wallet.userId, balance = wallet.balance, version = wallet.version)
+            Wallet.reconstitute(id = WalletId(sequence), userId = wallet.userId, balance = wallet.balance)
         } else {
             wallet
         }
@@ -101,7 +101,6 @@ class ApproveDepositRequestServiceTest {
             processedBy = null,
             processedAt = null,
             rejectionReason = null,
-            version = 0,
         ).also { depositRequests.put(it) }
 
     @Test

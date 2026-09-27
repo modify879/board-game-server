@@ -89,7 +89,7 @@ class RejectWithdrawalRequestServiceTest {
         amount: Long = 10_000,
         status: WithdrawalRequestStatus = WithdrawalRequestStatus.PENDING,
     ): WithdrawalRequest {
-        wallets.stored[userId] = Wallet.reconstitute(id = WalletId(userId), userId = userId, balance = Money.ZERO, version = 0)
+        wallets.stored[userId] = Wallet.reconstitute(id = WalletId(userId), userId = userId, balance = Money.ZERO)
         return WithdrawalRequest.reconstitute(
             id = WithdrawalRequestId(id),
             userId = userId,
@@ -100,7 +100,6 @@ class RejectWithdrawalRequestServiceTest {
             processedBy = null,
             processedAt = null,
             rejectionReason = null,
-            version = 0,
         ).also { withdrawalRequests.put(it) }
     }
 
