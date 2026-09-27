@@ -10,4 +10,7 @@ class StompUserConnections(
 ) : UserConnections {
 
     override fun isConnected(userId: Long): Boolean = userRegistry.getUser(userId.toString()) != null
+
+    override fun hasOtherSession(userId: Long, excludingSessionId: String): Boolean =
+        userRegistry.getUser(userId.toString())?.sessions?.any { it.id != excludingSessionId } == true
 }

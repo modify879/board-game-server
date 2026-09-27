@@ -68,6 +68,8 @@ private class SitDownFakeUserConnections : UserConnections {
     fun connect(userId: Long) { connectedUserIds += userId }
 
     override fun isConnected(userId: Long): Boolean = userId in connectedUserIds
+
+    override fun hasOtherSession(userId: Long, excludingSessionId: String): Boolean = false
 }
 
 class SitDownServiceTest {

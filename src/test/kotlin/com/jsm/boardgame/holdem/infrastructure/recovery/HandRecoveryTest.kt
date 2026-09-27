@@ -16,6 +16,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceUs
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
 import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
+import com.jsm.boardgame.holdem.application.port.UserConnections
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -163,6 +164,11 @@ private class HandRecoveryFakeJoinQueueNotifier : JoinQueueNotifier {
     override fun notifyPositions(tableId: TableId, entries: List<JoinQueueEntry>) {}
 }
 
+private class HandRecoveryFakeUserConnections : UserConnections {
+    override fun isConnected(userId: Long): Boolean = false
+    override fun hasOtherSession(userId: Long, excludingSessionId: String): Boolean = false
+}
+
 private class HandRecoveryFakeStartScheduledHandUseCase : StartScheduledHandUseCase {
     val calls = mutableListOf<StartScheduledHandCommand>()
     override fun start(command: StartScheduledHandCommand) {
@@ -193,6 +199,7 @@ class HandRecoveryTest {
         tables,
         InMemoryJoinQueue(),
         HandRecoveryFakeJoinQueueNotifier(),
+        HandRecoveryFakeUserConnections(),
     )
 
     /** userId = seatNo * 1000L 로 좌석을 채운 테이블을 만들고 참가시켜 진행 중 핸드를 만든다. */
@@ -345,6 +352,7 @@ class HandRecoveryTest {
             tables,
             InMemoryJoinQueue(),
             HandRecoveryFakeJoinQueueNotifier(),
+            HandRecoveryFakeUserConnections(),
         )
         val recovery = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase, connectionTimer, NextHandTimer(HandRecoveryFakeTaskScheduler(), HandRecoveryFakeStartScheduledHandUseCase()))
 
@@ -376,6 +384,7 @@ class HandRecoveryTest {
             tables,
             InMemoryJoinQueue(),
             HandRecoveryFakeJoinQueueNotifier(),
+            HandRecoveryFakeUserConnections(),
         )
         val recovery = HandRecovery(handStore, tables, recoveryScheduler, clock, resumeUseCase, cancelUseCase, connectionTimer, NextHandTimer(HandRecoveryFakeTaskScheduler(), HandRecoveryFakeStartScheduledHandUseCase()))
 
