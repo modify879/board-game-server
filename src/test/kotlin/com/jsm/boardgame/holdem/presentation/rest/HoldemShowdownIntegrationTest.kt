@@ -186,6 +186,18 @@ class HoldemShowdownIntegrationTest {
         return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{"buyIn":$buyIn}""")
     }
 
+    /** 착석 처리(ProcessJoinRequestsService)는 이제 TableExecutor.post 로 비동기 디스패치된다
+     *  (JoinRequestsProcessor) — 응답이 돌아온 시점에 아직 안 끝났을 수 있어, 실제 착석을
+     *  기다린다. startHand() 는 두 좌석이 실제로 채워져 있어야 한다. */
+    private fun awaitSeated(userId: Long, timeoutMs: Long = 5_000) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (holdemTableRepository.findByUserId(userId) != null) return
+            Thread.sleep(20)
+        }
+        error("착석이 시간 안에 끝나지 않았습니다: userId=$userId")
+    }
+
     /** 수동 시작 엔드포인트가 없으므로 nextHandAt 을 과거로 당겨 시스템 진입점을 직접 불러 결정적으로 시작시킨다. */
     private fun startHand(tableId: Long) {
         val table = holdemTableRepository.findById(TableId(tableId))!!
@@ -225,7 +237,9 @@ class HoldemShowdownIntegrationTest {
         fundWallet(userIdB, 15_000)
         val tableId = createTable(tokenA)
         sitDown(tokenA, tableId, 10_000).andExpect(status().isAccepted)
+        awaitSeated(userIdA)
         sitDown(tokenB, tableId, 10_000).andExpect(status().isAccepted)
+        awaitSeated(userIdB)
 
         // 새 테이블의 첫 헤즈업 핸드는 HoldemTable.advanceBlinds 가 결정적으로 정한다:
         // 좌석1(버튼/SB, 낮은 좌석 번호) = 포켓 에이스, 좌석2(BB) = 2-3 오프수트.
@@ -261,7 +275,9 @@ class HoldemShowdownIntegrationTest {
         fundWallet(userIdB, 5_000)
         val tableId = createTable(tokenA)
         sitDown(tokenA, tableId, 20_000).andExpect(status().isAccepted)
+        awaitSeated(userIdA)
         sitDown(tokenB, tableId, 1_000).andExpect(status().isAccepted)
+        awaitSeated(userIdB)
 
         // 좌석2(BB, 숏스택)가 킹 페어로 이기게, 좌석1(버튼, 빅스택)은 하이카드로 지게 고정한다.
         fixDeckOrder("Ks", "7c", "Kh", "8d", "2h", "3c", "4d", "9s", "Td")
@@ -338,7 +354,9 @@ class HoldemShowdownIntegrationTest {
         fundWallet(userIdB, 15_000)
         val tableId = createTable(tokenA)
         sitDown(tokenA, tableId, 10_000).andExpect(status().isAccepted)
+        awaitSeated(userIdA)
         sitDown(tokenB, tableId, 10_000).andExpect(status().isAccepted)
+        awaitSeated(userIdB)
 
         val session = tryConnect(tokenA)
         val (publicHandler, publicQueue) = capturingFrameHandler()

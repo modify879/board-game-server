@@ -2,7 +2,6 @@ package com.jsm.boardgame.holdem.infrastructure.persistence.adapter
 
 import com.jsm.boardgame.common.persistence.violatedConstraint
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
-import com.jsm.boardgame.holdem.domain.exception.ConcurrentTableUpdateException
 import com.jsm.boardgame.holdem.domain.exception.SeatTakenException
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.Seat
@@ -14,7 +13,6 @@ import com.jsm.boardgame.holdem.infrastructure.persistence.entity.HoldemTableJpa
 import com.jsm.boardgame.holdem.infrastructure.persistence.entity.toDomain
 import com.jsm.boardgame.holdem.infrastructure.persistence.entity.toJpaEntity
 import org.springframework.dao.DataIntegrityViolationException
-import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.stereotype.Repository
 
 private const val CONSTRAINT_SEAT_USER = "uk_holdem_seats_user"
@@ -42,14 +40,7 @@ class HoldemTableRepositoryAdapter(
         tableJpa.findAllByNextHandAtIsNotNull().map { TableId(it.id) }
 
     override fun save(table: HoldemTable): HoldemTable {
-        val savedTable = try {
-            tableJpa.saveAndFlush(table.toJpaEntity())
-        } catch (e: OptimisticLockingFailureException) {
-            // 테이블 행만 버전을 갖는다. 착석·기립 둘 다 테이블 행을 저장하므로 경합은 이 버전에서 드러난다.
-            // 기립이 충돌했을 때 SEAT_TAKEN 을 내보내면 계약이 사실과 어긋나므로 wallet 의
-            // CONCURRENT_WALLET_UPDATE 와 같은 자리에 전용 코드를 둔다.
-            throw ConcurrentTableUpdateException("낙관적 락 충돌: ${e.message}")
-        }
+        val savedTable = tableJpa.saveAndFlush(table.toJpaEntity())
 
         val existingSeats = seatJpa.findAllByTableId(savedTable.id).associateBy { it.seatNo }
         val occupied = table.occupiedSeats()
@@ -68,8 +59,6 @@ class HoldemTableRepositoryAdapter(
             }
         } catch (e: DataIntegrityViolationException) {
             throw translateSeat(e)
-        } catch (e: OptimisticLockingFailureException) {
-            throw ConcurrentTableUpdateException("낙관적 락 충돌: ${e.message}")
         }
 
         return savedTable.toDomain(seatJpa.findAllByTableId(savedTable.id))

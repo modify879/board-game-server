@@ -9,6 +9,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceUs
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
+import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.application.port.UserConnections
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
@@ -76,6 +77,7 @@ class ConnectionTimer(
     private val joinQueue: JoinQueue,
     private val joinQueueNotifier: JoinQueueNotifier,
     private val userConnections: UserConnections,
+    private val tableExecutor: TableExecutor,
 ) {
     private class ScheduledExpiry(val future: ScheduledFuture<*>, val token: Long)
 
@@ -86,6 +88,13 @@ class ConnectionTimer(
     private val pendingStandUps = ConcurrentHashMap<TableId, MutableSet<Long>>()
 
     private val suspended = ConcurrentHashMap.newKeySet<Long>()
+
+    /** 사용자가 앉은 테이블을 찾아 그 테이블의 실행기에서 [task] 를 돌린다 — 못 찾으면(미착석)
+     *  테이블 상태를 안 건드리므로 그 자리에서 바로 실행해도 안전하다. */
+    private fun <T> dispatchForUser(userId: Long, task: () -> T): T {
+        val tableId = tables.findByUserId(userId)?.id
+        return if (tableId != null) tableExecutor.call(tableId, task) else task()
+    }
 
     /** HandRecovery.onApplicationReady(@Order(0)) 다음으로 실행되어야 한다 - 클래스 KDoc 참고. */
     @EventListener(ApplicationReadyEvent::class)
@@ -101,9 +110,12 @@ class ConnectionTimer(
         val userId = event.user?.name?.toLongOrNull() ?: return
 
         if (!userConnections.hasOtherSession(userId, event.sessionId)) {
-            val queuedTableId = joinQueue.removeByUserId(userId)
+            val queuedTableId = joinQueue.tableOf(userId)
             if (queuedTableId != null) {
-                joinQueueNotifier.notifyPositions(queuedTableId, joinQueue.entriesOf(queuedTableId))
+                tableExecutor.call(queuedTableId) {
+                    val removed = joinQueue.removeByUserId(userId)
+                    if (removed != null) joinQueueNotifier.notifyPositions(removed, joinQueue.entriesOf(removed))
+                }
             }
         }
 
@@ -121,7 +133,7 @@ class ConnectionTimer(
         // 서로 다른 생명주기라 token 만으로는 못 막는다) - 재접속했으니 그 예약도 지운다.
         pendingStandUps.values.forEach { it.remove(userId) }
 
-        updateSeatPresenceUseCase.update(UpdateSeatPresenceCommand(userId, SeatPresence.SEATED.name))
+        dispatchForUser(userId) { updateSeatPresenceUseCase.update(UpdateSeatPresenceCommand(userId, SeatPresence.SEATED.name)) }
     }
 
     /**
@@ -130,7 +142,7 @@ class ConnectionTimer(
      */
     fun beginWatch(userId: Long) {
         suspended.remove(userId)
-        updateSeatPresenceUseCase.update(UpdateSeatPresenceCommand(userId, SeatPresence.DISCONNECTED.name))
+        dispatchForUser(userId) { updateSeatPresenceUseCase.update(UpdateSeatPresenceCommand(userId, SeatPresence.DISCONNECTED.name)) }
 
         scheduled.remove(userId)?.future?.cancel(false)
         val token = tokens.computeIfAbsent(userId) { AtomicLong() }.incrementAndGet()
@@ -165,7 +177,7 @@ class ConnectionTimer(
 
     private fun onExpire(userId: Long, token: Long) {
         if (tokens[userId]?.get() != token) return
-        val reservedTableId = expireConnectionUseCase.expire(ExpireConnectionCommand(userId))
+        val reservedTableId = dispatchForUser(userId) { expireConnectionUseCase.expire(ExpireConnectionCommand(userId)) }
         if (reservedTableId != null) {
             pendingStandUps.computeIfAbsent(reservedTableId) { ConcurrentHashMap.newKeySet() }.add(userId)
         }
@@ -175,9 +187,11 @@ class ConnectionTimer(
     fun onHandBroadcastRequested(event: HandBroadcastRequested) {
         if (event.hand != null && !event.hand.isFinished) return
         val userIds = pendingStandUps.remove(event.tableId) ?: return
-        for (userId in userIds) {
-            standUpUseCase.standUp(StandUpCommand(userId))
-            log.info("핸드 종료로 예약된 퇴장을 실행했습니다: userId={}, tableId={}", userId, event.tableId.value)
+        tableExecutor.call(event.tableId) {
+            for (userId in userIds) {
+                standUpUseCase.standUp(StandUpCommand(userId))
+                log.info("핸드 종료로 예약된 퇴장을 실행했습니다: userId={}, tableId={}", userId, event.tableId.value)
+            }
         }
     }
 

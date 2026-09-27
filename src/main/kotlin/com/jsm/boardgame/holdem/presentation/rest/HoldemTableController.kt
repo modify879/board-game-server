@@ -6,7 +6,9 @@ import com.jsm.boardgame.holdem.application.command.usecase.CancelJoinRequestUse
 import com.jsm.boardgame.holdem.application.command.usecase.CreateTableUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.PlayActionUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.SitDownUseCase
+import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.application.query.service.HoldemTableQueryService
+import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.presentation.rest.request.CreateTableRequest
 import com.jsm.boardgame.holdem.presentation.rest.request.PlayActionRequest
 import com.jsm.boardgame.holdem.presentation.rest.request.SitDownRequest
@@ -37,6 +39,7 @@ class HoldemTableController(
     private val cancelJoinRequestUseCase: CancelJoinRequestUseCase,
     private val playActionUseCase: PlayActionUseCase,
     private val holdemTableQueryService: HoldemTableQueryService,
+    private val tableExecutor: TableExecutor,
 ) {
 
     @PostMapping
@@ -53,7 +56,9 @@ class HoldemTableController(
     @PostMapping("/{tableId}/seats")
     @ResponseStatus(HttpStatus.ACCEPTED)
     fun sitDown(@AuthenticationPrincipal jwt: Jwt, @PathVariable tableId: Long, @RequestBody request: SitDownRequest): SitDownResponse =
-        SitDownResponse(sitDownUseCase.sitDown(request.toCommand(tableId, jwt.requireUserId())))
+        SitDownResponse(
+            tableExecutor.call(TableId(tableId)) { sitDownUseCase.sitDown(request.toCommand(tableId, jwt.requireUserId())) },
+        )
 
     @DeleteMapping("/{tableId}/seats/request")
     @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -64,7 +69,7 @@ class HoldemTableController(
     @PostMapping("/{tableId}/hands/actions")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun playAction(@AuthenticationPrincipal jwt: Jwt, @PathVariable tableId: Long, @RequestBody request: PlayActionRequest) {
-        playActionUseCase.play(request.toCommand(tableId, jwt.requireUserId()))
+        tableExecutor.call(TableId(tableId)) { playActionUseCase.play(request.toCommand(tableId, jwt.requireUserId())) }
     }
 }
 

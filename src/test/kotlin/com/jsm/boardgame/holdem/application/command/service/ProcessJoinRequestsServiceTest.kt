@@ -10,10 +10,10 @@ import com.jsm.boardgame.holdem.application.exception.JoinRequestNotFoundExcepti
 import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
 import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
 import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
-import com.jsm.boardgame.holdem.domain.exception.ConcurrentTableUpdateException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.infrastructure.executor.SerialTableExecutor
 import com.jsm.boardgame.holdem.infrastructure.queue.InMemoryJoinQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -141,34 +141,6 @@ class ProcessJoinRequestsServiceTest {
     }
 
     @Test
-    fun `경합 예외가 나면 같은 head 를 다시 시도해 결국 착석시킨다`() {
-        val queue = InMemoryJoinQueue()
-        queue.enqueue(tableId, 101L, Chips.of(8_000), false)
-        var attempts = 0
-        val admit = ProcessJoinRequestsFakeAdmitUseCase(
-            mapOf(
-                101L to {
-                    attempts++
-                    if (attempts == 1) throw ConcurrentTableUpdateException("competing update")
-                    AdmitJoinRequestResult.Seated(1)
-                },
-            ),
-        )
-        val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
-        val service = ProcessJoinRequestsService(queue, admit, notifier)
-
-        service.process(ProcessJoinRequestsCommand(tableId.value))
-
-        assertEquals(listOf(101L, 101L), admit.calls.map { it.userId })
-        assertEquals(
-            listOf(ProcessJoinRequestsFakeJoinQueueNotifier.Seated(tableId, 101L, 1)),
-            notifier.seatedCalls,
-        )
-        assertTrue(notifier.droppedCalls.isEmpty())
-        assertNull(queue.peekHead(tableId))
-    }
-
-    @Test
     fun `착석 처리 중에는 취소가 기다리다가 결국 착석되고 취소는 JOIN_REQUEST_NOT_FOUND 로 실패한다`() {
         val queue = InMemoryJoinQueue()
         queue.enqueue(tableId, 101L, Chips.of(8_000), false)
@@ -186,9 +158,12 @@ class ProcessJoinRequestsServiceTest {
         val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
         val service = ProcessJoinRequestsService(queue, admit, notifier)
         val cancelNotifier = ProcessJoinRequestsFakeJoinQueueNotifier()
-        val cancelService = CancelJoinRequestService(queue, cancelNotifier)
+        val tableExecutor = SerialTableExecutor()
+        val cancelService = CancelJoinRequestService(queue, cancelNotifier, tableExecutor)
 
-        val processThread = thread { service.process(ProcessJoinRequestsCommand(tableId.value)) }
+        val processThread = thread {
+            tableExecutor.call(tableId) { service.process(ProcessJoinRequestsCommand(tableId.value)) }
+        }
         assertTrue(admitStarted.await(5, TimeUnit.SECONDS))
 
         var cancelFailure: Throwable? = null

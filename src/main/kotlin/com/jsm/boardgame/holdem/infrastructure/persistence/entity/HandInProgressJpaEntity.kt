@@ -10,8 +10,11 @@ import org.hibernate.type.SqlTypes
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
+import jakarta.persistence.PostLoad
+import jakarta.persistence.PostPersist
 import jakarta.persistence.Table
-import jakarta.persistence.Version
+import jakarta.persistence.Transient
+import org.springframework.data.domain.Persistable
 import org.springframework.data.jpa.repository.JpaRepository
 import java.time.Instant
 
@@ -37,10 +40,19 @@ class HandInProgressJpaEntity(
     var state: HandStateJson,
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant,
-    @Version
-    @Column(name = "version")
-    var version: Long? = null,
-)
+) : Persistable<Long> {
+    @Transient
+    private var new: Boolean = true
+
+    override fun getId(): Long = tableId
+    override fun isNew(): Boolean = new
+
+    @PostLoad
+    @PostPersist
+    fun markNotNew() {
+        new = false
+    }
+}
 
 interface HandInProgressJpaRepository : JpaRepository<HandInProgressJpaEntity, Long>
 

@@ -191,11 +191,25 @@ class HoldemStompIntegrationTest {
 
     private data class SeatedUser(val userId: Long, val accessToken: String, val tableId: Long)
 
+    /** 착석 처리(ProcessJoinRequestsService)는 이제 TableExecutor.post 로 비동기 디스패치된다
+     *  (JoinRequestsProcessor) — 202 응답이 돌아온 시점에 아직 안 끝났을 수 있어, 실제 착석을
+     *  기다린다. 개인 큐 구독 인가는 실제로 앉아 있어야 통과하므로 이 대기가 없으면 간헐적으로
+     *  ACCESS_DENIED 로 실패할 수 있다. */
+    private fun awaitSeated(userId: Long, timeoutMs: Long = 5_000) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (holdemTableRepository.findByUserId(userId) != null) return
+            Thread.sleep(20)
+        }
+        error("착석이 시간 안에 끝나지 않았습니다: userId=$userId")
+    }
+
     private fun seatNewUser(buyIn: Long = 10_000L, fundAmount: Long = 15_000L): SeatedUser {
         val (userId, accessToken) = signUpAndLogin()
         fundWallet(userId, fundAmount)
         val tableId = createTable(accessToken)
         sitDown(accessToken, tableId, buyIn).andExpect(status().isAccepted)
+        awaitSeated(userId)
         return SeatedUser(userId, accessToken, tableId)
     }
 
@@ -206,10 +220,12 @@ class HoldemStompIntegrationTest {
         fundWallet(userIdA, fundAmount)
         val tableId = createTable(tokenA)
         sitDown(tokenA, tableId, buyIn).andExpect(status().isAccepted)
+        awaitSeated(userIdA)
 
         val (userIdB, tokenB) = signUpAndLogin()
         fundWallet(userIdB, fundAmount)
         sitDown(tokenB, tableId, buyIn).andExpect(status().isAccepted)
+        awaitSeated(userIdB)
 
         return TablePair(tableId, SeatedUser(userIdA, tokenA, tableId), SeatedUser(userIdB, tokenB, tableId))
     }

@@ -62,7 +62,6 @@ paths: ["**/holdem/**"]
 - **새 참가자는 SB·버튼 자리에서는 포스팅을 자청해도 딜인되지 않는다.** Robert's Rules: "You must wait until
   the button passes." 어기면 SB 와 진입료를 이중으로 내 `committed > currentBet` 이 되고, 콜이
   `CHIPS_NEGATIVE` 로 터진다. 차단된 좌석은 `owesImmediatePost` 를 그대로 들고 기다린다
-- 타이머가 경합에서 지면 호출자가 없으므로 `CONCURRENT_TABLE_UPDATE` 를 INFO 로 버린다
 - **쇼다운까지 간 좌석은 전원 공개한다(사용자 결정, 머크 없음).** `showdownOrder`(TDA 17: 마지막
   라운드의 마지막 공격자부터, 없으면 버튼 왼쪽부터)는 공개 패를 나열하는 순서로만 쓴다. 모두
   폴드한 판은 공개하지 않는다
@@ -75,7 +74,8 @@ paths: ["**/holdem/**"]
   비워져도 안전하다(복구할 게 없다). 트리거는 셋: 대기열 삽입 커밋(SitDownService), 핸드 정산(HandSettler),
   기립 커밋(StandUpService, 좌석 하나가 빈다). 항목마다 커밋 후 별도 트랜잭션(AdmitJoinRequestService,
   REQUIRES_NEW)으로 처리한다 — 같은 트랜잭션이면 지갑 이체 실패 하나가 다른 처리 전체를 롤백시킨다. 연결이
-  끊기면 대기열에서도 빠진다(ConnectionTimer). 처리 못 하는 항목은 버린다. 취소는 착석 처리와 같은 테이블 락을 잡는다.
+  끊기면 대기열에서도 빠진다(ConnectionTimer). 처리 못 하는 항목은 버린다. 취소는 그 테이블의 `TableExecutor` 를 거쳐 착석 처리와 순서대로 실행된다.
+- **테이블의 상태를 바꾸는 명령은 전부 `TableExecutor` 로 그 테이블의 스레드에서 실행한다 — 한 테이블에 쓰는 쪽은 하나다(single writer).** 새 명령 진입점도 반드시 거친다. 트랜잭션은 그 스레드 안에서 연다. 같은 테이블 스레드 안에서 다시 `call` 하면 인라인으로 돈다. 서버 한 대 전제.
 - **공개/개인 뷰에는 테이블별 순번(`seq`, `TableViewSequence`)이 붙는다.** `HandBroadcaster` 는 커밋 후가 아니라
   `BEFORE_COMMIT` 에서 순번을 따는데, 같은 행을 바꾸는 트랜잭션들은 `saveAndFlush` 의 행 락으로 커밋 순서대로만
   여기 도달하기 때문이다(순번 순서 = 커밋 순서). 실제 전송은 여전히 `afterCommit` 이라 규칙 6은 그대로 지켜진다.

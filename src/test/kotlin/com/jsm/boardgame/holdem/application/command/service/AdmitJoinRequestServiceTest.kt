@@ -36,7 +36,6 @@ private class AdmitJoinRequestFakeTableRepository : HoldemTableRepository {
         bigBlind = saved.bigBlind,
         buttonSeatNo = saved.buttonSeatNo,
         seats = saved.occupiedSeats().associateBy { it.seatNo },
-        version = saved.version,
         nextHandAt = saved.nextHandAt,
     )
 
@@ -54,7 +53,6 @@ private class AdmitJoinRequestFakeTableRepository : HoldemTableRepository {
             bigBlind = table.bigBlind,
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
-            version = table.version,
             nextHandAt = table.nextHandAt,
         )
         store[id.value] = saved
@@ -119,7 +117,6 @@ class AdmitJoinRequestServiceTest {
             bigBlind = table.bigBlind,
             buttonSeatNo = table.buttonSeatNo,
             seats = seats,
-            version = table.version,
         )
         tables.save(seeded)
         return table.id!!

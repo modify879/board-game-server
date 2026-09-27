@@ -62,7 +62,6 @@ class HoldemTableTest {
                 1 to Seat.reconstitute(1, 1L, Chips.of(10_000), SeatPresence.SEATED),
                 3 to Seat.reconstitute(3, 3L, Chips.of(10_000), SeatPresence.SEATED),
             ),
-            version = 0,
         )
 
         val seat = table.sitDown(userId = 99L, buyIn = Chips.of(10_000))
@@ -163,7 +162,6 @@ class HoldemTableTest {
                 5 to Seat.reconstitute(5, 2L, Chips.of(10_000), SeatPresence.SEATED),
                 9 to Seat.reconstitute(9, 3L, Chips.of(10_000), SeatPresence.SEATED),
             ),
-            version = 0,
         )
 
         table.moveButtonToNextOccupiedSeat()
@@ -210,7 +208,6 @@ class HoldemTableTest {
             bigBlind = HoldemTable.BIG_BLIND,
             buttonSeatNo = 42,
             seats = emptyMap(),
-            version = 0,
         )
         assertEquals("   ", table.name)
         assertEquals(42, table.buttonSeatNo)
@@ -273,7 +270,6 @@ class HoldemTableTest {
             bigBlind = HoldemTable.BIG_BLIND,
             buttonSeatNo = 2,
             seats = emptyMap(),
-            version = 0,
             smallBlindSeatNo = 3, // 직전 SB 였던 좌석 — 이번 핸드엔 없다
             bigBlindSeatNo = 4,   // 직전 BB — 이번 핸드에도 있다
         )
@@ -294,7 +290,6 @@ class HoldemTableTest {
             bigBlind = HoldemTable.BIG_BLIND,
             buttonSeatNo = 2,
             seats = emptyMap(),
-            version = 0,
             smallBlindSeatNo = 3,
             bigBlindSeatNo = 4, // 직전 BB — 이번 핸드엔 없다
         )

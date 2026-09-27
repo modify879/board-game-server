@@ -10,7 +10,6 @@ import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
-import jakarta.persistence.Version
 import java.time.Instant
 import org.springframework.data.jpa.repository.JpaRepository
 
@@ -33,9 +32,6 @@ class HoldemTableJpaEntity(
     var bigBlindSeatNo: Int?,
     @Column(name = "next_hand_at")
     var nextHandAt: Instant?,
-    @Version
-    @Column(name = "version", nullable = false)
-    var version: Long = 0,
 )
 
 interface HoldemTableJpaRepository : JpaRepository<HoldemTableJpaEntity, Long>, KotlinJdslJpqlExecutor {
@@ -50,7 +46,6 @@ fun HoldemTableJpaEntity.toDomain(seats: List<HoldemSeatJpaEntity>): HoldemTable
         bigBlind = Chips.reconstitute(bigBlind),
         buttonSeatNo = buttonSeatNo,
         seats = seats.associate { it.seatNo to it.toDomain() },
-        version = version,
         smallBlindSeatNo = smallBlindSeatNo,
         bigBlindSeatNo = bigBlindSeatNo,
         nextHandAt = nextHandAt,
@@ -66,5 +61,4 @@ fun HoldemTable.toJpaEntity(): HoldemTableJpaEntity =
         smallBlindSeatNo = smallBlindSeatNo,
         bigBlindSeatNo = bigBlindSeatNo,
         nextHandAt = nextHandAt,
-        version = version,
     )

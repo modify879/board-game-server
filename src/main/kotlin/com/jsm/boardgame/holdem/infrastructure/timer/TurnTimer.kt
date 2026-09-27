@@ -3,9 +3,8 @@ package com.jsm.boardgame.holdem.infrastructure.timer
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
-import com.jsm.boardgame.holdem.domain.exception.ConcurrentTableUpdateException
+import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.TableId
-import org.slf4j.LoggerFactory
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
 import org.springframework.transaction.event.TransactionalEventListener
@@ -30,6 +29,7 @@ class TurnTimer(
     private val taskScheduler: TaskScheduler,
     private val clock: Clock,
     private val expireTurnUseCase: ExpireTurnUseCase,
+    private val tableExecutor: TableExecutor,
 ) {
     private class ScheduledExpiry(val future: ScheduledFuture<*>, val token: Long)
 
@@ -53,21 +53,16 @@ class TurnTimer(
         scheduled[event.tableId] = ScheduledExpiry(future, token)
     }
 
+    // TableExecutor 가 이 만료를 그 테이블의 실제 플레이어 액션과 같은 스레드에 직렬화하므로,
+    // 이 사이에 다른 액션이 먼저 커밋돼 차례가 넘어갔더라도 ExpireTurnService 의 stale 가드
+    // (toActSeatNo != seatNo 면 no-op)만으로 안전하다 - 더 이상 경합 자체가 나지 않는다.
     private fun onExpire(tableId: TableId, seatNo: Int, token: Long) {
         if (tokens[tableId]?.get() != token) return
-        try {
-            expireTurnUseCase.expire(ExpireTurnCommand(tableId.value, seatNo))
-        } catch (e: ConcurrentTableUpdateException) {
-            // 이 타이머가 경합에서 진 쪽이다 - 이긴 플레이어 액션이 이미 커밋되며
-            // HandBroadcastRequested 를 발행했고, 그게 이 타이머를 새로 예약했다.
-            // 그러니 낡은 만료를 버려도 잃는 것이 없다.
-            log.info("차례 만료가 플레이어 액션과 경합해 무시했습니다: tableId={}, seatNo={}", tableId.value, seatNo)
-        }
+        tableExecutor.call(tableId) { expireTurnUseCase.expire(ExpireTurnCommand(tableId.value, seatNo)) }
     }
 
     companion object {
         // 계획서: 테이블 설정값이 될 자리. 지금은 전역 상수.
         private val TURN_TIMEOUT: Duration = Duration.ofMinutes(1)
-        private val log = LoggerFactory.getLogger(TurnTimer::class.java)
     }
 }

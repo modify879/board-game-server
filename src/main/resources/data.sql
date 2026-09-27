@@ -38,6 +38,3 @@ do $$ begin
         add constraint fk_hand_in_progress_table foreign key (table_id) references holdem_tables(id);
 exception when duplicate_object then null;
 end $$
-@@@
--- ddl-auto: update 가 version 칼럼을 추가하면 기존 행은 NULL 이 되어, Hibernate 의 낙관적 락이 깨진다
-update holdem_hand_in_progress set version = 0 where version is null

@@ -3,7 +3,6 @@ package com.jsm.boardgame.holdem.infrastructure.persistence.adapter
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
 import com.jsm.boardgame.holdem.application.port.HandStore
-import com.jsm.boardgame.holdem.domain.exception.ConcurrentTableUpdateException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -152,77 +151,6 @@ class HandInProgressStoreAdapterIntegrationTest {
 
         assertNotNull(found.toActSeatNo)
         assertFalse(found.toActSeatNo == actingSeatNo)
-    }
-
-    @Test
-    fun `다른 트랜잭션이 먼저 저장한 핸드를 덮어쓰면 CONCURRENT_TABLE_UPDATE 로 거부되고 먼저 저장한 상태가 남는다`() {
-        val tableId = newTableId()
-        handStore.save(tableId, newHand())
-
-        val outerTemplate = TransactionTemplate(transactionManager)
-        val innerTemplate = TransactionTemplate(transactionManager).apply {
-            propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
-        }
-        var innerToActSeatNo: Int? = null
-
-        val e = assertFailsWith<ConcurrentTableUpdateException> {
-            outerTemplate.execute {
-                // 이 findById 가 이 트랜잭션의 영속성 컨텍스트에 version=0 인 채로 캐시된다.
-                val outerHand = handStore.find(tableId)!!
-
-                // REQUIRES_NEW 라 완전히 새 트랜잭션·EntityManager 로 읽고, 액션 후 저장하고,
-                // execute 가 반환하기 전에 커밋까지 끝난다 — "이미 다른 트랜잭션이 커밋한" 상황을 만든다.
-                innerTemplate.execute {
-                    val innerHand = handStore.find(tableId)!!
-                    innerHand.act(innerHand.toActSeatNo!!, BettingAction.Call)
-                    handStore.save(tableId, innerHand)
-                    innerToActSeatNo = innerHand.toActSeatNo
-                }
-
-                // outer 가 재개된 뒤에도 findById 는 1차 캐시의 stale(version=0) 인스턴스를 그대로 돌려주므로
-                // 이 save 의 버전 있는 UPDATE 는 DB 의 더 앞선 버전과 충돌해 낙관적 락 예외를 낸다.
-                outerHand.act(outerHand.toActSeatNo!!, BettingAction.Call)
-                handStore.save(tableId, outerHand)
-            }
-        }
-        assertEquals(HoldemErrorCode.CONCURRENT_TABLE_UPDATE, e.errorCode)
-
-        val found = handStore.find(tableId)
-        assertEquals(innerToActSeatNo, found?.toActSeatNo)
-    }
-
-    @Test
-    fun `다른 트랜잭션이 먼저 갱신한 핸드를 stale 버전으로 지우려 하면 CONCURRENT_TABLE_UPDATE 로 거부되고 행이 남는다`() {
-        val tableId = newTableId()
-        handStore.save(tableId, newHand())
-
-        val outerTemplate = TransactionTemplate(transactionManager)
-        val innerTemplate = TransactionTemplate(transactionManager).apply {
-            propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
-        }
-
-        val e = assertFailsWith<ConcurrentTableUpdateException> {
-            outerTemplate.execute {
-                val outerHand = handStore.find(tableId)!!
-
-                innerTemplate.execute {
-                    val innerHand = handStore.find(tableId)!!
-                    innerHand.act(innerHand.toActSeatNo!!, BettingAction.Call)
-                    handStore.save(tableId, innerHand)
-                }
-
-                // outerHand 는 여전히 stale(version=0) 이라 remove 의 버전 있는 DELETE 가 충돌한다.
-                handStore.remove(tableId)
-            }
-        }
-        assertEquals(HoldemErrorCode.CONCURRENT_TABLE_UPDATE, e.errorCode)
-
-        val rowCount = jdbcTemplate.queryForObject(
-            "select count(*) from holdem_hand_in_progress where table_id = ?",
-            Long::class.java,
-            tableId.value,
-        )
-        assertEquals(1L, rowCount)
     }
 
     @Test

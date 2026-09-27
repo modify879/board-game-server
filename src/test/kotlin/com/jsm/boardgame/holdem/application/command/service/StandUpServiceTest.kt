@@ -48,7 +48,6 @@ private class StandUpFakeHoldemTableRepository : HoldemTableRepository {
             bigBlind = table.bigBlind,
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
-            version = table.version,
             nextHandAt = table.nextHandAt,
         )
         stored[id.value] = saved
@@ -147,7 +146,6 @@ class StandUpServiceTest {
             bigBlind = HoldemTable.BIG_BLIND,
             buttonSeatNo = null,
             seats = mapOf(1 to zeroStackSeat),
-            version = 0,
         )
         tables.stored[1] = table
 
