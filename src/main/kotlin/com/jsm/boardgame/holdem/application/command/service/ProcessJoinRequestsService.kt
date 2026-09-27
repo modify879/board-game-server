@@ -12,7 +12,6 @@ import com.jsm.boardgame.holdem.domain.exception.ConcurrentTableUpdateException
 import com.jsm.boardgame.holdem.domain.model.TableId
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 대기열 맨 앞부터 순서대로 착석을 시도한다. 이 클래스 자체는 @Transactional 이 아니다 — 항목
@@ -21,7 +20,8 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * 테이블별로 JVM 락(블로킹, tryLock 아님)으로 직렬화한다 — tryLock 이면 처리 루프가 막 빠져나가는
  * 순간 들어온 새 항목이 이번에도, 다음 트리거가 올 때까지도 처리되지 않고 방치될 수 있다.
- * 단일 인스턴스 배포를 전제한다(InMemoryJoinQueue 와 같은 전제).
+ * 단일 인스턴스 배포를 전제한다(InMemoryJoinQueue 와 같은 전제). 이 락은 JoinQueue 가 갖고 있다
+ * (CancelJoinRequestService 와 같은 락을 공유해야 착석 중 취소 경합이 닫힌다).
  */
 @Service
 class ProcessJoinRequestsService(
@@ -30,14 +30,11 @@ class ProcessJoinRequestsService(
     private val notifier: JoinQueueNotifier,
 ) : ProcessJoinRequestsUseCase {
 
-    // ponytail: 정리되지 않는다 — 테이블은 몇 개뿐이고 삭제되지 않아, 엔트리가 쌓여도 무해하다.
-    private val tableLocks = ConcurrentHashMap<Long, Any>()
-
     override fun process(command: ProcessJoinRequestsCommand) {
         val tableId = TableId(command.tableId)
-        synchronized(tableLocks.computeIfAbsent(command.tableId) { Any() }) {
+        joinQueue.withTableLock(tableId) processLoop@{
             while (true) {
-                val head = joinQueue.peekHead(tableId) ?: return
+                val head = joinQueue.peekHead(tableId) ?: return@processLoop
 
                 try {
                     when (
@@ -45,7 +42,7 @@ class ProcessJoinRequestsService(
                             AdmitJoinRequestCommand(tableId.value, head.userId, head.buyIn.amount, head.postBlindImmediately),
                         )
                     ) {
-                        is AdmitJoinRequestResult.Blocked -> return
+                        is AdmitJoinRequestResult.Blocked -> return@processLoop
                         is AdmitJoinRequestResult.Seated -> {
                             joinQueue.removeByUserId(head.userId)
                             notifier.notifySeated(tableId, head.userId, result.seatNo)

@@ -4,7 +4,9 @@ import com.jsm.boardgame.common.error.ErrorCode
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestCommand
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestResult
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestUseCase
+import com.jsm.boardgame.holdem.application.command.usecase.CancelJoinRequestCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ProcessJoinRequestsCommand
+import com.jsm.boardgame.holdem.application.exception.JoinRequestNotFoundException
 import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
 import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
 import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
@@ -13,6 +15,9 @@ import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.infrastructure.queue.InMemoryJoinQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -161,5 +166,50 @@ class ProcessJoinRequestsServiceTest {
         )
         assertTrue(notifier.droppedCalls.isEmpty())
         assertNull(queue.peekHead(tableId))
+    }
+
+    @Test
+    fun `착석 처리 중에는 취소가 기다리다가 결국 착석되고 취소는 JOIN_REQUEST_NOT_FOUND 로 실패한다`() {
+        val queue = InMemoryJoinQueue()
+        queue.enqueue(tableId, 101L, Chips.of(8_000), false)
+        val admitStarted = CountDownLatch(1)
+        val releaseAdmit = CountDownLatch(1)
+        val admit = ProcessJoinRequestsFakeAdmitUseCase(
+            mapOf(
+                101L to {
+                    admitStarted.countDown()
+                    releaseAdmit.await(5, TimeUnit.SECONDS)
+                    AdmitJoinRequestResult.Seated(1)
+                },
+            ),
+        )
+        val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
+        val service = ProcessJoinRequestsService(queue, admit, notifier)
+        val cancelNotifier = ProcessJoinRequestsFakeJoinQueueNotifier()
+        val cancelService = CancelJoinRequestService(queue, cancelNotifier)
+
+        val processThread = thread { service.process(ProcessJoinRequestsCommand(tableId.value)) }
+        assertTrue(admitStarted.await(5, TimeUnit.SECONDS))
+
+        var cancelFailure: Throwable? = null
+        val cancelThread = thread {
+            try {
+                cancelService.cancel(CancelJoinRequestCommand(tableId.value, userId = 101L))
+            } catch (e: Throwable) {
+                cancelFailure = e
+            }
+        }
+        Thread.sleep(200)
+        releaseAdmit.countDown()
+
+        processThread.join(5_000)
+        cancelThread.join(5_000)
+
+        assertEquals(
+            listOf(ProcessJoinRequestsFakeJoinQueueNotifier.Seated(tableId, 101L, 1)),
+            notifier.seatedCalls,
+        )
+        assertTrue(cancelFailure is JoinRequestNotFoundException)
+        assertEquals(HoldemErrorCode.JOIN_REQUEST_NOT_FOUND, (cancelFailure as JoinRequestNotFoundException).errorCode)
     }
 }

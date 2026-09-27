@@ -69,4 +69,19 @@ class CancelJoinRequestServiceTest {
         assertTrue(queue.isQueued(1L))
         assertEquals(1L, queue.peekHead(tableId)?.userId)
     }
+
+    @Test
+    fun `착석 처리로 이미 제거된 사용자의 취소는 JOIN_REQUEST_NOT_FOUND 다`() {
+        val queue = InMemoryJoinQueue()
+        val notifier = CancelJoinRequestFakeJoinQueueNotifier()
+        val service = CancelJoinRequestService(queue, notifier)
+        val tableId = TableId(1L)
+        queue.enqueue(tableId, userId = 1L, buyIn = Chips.of(10_000), postBlindImmediately = false)
+        queue.removeByUserId(1L)
+
+        val e = assertFailsWith<JoinRequestNotFoundException> {
+            service.cancel(CancelJoinRequestCommand(tableId.value, userId = 1L))
+        }
+        assertEquals(HoldemErrorCode.JOIN_REQUEST_NOT_FOUND, e.errorCode)
+    }
 }
