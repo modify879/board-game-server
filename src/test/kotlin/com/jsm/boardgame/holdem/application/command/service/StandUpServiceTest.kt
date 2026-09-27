@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
+import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
@@ -33,13 +34,10 @@ private class StandUpFakeHoldemTableRepository : HoldemTableRepository {
 
     override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
-    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
-
     override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllPendingNextHandTableIds(): List<TableId> =
         stored.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
-    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: run { sequence += 1; TableId(sequence) }
@@ -67,6 +65,11 @@ private class StandUpFakeHandStore : HandStore {
     override fun findAllInProgress(): List<TableId> = stored.keys.map { TableId(it) }
 }
 
+private class StandUpFakeEventPublisher : ApplicationEventPublisher {
+    val events = mutableListOf<Any>()
+    override fun publishEvent(event: Any) { events += event }
+}
+
 private class StandUpFakeWalletTransfer : WalletTransfer {
     data class FromGameCall(val userId: Long, val amount: Long, val tableId: Long, val memo: String?)
 
@@ -86,17 +89,17 @@ class StandUpServiceTest {
     private val tables = StandUpFakeHoldemTableRepository()
     private val handStore = StandUpFakeHandStore()
     private val walletTransfer = StandUpFakeWalletTransfer()
-    private val eventPublisher = ApplicationEventPublisher { }
+    private val eventPublisher = StandUpFakeEventPublisher()
     private val clock: Clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
     private val nextHandDelay: Duration = Duration.ofSeconds(5)
     private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
     private val handStarter = HandStarter(tables, handStore, Shuffler { it }, handSettler, eventPublisher, clock, nextHandDelay)
-    private val service = StandUpService(tables, handStore, walletTransfer, handStarter)
+    private val service = StandUpService(tables, handStore, walletTransfer, handStarter, eventPublisher)
 
     @Test
     fun `기립하면 좌석이 비고 스택이 지갑으로 돌아간다`() {
         val table = tables.save(HoldemTable.create("테스트 테이블"))
-        table.sitDown(1, 1, Chips.of(8_000))
+        table.sitDown(1, Chips.of(8_000))
         val saved = tables.save(table)
 
         service.standUp(StandUpCommand(userId = 1))
@@ -106,6 +109,7 @@ class StandUpServiceTest {
         assertEquals(1L, call.userId)
         assertEquals(8_000L, call.amount)
         assertEquals(saved.id!!.value, call.tableId)
+        assertTrue(eventPublisher.events.any { it is JoinRequestsDue && it.tableId == saved.id })
     }
 
     @Test
@@ -119,7 +123,7 @@ class StandUpServiceTest {
     @Test
     fun `핸드가 진행 중이면 기립할 수 없다`() {
         val table = tables.save(HoldemTable.create("테스트 테이블"))
-        table.sitDown(1, 1, Chips.of(8_000))
+        table.sitDown(1, Chips.of(8_000))
         val saved = tables.save(table)
         handStore.save(
             saved.id!!,
@@ -156,8 +160,8 @@ class StandUpServiceTest {
     @Test
     fun `기립으로 후보가 2명 미만이 되면 nextHandAt 이 취소된다`() {
         val table = tables.save(HoldemTable.create("테스트 테이블"))
-        table.sitDown(1, 1, Chips.of(8_000))
-        table.sitDown(2, 2, Chips.of(8_000))
+        table.sitDown(1, Chips.of(8_000))
+        table.sitDown(2, Chips.of(8_000))
         table.scheduleNextHand(Instant.now(clock).plusSeconds(5))
         tables.save(table)
 
@@ -169,9 +173,9 @@ class StandUpServiceTest {
     @Test
     fun `기립 후에도 후보가 2명 이상이면 기존 nextHandAt 이 그대로 유지된다`() {
         val table = tables.save(HoldemTable.create("테스트 테이블"))
-        table.sitDown(1, 1, Chips.of(8_000))
-        table.sitDown(2, 2, Chips.of(8_000))
-        table.sitDown(3, 3, Chips.of(8_000))
+        table.sitDown(1, Chips.of(8_000))
+        table.sitDown(2, Chips.of(8_000))
+        table.sitDown(3, Chips.of(8_000))
         val scheduledAt = Instant.now(clock).plusSeconds(5)
         table.scheduleNextHand(scheduledAt)
         tables.save(table)

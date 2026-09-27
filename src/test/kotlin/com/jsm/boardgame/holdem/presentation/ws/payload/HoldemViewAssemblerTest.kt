@@ -30,7 +30,7 @@ private fun fixedShuffler(vararg notation: String): Shuffler {
 private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): HoldemTable {
     val table = HoldemTable.create("assembler-test")
     for ((seatNo, buyIn) in buyIns) {
-        table.sitDown(seatNo, userId = seatNo * 100L, buyIn = Chips.of(buyIn))
+        table.sitDown(userId = seatNo * 100L, buyIn = Chips.of(buyIn))
     }
     return table
 }

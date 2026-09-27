@@ -72,12 +72,11 @@ class HandSettler(
         // 정산 후에도 hand 를 null 로 넘기지 않는다 — 클라이언트가 쇼다운 결과(showdownRanks/payouts)를
         // 봐야 한다. HandStore 에서는 이미 지웠을 뿐이다.
         eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand))
-        // 참가 요청은 여기서 처리하지 않는다 — 지갑 이체가 이 트랜잭션(정산)과 같은 트랜잭션에서 실패하면
+        // 대기열 처리는 여기서 하지 않는다 — 지갑 이체가 이 트랜잭션(정산)과 같은 트랜잭션에서 실패하면
         // 예외를 잡아도 트랜잭션이 rollback-only 가 되어 정산 전체가 롤백된다. 커밋 후 별도 트랜잭션으로
-        // 넘긴다(JoinRequestsProcessor → ProcessJoinRequestsService → AdmitJoinRequestService, 요청마다 하나씩).
-        if (table.pendingJoinRequests().isNotEmpty()) {
-            eventPublisher.publishEvent(JoinRequestsDue(tableId))
-        }
+        // 넘긴다(JoinRequestsProcessor → ProcessJoinRequestsService → AdmitJoinRequestService, 항목마다 하나씩).
+        // 대기열이 비어 있어도 트리거는 그냥 버려지므로(peekHead 가 null) 조건 없이 발행한다.
+        eventPublisher.publishEvent(JoinRequestsDue(tableId))
     }
 
     companion object {

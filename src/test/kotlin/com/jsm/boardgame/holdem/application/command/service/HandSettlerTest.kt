@@ -33,8 +33,6 @@ private class HandSettlerFakeTableRepository : HoldemTableRepository {
 
     override fun findByUserId(userId: Long): HoldemTable? = store.values.find { it.seatOf(userId) != null }
 
-    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
-
     override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun save(table: HoldemTable): HoldemTable {
@@ -54,8 +52,6 @@ private class HandSettlerFakeTableRepository : HoldemTableRepository {
     }
 
     override fun findAllPendingNextHandTableIds(): List<TableId> = store.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
-
-    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
 }
 
 private class HandSettlerFakeHandStore : HandStore {
@@ -208,31 +204,16 @@ class HandSettlerTest {
     }
 
     @Test
-    fun `정산 뒤 대기 중인 참가 요청이 있으면 JoinRequestsDue 이벤트를 발행한다`() {
+    fun `정산 뒤에는 항상 JoinRequestsDue 이벤트를 발행한다`() {
         val table = seatedTable(1 to 10_000L, 2 to 10_000L)
         val tableId = table.id!!
         val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
         val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
         handStore.save(tableId, hand)
         hand.act(1, BettingAction.Fold)
-        table.requestJoin(userId = 9001L, seatNo = 5, buyIn = Chips.of(8_000), postBlindImmediately = false, requestedAt = fixedInstant)
 
         settler.settle(tableId, table, hand)
 
         assertTrue(eventPublisher.events.any { it is JoinRequestsDue && it.tableId == tableId })
-    }
-
-    @Test
-    fun `정산 뒤 대기 중인 참가 요청이 없으면 JoinRequestsDue 이벤트를 발행하지 않는다`() {
-        val table = seatedTable(1 to 10_000L, 2 to 10_000L)
-        val tableId = table.id!!
-        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
-        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
-        handStore.save(tableId, hand)
-        hand.act(1, BettingAction.Fold)
-
-        settler.settle(tableId, table, hand)
-
-        assertTrue(eventPublisher.events.none { it is JoinRequestsDue })
     }
 }

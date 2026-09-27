@@ -3,15 +3,13 @@ package com.jsm.boardgame.holdem.domain.model
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.InvalidTableNameException
-import com.jsm.boardgame.holdem.domain.exception.JoinRequestNotFoundException
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
-import com.jsm.boardgame.holdem.domain.exception.SeatNoOutOfRangeException
-import com.jsm.boardgame.holdem.domain.exception.SeatTakenException
+import com.jsm.boardgame.holdem.domain.exception.TableFullException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
-import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -22,7 +20,7 @@ class HoldemTableTest {
     @Test
     fun `sitDown 하면 좌석에서 조회된다`() {
         val table = newTable()
-        table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(10_000))
+        table.sitDown(userId = 1L, buyIn = Chips.of(10_000))
 
         assertEquals(1, table.seatOf(1L)?.seatNo)
         assertEquals(1L, table.seatAt(1)?.userId)
@@ -32,7 +30,7 @@ class HoldemTableTest {
     @Test
     fun `standUp 하면 스택을 반환하고 좌석에서 사라진다`() {
         val table = newTable()
-        table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(10_000))
+        table.sitDown(userId = 1L, buyIn = Chips.of(10_000))
 
         val returned = table.standUp(1L)
 
@@ -42,50 +40,60 @@ class HoldemTableTest {
     }
 
     @Test
-    fun `좌석 번호 0은 SEAT_NO_OUT_OF_RANGE 로 거부된다`() {
-        val table = newTable()
-        val e = assertFailsWith<SeatNoOutOfRangeException> {
-            table.sitDown(seatNo = 0, userId = 1L, buyIn = Chips.of(10_000))
-        }
-        assertEquals(HoldemErrorCode.SEAT_NO_OUT_OF_RANGE, e.errorCode)
-    }
-
-    @Test
-    fun `좌석 번호 10은 SEAT_NO_OUT_OF_RANGE 로 거부된다`() {
-        val table = newTable()
-        val e = assertFailsWith<SeatNoOutOfRangeException> {
-            table.sitDown(seatNo = 10, userId = 1L, buyIn = Chips.of(10_000))
-        }
-        assertEquals(HoldemErrorCode.SEAT_NO_OUT_OF_RANGE, e.errorCode)
-    }
-
-    @Test
-    fun `이미 점유된 좌석에 앉으면 SEAT_TAKEN 으로 거부된다`() {
-        val table = newTable()
-        table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(10_000))
-
-        val e = assertFailsWith<SeatTakenException> {
-            table.sitDown(seatNo = 1, userId = 2L, buyIn = Chips.of(10_000))
-        }
-        assertEquals(HoldemErrorCode.SEAT_TAKEN, e.errorCode)
-    }
-
-    @Test
     fun `같은 사용자가 두 번째 좌석에 앉으면 ALREADY_SEATED 로 거부된다`() {
         val table = newTable()
-        table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(10_000))
+        table.sitDown(userId = 1L, buyIn = Chips.of(10_000))
 
         val e = assertFailsWith<AlreadySeatedException> {
-            table.sitDown(seatNo = 2, userId = 1L, buyIn = Chips.of(10_000))
+            table.sitDown(userId = 1L, buyIn = Chips.of(10_000))
         }
         assertEquals(HoldemErrorCode.ALREADY_SEATED, e.errorCode)
+    }
+
+    @Test
+    fun `1,3번 좌석이 점유되어 있으면 다음 sitDown 은 2번에 앉는다`() {
+        val table = HoldemTable.reconstitute(
+            id = TableId(1),
+            name = "t",
+            smallBlind = HoldemTable.SMALL_BLIND,
+            bigBlind = HoldemTable.BIG_BLIND,
+            buttonSeatNo = null,
+            seats = mapOf(
+                1 to Seat.reconstitute(1, 1L, Chips.of(10_000), SeatPresence.SEATED),
+                3 to Seat.reconstitute(3, 3L, Chips.of(10_000), SeatPresence.SEATED),
+            ),
+            version = 0,
+        )
+
+        val seat = table.sitDown(userId = 99L, buyIn = Chips.of(10_000))
+
+        assertEquals(2, seat.seatNo)
+    }
+
+    @Test
+    fun `빈 좌석이 없으면 TABLE_FULL 로 거부된다`() {
+        val table = newTable()
+        repeat(HoldemTable.MAX_SEATS) { i -> table.sitDown(userId = (i + 1).toLong(), buyIn = Chips.of(10_000)) }
+
+        val e = assertFailsWith<TableFullException> {
+            table.sitDown(userId = 10L, buyIn = Chips.of(10_000))
+        }
+        assertEquals(HoldemErrorCode.TABLE_FULL, e.errorCode)
+    }
+
+    @Test
+    fun `hasEmptySeat 는 좌석이 남아 있으면 true, 9석이 다 차면 false 다`() {
+        val table = newTable()
+        assertTrue(table.hasEmptySeat())
+        repeat(HoldemTable.MAX_SEATS) { i -> table.sitDown(userId = (i + 1).toLong(), buyIn = Chips.of(10_000)) }
+        assertFalse(table.hasEmptySeat())
     }
 
     @Test
     fun `빅 블라인드 미만 바이인은 BUY_IN_OUT_OF_RANGE 로 거부된다`() {
         val table = newTable()
         val e = assertFailsWith<BuyInOutOfRangeException> {
-            table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(100))
+            table.sitDown(userId = 1L, buyIn = Chips.of(100))
         }
         assertEquals(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, e.errorCode)
     }
@@ -93,7 +101,7 @@ class HoldemTableTest {
     @Test
     fun `정확히 빅 블라인드인 바이인은 허용된다`() {
         val table = newTable()
-        val seat = table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(200))
+        val seat = table.sitDown(userId = 1L, buyIn = Chips.of(200))
         assertEquals(Chips.of(200), seat.stack)
     }
 
@@ -101,7 +109,7 @@ class HoldemTableTest {
     fun `상한 없이 아주 큰 바이인도 허용된다`() {
         val table = newTable()
         val bigBuyIn = Chips.of(200_000_000)
-        val seat = table.sitDown(seatNo = 1, userId = 1L, buyIn = bigBuyIn)
+        val seat = table.sitDown(userId = 1L, buyIn = bigBuyIn)
         assertEquals(bigBuyIn, seat.stack)
     }
 
@@ -115,7 +123,7 @@ class HoldemTableTest {
     @Test
     fun `markPresence 는 좌석의 연결 상태를 바꾼다`() {
         val table = newTable()
-        table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(10_000))
+        table.sitDown(userId = 1L, buyIn = Chips.of(10_000))
 
         table.markPresence(1L, SeatPresence.DISCONNECTED)
 
@@ -144,10 +152,19 @@ class HoldemTableTest {
 
     @Test
     fun `moveButtonToNextOccupiedSeat 은 null 에서 최소 좌석으로, 이후 다음 좌석으로, 마지막에서 최소로 순환한다`() {
-        val table = newTable()
-        table.sitDown(seatNo = 2, userId = 1L, buyIn = Chips.of(10_000))
-        table.sitDown(seatNo = 5, userId = 2L, buyIn = Chips.of(10_000))
-        table.sitDown(seatNo = 9, userId = 3L, buyIn = Chips.of(10_000))
+        val table = HoldemTable.reconstitute(
+            id = TableId(1),
+            name = "t",
+            smallBlind = HoldemTable.SMALL_BLIND,
+            bigBlind = HoldemTable.BIG_BLIND,
+            buttonSeatNo = null,
+            seats = mapOf(
+                2 to Seat.reconstitute(2, 1L, Chips.of(10_000), SeatPresence.SEATED),
+                5 to Seat.reconstitute(5, 2L, Chips.of(10_000), SeatPresence.SEATED),
+                9 to Seat.reconstitute(9, 3L, Chips.of(10_000), SeatPresence.SEATED),
+            ),
+            version = 0,
+        )
 
         table.moveButtonToNextOccupiedSeat()
         assertEquals(2, table.buttonSeatNo)
@@ -165,7 +182,7 @@ class HoldemTableTest {
     @Test
     fun `applyStacks 은 점유되지 않은 좌석 번호가 들어오면 예외를 던진다`() {
         val table = newTable()
-        table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(10_000))
+        table.sitDown(userId = 1L, buyIn = Chips.of(10_000))
 
         assertFailsWith<IllegalStateException> {
             table.applyStacks(mapOf(1 to Chips.of(5_000), 7 to Chips.of(1_000)))
@@ -175,13 +192,13 @@ class HoldemTableTest {
     @Test
     fun `applyStacks 은 일부 점유 좌석만 포함된 맵으로 정상 동작하고 나머지 좌석은 변경되지 않는다`() {
         val table = newTable()
-        table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(10_000))
-        table.sitDown(seatNo = 3, userId = 2L, buyIn = Chips.of(8_000))
+        table.sitDown(userId = 1L, buyIn = Chips.of(10_000))
+        table.sitDown(userId = 2L, buyIn = Chips.of(8_000))
 
         table.applyStacks(mapOf(1 to Chips.of(5_000)))
 
         assertEquals(Chips.of(5_000), table.seatAt(1)?.stack)
-        assertEquals(Chips.of(8_000), table.seatAt(3)?.stack)
+        assertEquals(Chips.of(8_000), table.seatAt(2)?.stack)
     }
 
     @Test
@@ -377,76 +394,10 @@ class HoldemTableTest {
     }
 
     @Test
-    fun `requestJoin 은 이미 점유된 좌석을 SEAT_TAKEN 으로 거부한다`() {
-        val table = newTable()
-        table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(10_000))
-
-        val e = assertFailsWith<SeatTakenException> {
-            table.requestJoin(userId = 2L, seatNo = 1, buyIn = Chips.of(10_000), postBlindImmediately = false, requestedAt = Instant.now())
-        }
-        assertEquals(HoldemErrorCode.SEAT_TAKEN, e.errorCode)
-    }
-
-    @Test
-    fun `requestJoin 은 이미 참가 요청이 있는 좌석을 SEAT_TAKEN 으로 거부한다`() {
-        val table = newTable()
-        table.requestJoin(userId = 1L, seatNo = 1, buyIn = Chips.of(10_000), postBlindImmediately = false, requestedAt = Instant.now())
-
-        val e = assertFailsWith<SeatTakenException> {
-            table.requestJoin(userId = 2L, seatNo = 1, buyIn = Chips.of(10_000), postBlindImmediately = false, requestedAt = Instant.now())
-        }
-        assertEquals(HoldemErrorCode.SEAT_TAKEN, e.errorCode)
-    }
-
-    @Test
-    fun `requestJoin 은 빅 블라인드 미만 바이인을 BUY_IN_OUT_OF_RANGE 로 거부한다`() {
-        val table = newTable()
-
-        val e = assertFailsWith<BuyInOutOfRangeException> {
-            table.requestJoin(userId = 1L, seatNo = 1, buyIn = Chips.of(100), postBlindImmediately = false, requestedAt = Instant.now())
-        }
-        assertEquals(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, e.errorCode)
-    }
-
-    @Test
-    fun `requestJoin 도 상한 없이 큰 바이인을 허용한다`() {
-        val table = newTable()
-        val bigBuyIn = Chips.of(200_000_000)
-
-        val request = table.requestJoin(userId = 1L, seatNo = 1, buyIn = bigBuyIn, postBlindImmediately = false, requestedAt = Instant.now())
-
-        assertEquals(bigBuyIn, request.buyIn)
-    }
-
-    @Test
-    fun `requestJoin 이 등록한 요청은 pendingJoinRequests·pendingSeatNos 로 조회된다`() {
-        val table = newTable()
-        val now = Instant.now()
-
-        table.requestJoin(userId = 1L, seatNo = 3, buyIn = Chips.of(10_000), postBlindImmediately = false, requestedAt = now)
-
-        assertEquals(setOf(3), table.pendingSeatNos())
-        assertEquals(1, table.pendingJoinRequests().size)
-        assertEquals(1L, table.pendingJoinRequests().single().userId)
-    }
-
-    @Test
-    fun `cancelJoinRequest 는 요청자 본인의 요청을 제거하고 두 번째 취소는 JOIN_REQUEST_NOT_FOUND 다`() {
-        val table = newTable()
-        table.requestJoin(userId = 1L, seatNo = 3, buyIn = Chips.of(10_000), postBlindImmediately = false, requestedAt = Instant.now())
-
-        table.cancelJoinRequest(1L)
-
-        assertTrue(table.pendingJoinRequests().isEmpty())
-        val e = assertFailsWith<JoinRequestNotFoundException> { table.cancelJoinRequest(1L) }
-        assertEquals(HoldemErrorCode.JOIN_REQUEST_NOT_FOUND, e.errorCode)
-    }
-
-    @Test
     fun `candidateSeatNos 는 스택이 양수인 점유 좌석만 포함한다`() {
         val table = newTable()
-        table.sitDown(seatNo = 1, userId = 1L, buyIn = Chips.of(10_000))
-        table.sitDown(seatNo = 2, userId = 2L, buyIn = Chips.of(10_000))
+        table.sitDown(userId = 1L, buyIn = Chips.of(10_000))
+        table.sitDown(userId = 2L, buyIn = Chips.of(10_000))
         table.applyStacks(mapOf(2 to Chips.ZERO))
 
         assertEquals(setOf(1), table.candidateSeatNos())

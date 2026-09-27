@@ -9,6 +9,7 @@ object HoldemDestinations {
 
     private const val TOPIC_PREFIX = "/topic/tables/"
     private const val PRIVATE_QUEUE_PREFIX = "/user/queue/tables/"
+    private const val JOIN_QUEUE_PRIVATE = "/user/queue/holdem/join-queue"
 
     private val TABLE_ID_PATTERN = Regex("""^/(?:topic|user/queue)/tables/(\d+)$""")
 
@@ -28,6 +29,12 @@ object HoldemDestinations {
 
     /** 공개 토픽과 개인 큐를 인가 정책에서 가르는 데 쓴다. */
     fun isPrivateQueue(destination: String): Boolean = destination.startsWith(PRIVATE_QUEUE_PREFIX)
+
+    /** 착석 대기열 개인 채널. 특정 테이블에 묶이지 않는다 — 어느 테이블에서 대기 중이든 이 채널 하나로 온다. */
+    fun joinQueueDestination(): String = JOIN_QUEUE_PRIVATE
+
+    /** convertAndSendToUser 에 넘길 목적지 — [privateQueueSendTargetOf] 와 같은 이유로 "/user" 를 뗀다. */
+    fun joinQueueSendTargetOf(): String = JOIN_QUEUE_PRIVATE.removePrefix("/user")
 
     /**
      * 목적지가 홀덤 테이블 구독처럼 보이는지 — tableId 파싱 성공 여부와 무관하다.

@@ -24,14 +24,10 @@ private class CreateTableFakeHoldemTableRepository : HoldemTableRepository {
 
     override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
-    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
-
     override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllPendingNextHandTableIds(): List<TableId> =
         stored.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
-
-    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: run { sequence += 1; TableId(sequence) }
@@ -67,7 +63,7 @@ class CreateTableServiceTest {
 
     private fun seatedTable(userId: Long): HoldemTable {
         val table = HoldemTable.create("기존 테이블")
-        table.sitDown(1, userId, Chips.of(8_000))
+        table.sitDown(userId, Chips.of(8_000))
         return tables.save(table)
     }
 

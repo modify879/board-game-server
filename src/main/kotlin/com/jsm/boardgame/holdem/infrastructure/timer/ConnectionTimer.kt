@@ -7,6 +7,8 @@ import com.jsm.boardgame.holdem.application.command.usecase.StandUpUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceCommand
 import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
+import com.jsm.boardgame.holdem.application.port.JoinQueue
+import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
@@ -57,6 +59,9 @@ import java.util.concurrent.atomic.AtomicLong
  * [onApplicationReady] 와 `HandRecovery.onApplicationReady` 는 같은 `ApplicationReadyEvent` 를
  * 듣는다. `HandRecovery` 쪽이 먼저 실행되어 복구 대상 테이블의 참가자를 [suspendWatch] 로 걸어둬야
  * 이 컴포넌트의 부팅 시딩이 그들을 뺄 수 있어, `@Order` 로 순서를 강제한다(낮은 값이 먼저 실행).
+ *
+ * 연결이 끊기면 대기열 멤버십도 함께 지운다([onSessionDisconnect]) — 좌석 배정 전이라
+ * suspended(복구 유예) 대상이 될 일이 없으므로 무조건 지워도 안전하다.
  */
 @Component
 class ConnectionTimer(
@@ -66,6 +71,8 @@ class ConnectionTimer(
     private val expireConnectionUseCase: ExpireConnectionUseCase,
     private val standUpUseCase: StandUpUseCase,
     private val tables: HoldemTableRepository,
+    private val joinQueue: JoinQueue,
+    private val joinQueueNotifier: JoinQueueNotifier,
 ) {
     private class ScheduledExpiry(val future: ScheduledFuture<*>, val token: Long)
 
@@ -89,6 +96,12 @@ class ConnectionTimer(
     @EventListener
     fun onSessionDisconnect(event: SessionDisconnectEvent) {
         val userId = event.user?.name?.toLongOrNull() ?: return
+
+        val queuedTableId = joinQueue.removeByUserId(userId)
+        if (queuedTableId != null) {
+            joinQueueNotifier.notifyPositions(queuedTableId, joinQueue.entriesOf(queuedTableId))
+        }
+
         // 복구 유예 중에는 이 타이머가 돌지 않는다 - 서버 다운타임은 플레이어 책임이 아니다.
         if (userId in suspended) return
         beginWatch(userId)

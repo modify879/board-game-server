@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestCommand
+import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestResult
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
@@ -8,6 +9,8 @@ import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.Seat
+import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
@@ -26,26 +29,21 @@ private class AdmitJoinRequestFakeTableRepository : HoldemTableRepository {
     private val store = mutableMapOf<Long, HoldemTable>()
     private var nextId = 1L
 
-    override fun findById(id: TableId): HoldemTable? {
-        val saved = store[id.value] ?: return null
-        return HoldemTable.reconstitute(
-            id = saved.id!!,
-            name = saved.name,
-            smallBlind = saved.smallBlind,
-            bigBlind = saved.bigBlind,
-            buttonSeatNo = saved.buttonSeatNo,
-            seats = saved.occupiedSeats().associateBy { it.seatNo },
-            version = saved.version,
-            nextHandAt = saved.nextHandAt,
-            joinRequests = saved.pendingJoinRequests().associateBy { it.seatNo },
-        )
-    }
+    private fun reconstituteFrom(saved: HoldemTable): HoldemTable = HoldemTable.reconstitute(
+        id = saved.id!!,
+        name = saved.name,
+        smallBlind = saved.smallBlind,
+        bigBlind = saved.bigBlind,
+        buttonSeatNo = saved.buttonSeatNo,
+        seats = saved.occupiedSeats().associateBy { it.seatNo },
+        version = saved.version,
+        nextHandAt = saved.nextHandAt,
+    )
+
+    override fun findById(id: TableId): HoldemTable? = store[id.value]?.let { reconstituteFrom(it) }
     override fun findByUserId(userId: Long): HoldemTable? = store.values.find { it.seatOf(userId) != null }
-    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
     override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
     override fun findAllPendingNextHandTableIds(): List<TableId> = store.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
-    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> =
-        store.values.filter { it.pendingJoinRequests().isNotEmpty() }.mapNotNull { it.id }
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: TableId(nextId++)
@@ -58,7 +56,6 @@ private class AdmitJoinRequestFakeTableRepository : HoldemTableRepository {
             seats = table.occupiedSeats().associateBy { it.seatNo },
             version = table.version,
             nextHandAt = table.nextHandAt,
-            joinRequests = table.pendingJoinRequests().associateBy { it.seatNo },
         )
         store[id.value] = saved
         return saved
@@ -107,18 +104,29 @@ class AdmitJoinRequestServiceTest {
     private val handStarter = HandStarter(tables, handStore, identityShuffler, handSettler, eventPublisher, clock, nextHandDelay)
     private val service = AdmitJoinRequestService(tables, handStore, walletTransfer, handStarter)
 
+    /** 특정 좌석 번호에 특정 버이인으로 미리 앉혀 둔다 — sitDown 이 더 이상 좌석을 고르지 않으므로
+     *  reconstitute 로 원하는 좌석 배치를 직접 만든다. */
     private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): TableId {
         var table = HoldemTable.create("test-table")
         table = tables.save(table)
-        for ((seatNo, buyIn) in buyIns) {
-            table.sitDown(seatNo, userId = seatNo.toLong(), buyIn = Chips.of(buyIn))
+        val seats = buyIns.associate { (seatNo, buyIn) ->
+            seatNo to Seat.reconstitute(seatNo, userId = seatNo.toLong(), stack = Chips.of(buyIn), presence = SeatPresence.SEATED)
         }
-        table = tables.save(table)
+        val seeded = HoldemTable.reconstitute(
+            id = table.id!!,
+            name = table.name,
+            smallBlind = table.smallBlind,
+            bigBlind = table.bigBlind,
+            buttonSeatNo = table.buttonSeatNo,
+            seats = seats,
+            version = table.version,
+        )
+        tables.save(seeded)
         return table.id!!
     }
 
     @Test
-    fun `핸드가 진행 중이면 참가 요청을 그대로 두고 아무 일도 하지 않는다`() {
+    fun `핸드가 진행 중이면 참가를 막고 좌석·지갑을 건드리지 않는다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
@@ -131,70 +139,66 @@ class AdmitJoinRequestServiceTest {
         )
         handStore.save(tableId, hand)
 
-        var table = tables.findById(tableId)!!
-        table.requestJoin(userId = 9001L, seatNo = 3, buyIn = Chips.of(8_000), postBlindImmediately = false, requestedAt = fixedInstant)
-        table = tables.save(table)
+        val result = service.admit(AdmitJoinRequestCommand(tableId.value, 9001L, buyIn = 8_000, postBlindImmediately = false))
 
-        service.admit(AdmitJoinRequestCommand(tableId.value, 9001L))
-
+        assertEquals(AdmitJoinRequestResult.Blocked, result)
         val savedTable = tables.findById(tableId)!!
         assertNull(savedTable.seatOf(9001L))
-        assertEquals(0, walletTransfer.toGameCalls.size)
-        assertTrue(savedTable.pendingJoinRequests().any { it.userId == 9001L })
+        assertTrue(walletTransfer.toGameCalls.isEmpty())
     }
 
     @Test
-    fun `핸드가 없으면 참가 요청을 좌석에 앉히고 지갑에서 바이인을 차감한다`() {
+    fun `핸드가 없고 빈 좌석이 있으면 참가자를 좌석에 앉히고 지갑에서 바이인을 차감한다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
 
-        var table = tables.findById(tableId)!!
-        table.requestJoin(userId = 9002L, seatNo = 3, buyIn = Chips.of(8_000), postBlindImmediately = false, requestedAt = fixedInstant)
-        table = tables.save(table)
+        val result = service.admit(AdmitJoinRequestCommand(tableId.value, 9002L, buyIn = 8_000, postBlindImmediately = false))
 
-        service.admit(AdmitJoinRequestCommand(tableId.value, 9002L))
-
+        assertEquals(AdmitJoinRequestResult.Seated(3), result)
         val savedTable = tables.findById(tableId)!!
         assertEquals(9002L, savedTable.seatAt(3)?.userId)
         val call = walletTransfer.toGameCalls.single()
         assertEquals(9002L, call.userId)
         assertEquals(8_000L, call.amount)
-        assertTrue(savedTable.pendingJoinRequests().none { it.userId == 9002L })
     }
 
     @Test
     fun `지갑 이체가 실패하면 예외를 던지고 좌석에 앉히지 않는다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
 
-        var table = tables.findById(tableId)!!
-        table.requestJoin(userId = 9003L, seatNo = 3, buyIn = Chips.of(8_000), postBlindImmediately = false, requestedAt = fixedInstant)
-        table = tables.save(table)
-
         val failingWallet = AdmitJoinRequestFakeWalletTransfer(failingUserIds = setOf(9003L))
         val failingService = AdmitJoinRequestService(tables, handStore, failingWallet, handStarter)
 
         assertFailsWith<BuyInOutOfRangeException> {
-            failingService.admit(AdmitJoinRequestCommand(tableId.value, 9003L))
+            failingService.admit(AdmitJoinRequestCommand(tableId.value, 9003L, buyIn = 8_000, postBlindImmediately = false))
         }
 
-        val savedTable = tables.findById(tableId)!!
-        assertNull(savedTable.seatAt(3))
+        assertNull(tables.findById(tableId)!!.seatOf(9003L))
     }
 
     @Test
-    fun `이미 다른 테이블에 앉은 사용자의 참가 요청은 AlreadySeatedException 을 던진다`() {
+    fun `이미 다른 테이블에 앉은 사용자의 참가는 AlreadySeatedException 을 던진다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
 
         var otherTable = HoldemTable.create("other-table")
         otherTable = tables.save(otherTable)
-        otherTable.sitDown(1, userId = 9004L, buyIn = Chips.of(8_000))
+        otherTable.sitDown(9004L, Chips.of(8_000))
         tables.save(otherTable)
 
-        var table = tables.findById(tableId)!!
-        table.requestJoin(userId = 9004L, seatNo = 3, buyIn = Chips.of(8_000), postBlindImmediately = false, requestedAt = fixedInstant)
-        table = tables.save(table)
-
         assertFailsWith<AlreadySeatedException> {
-            service.admit(AdmitJoinRequestCommand(tableId.value, 9004L))
+            service.admit(AdmitJoinRequestCommand(tableId.value, 9004L, buyIn = 8_000, postBlindImmediately = false))
         }
+    }
+
+    @Test
+    fun `빈 좌석이 없으면 지갑을 부르지 않고 Blocked 를 반환한다`() {
+        val tableId = tableWithSeats(
+            1 to 10_000L, 2 to 10_000L, 3 to 10_000L, 4 to 10_000L, 5 to 10_000L,
+            6 to 10_000L, 7 to 10_000L, 8 to 10_000L, 9 to 10_000L,
+        )
+
+        val result = service.admit(AdmitJoinRequestCommand(tableId.value, 9005L, buyIn = 8_000, postBlindImmediately = false))
+
+        assertEquals(AdmitJoinRequestResult.Blocked, result)
+        assertTrue(walletTransfer.toGameCalls.isEmpty())
     }
 }

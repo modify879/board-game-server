@@ -33,13 +33,10 @@ private class PlayActionFakeTableRepository : HoldemTableRepository {
     override fun findByUserId(userId: Long): HoldemTable? =
         store.values.firstOrNull { it.seatOf(userId) != null }?.let { copyOf(it) }
 
-    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
-
     override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllPendingNextHandTableIds(): List<TableId> =
         store.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
-    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: TableId(nextId++)
@@ -86,7 +83,7 @@ class PlayActionServiceTest {
         var table = HoldemTable.create("test-table")
         table = tables.save(table)
         for ((seatNo, buyIn) in stacks) {
-            table.sitDown(seatNo, userId = seatNo * 1000L, buyIn = Chips.of(buyIn))
+            table.sitDown(userId = seatNo * 1000L, buyIn = Chips.of(buyIn))
         }
         table.moveButtonToNextOccupiedSeat()
         table = tables.save(table)
@@ -130,7 +127,7 @@ class PlayActionServiceTest {
     fun `진행 중인 핸드가 없으면 거부한다`() {
         var table = HoldemTable.create("no-hand")
         table = tables.save(table)
-        table.sitDown(1, userId = 1000L, buyIn = Chips.of(10_000))
+        table.sitDown(userId = 1000L, buyIn = Chips.of(10_000))
         tables.save(table)
 
         val e = assertFailsWith<HandNotFoundException> {
@@ -202,7 +199,7 @@ class PlayActionServiceTest {
         val toAct = handStore.find(tableId)!!.toActSeatNo!!
 
         val table = tables.findById(tableId)!!
-        table.sitDown(3, userId = 3000L, buyIn = Chips.of(10_000))
+        table.sitDown(userId = 3000L, buyIn = Chips.of(10_000))
         tables.save(table)
 
         service.play(PlayActionCommand(tableId.value, userId = toAct * 1000L, action = "FOLD", raiseToAmount = null))

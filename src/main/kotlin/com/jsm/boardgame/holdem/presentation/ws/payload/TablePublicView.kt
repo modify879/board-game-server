@@ -21,7 +21,6 @@ data class TablePublicView(
     val buttonSeatNo: Int?,
     val seats: List<SeatPublicView>,
     val result: HandResultPublicView?,
-    val pendingSeatNos: List<Int>,
     /** 다음 핸드 자동 시작 예정 시각. 카운트다운용이며 핸드 진행 중이거나 인원이 모자라면 null. */
     val nextHandAt: Instant?,
     /**

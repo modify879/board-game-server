@@ -25,11 +25,9 @@ private class StartScheduledHandFakeTableRepository : HoldemTableRepository {
     override fun findById(id: TableId): HoldemTable? = stored[id.value]
     override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
-    override fun findByPendingJoinUserId(userId: Long): HoldemTable? = null
     override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
     override fun findAllPendingNextHandTableIds(): List<TableId> =
         stored.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
-    override fun findAllTableIdsWithPendingJoinRequests(): List<TableId> = emptyList()
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: run { sequence += 1; TableId(sequence) }
@@ -75,7 +73,7 @@ class StartScheduledHandServiceTest {
         var table = HoldemTable.create("test-table")
         table = tables.save(table)
         for ((seatNo, buyIn) in buyIns) {
-            table.sitDown(seatNo, userId = seatNo.toLong(), buyIn = Chips.of(buyIn))
+            table.sitDown(userId = seatNo.toLong(), buyIn = Chips.of(buyIn))
         }
         table = tables.save(table)
         return table.id!!

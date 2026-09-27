@@ -83,7 +83,7 @@ class TurnTimerTest {
     private fun handWithToAct(vararg stacks: Pair<Int, Long>): Hand {
         val table = HoldemTable.create("test-table")
         for ((seatNo, buyIn) in stacks) {
-            table.sitDown(seatNo, userId = seatNo * 1000L, buyIn = Chips.of(buyIn))
+            table.sitDown(userId = seatNo * 1000L, buyIn = Chips.of(buyIn))
         }
         table.moveButtonToNextOccupiedSeat()
         val handStacks = stacks.associate { (seatNo, buyIn) -> seatNo to Chips.of(buyIn) }

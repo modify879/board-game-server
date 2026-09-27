@@ -5,18 +5,17 @@ import com.jsm.boardgame.holdem.application.command.usecase.CancelJoinRequestCom
 import com.jsm.boardgame.holdem.application.command.usecase.CancelJoinRequestUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.CreateTableUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.PlayActionUseCase
-import com.jsm.boardgame.holdem.application.command.usecase.SitDownOutcome
 import com.jsm.boardgame.holdem.application.command.usecase.SitDownUseCase
 import com.jsm.boardgame.holdem.application.query.service.HoldemTableQueryService
 import com.jsm.boardgame.holdem.presentation.rest.request.CreateTableRequest
 import com.jsm.boardgame.holdem.presentation.rest.request.PlayActionRequest
 import com.jsm.boardgame.holdem.presentation.rest.request.SitDownRequest
+import com.jsm.boardgame.holdem.presentation.rest.response.SitDownResponse
 import com.jsm.boardgame.holdem.presentation.rest.response.TableCreatedResponse
 import com.jsm.boardgame.holdem.presentation.rest.response.TableSummaryResponse
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.http.HttpStatus
-import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -49,13 +48,12 @@ class HoldemTableController(
     fun listTables(@AuthenticationPrincipal jwt: Jwt, pageable: Pageable): Page<TableSummaryResponse> =
         holdemTableQueryService.findAll(jwt.requireUserId(), pageable).map(TableSummaryResponse::from)
 
-    // 핸드가 없으면 즉시 착석(201), 진행 중이면 참가 요청만 남긴다(202) — 어느 쪽인지는 응답 상태로만 구분된다.
+    // 좌석은 고를 수 없다 — 항상 대기열에 들어가고(202), 응답은 그 시점의 대기 순번이다.
+    // 빈 좌석이 있어도 예외는 아니다 — ProcessJoinRequestsService 가 커밋 후 곧바로 처리할 뿐이다.
     @PostMapping("/{tableId}/seats")
-    fun sitDown(@AuthenticationPrincipal jwt: Jwt, @PathVariable tableId: Long, @RequestBody request: SitDownRequest): ResponseEntity<Void> {
-        val outcome = sitDownUseCase.sitDown(request.toCommand(tableId, jwt.requireUserId()))
-        val status = if (outcome == SitDownOutcome.SEATED) HttpStatus.CREATED else HttpStatus.ACCEPTED
-        return ResponseEntity.status(status).build()
-    }
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    fun sitDown(@AuthenticationPrincipal jwt: Jwt, @PathVariable tableId: Long, @RequestBody request: SitDownRequest): SitDownResponse =
+        SitDownResponse(sitDownUseCase.sitDown(request.toCommand(tableId, jwt.requireUserId())))
 
     @DeleteMapping("/{tableId}/seats/request")
     @ResponseStatus(HttpStatus.NO_CONTENT)
