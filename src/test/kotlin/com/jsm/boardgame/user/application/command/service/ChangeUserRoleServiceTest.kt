@@ -3,6 +3,7 @@ package com.jsm.boardgame.user.application.command.service
 import com.jsm.boardgame.user.application.command.usecase.ChangeUserRoleCommand
 import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
+import com.jsm.boardgame.user.application.port.RealtimeConnections
 import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.domain.exception.UserErrorCode
 import com.jsm.boardgame.user.domain.exception.InvalidUserRoleException
@@ -52,6 +53,13 @@ private class ChangeRoleFakeAuthSessionStore : AuthSessionStore {
     override fun userIdForRefreshToken(refreshToken: String): Long? = null
 }
 
+private class ChangeRoleFakeRealtimeConnections : RealtimeConnections {
+    val closeNowCalls = mutableListOf<String>()
+    val closeAfterGraceCalls = mutableListOf<String>()
+    override fun closeNow(accessTokenId: String) { closeNowCalls += accessTokenId }
+    override fun closeAfterGrace(accessTokenId: String) { closeAfterGraceCalls += accessTokenId }
+}
+
 private class ChangeRoleFakeUserRepository : UserRepository {
     private val stored = mutableMapOf<Long, User>()
 
@@ -79,8 +87,9 @@ private class ChangeRoleFakeUserRepository : UserRepository {
 class ChangeUserRoleServiceTest {
 
     private val sessions = ChangeRoleFakeAuthSessionStore()
+    private val realtimeConnections = ChangeRoleFakeRealtimeConnections()
     private val users = ChangeRoleFakeUserRepository()
-    private val service = ChangeUserRoleService(users, sessions, Duration.ofMinutes(30), Clock.systemUTC())
+    private val service = ChangeUserRoleService(users, sessions, realtimeConnections, Duration.ofMinutes(30), Clock.systemUTC())
 
     @Test
     fun `대상 사용자의 역할이 바뀌고 저장된다`() {
@@ -99,6 +108,7 @@ class ChangeUserRoleServiceTest {
         service.changeRole(ChangeUserRoleCommand(1L, "USER"))
 
         assertTrue(sessions.isAccessTokenBlacklisted("jti-1"))
+        assertTrue(realtimeConnections.closeNowCalls.contains("jti-1"))
     }
 
     @Test

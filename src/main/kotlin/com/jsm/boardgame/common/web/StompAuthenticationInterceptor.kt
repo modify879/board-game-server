@@ -26,8 +26,9 @@ import org.springframework.stereotype.Component
  * 검증 경로를 새로 만들면 그 디코더에 물려 있는 블랙리스트 검증(로그아웃·역할변경 무효화)이 빠진다.
  *
  * CONNECT 이후로는 이 인터셉터가 다시 불리지 않는다 - STOMP 세션이 여기서 세팅한 인증 주체를
- * 이후 모든 프레임에 그대로 실어준다. 그래서 raw 토큰을 [StompSessionRegistry] 에 남겨
- * [StompSessionRevalidator] 가 30초마다 같은 JwtDecoder 로 다시 검증할 수 있게 한다.
+ * 이후 모든 프레임에 그대로 실어준다. 그래서 CONNECT 시점에 [StompSessionRegistry.register] 로
+ * 액세스 토큰의 만료 시각(exp)에 그 세션을 닫도록 한 번만 예약해둔다. 인밴드 토큰 갱신(별도 조각)은
+ * 그 예약을 [StompSessionRegistry.replaceToken] 으로 새 토큰·만료 시각으로 옮긴다.
  *
  * @Order 를 구독 인가 인터셉터(HoldemSubscriptionInterceptor 등)보다 앞세운 이유는 인가가
  * principal 을 읽어야 하기 때문이다. 실제로는 CONNECT 와 SUBSCRIBE 가 서로 다른 프레임이라
@@ -72,7 +73,17 @@ class StompAuthenticationInterceptor(
         val authentication = jwtAuthenticationConverter.convert(jwt)
             ?: throw AuthenticationRequiredException("STOMP CONNECT 토큰에서 인증 정보를 만들 수 없다")
         accessor.user = authentication
-        accessor.sessionId?.let { stompSessionRegistry.registerToken(it, token) }
+
+        val sessionId = accessor.sessionId
+            ?: throw AuthenticationRequiredException("STOMP 세션 id 를 확인할 수 없다")
+        val accessTokenId = jwt.id
+            ?: throw AuthenticationRequiredException("액세스 토큰에 jti 가 없다")
+        val expiresAt = jwt.expiresAt
+            ?: throw AuthenticationRequiredException("액세스 토큰에 만료 시각이 없다")
+        val userId = jwt.subject?.toLongOrNull()
+            ?: throw AuthenticationRequiredException("액세스 토큰의 subject 가 사용자 id 형식이 아니다")
+
+        stompSessionRegistry.register(sessionId, accessTokenId, userId, expiresAt)
 
         return message
     }

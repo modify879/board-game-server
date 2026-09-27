@@ -17,7 +17,7 @@ import org.springframework.web.socket.config.annotation.WebSocketTransportRegist
 /**
  * CONNECT 인증은 StompAuthenticationInterceptor, 오류 응답 계약은 StompErrorHandler 가 맡는다.
  * CapturingWebSocketHandlerDecoratorFactory 는 살아있는 WebSocketSession 객체 자체를
- * StompSessionRegistry 에 등록해, StompSessionRevalidator 가 나중에 그 세션을 직접 close() 할 수
+ * StompSessionRegistry 에 등록해, StompSessionRegistry 가 나중에 그 세션을 직접 close() 할 수
  * 있게 한다 - STOMP 인터셉터가 보는 건 프레임이지 소켓이 아니다.
  * 이 파일은 common 이므로 어떤 컨텍스트 패키지도 import 하지 않는다 — 게임별 구독 인가
  * (예: holdem 의 HoldemSubscriptionInterceptor)는 각 컨텍스트가 자기 WebSocketMessageBrokerConfigurer

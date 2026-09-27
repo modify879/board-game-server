@@ -6,6 +6,7 @@ import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
 import com.jsm.boardgame.user.application.port.IssuedTokens
 import com.jsm.boardgame.user.application.port.LoginAttemptLimiter
+import com.jsm.boardgame.user.application.port.RealtimeConnections
 import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.application.exception.AccountLockedException
 import com.jsm.boardgame.user.application.exception.LoginFailedException
@@ -85,6 +86,13 @@ private class LoginFakePasswordHasher : PasswordHasher {
         hash.value == "hashed:${raw.value}"
 }
 
+private class LoginFakeRealtimeConnections : RealtimeConnections {
+    val closeNowCalls = mutableListOf<String>()
+    val closeAfterGraceCalls = mutableListOf<String>()
+    override fun closeNow(accessTokenId: String) { closeNowCalls += accessTokenId }
+    override fun closeAfterGrace(accessTokenId: String) { closeAfterGraceCalls += accessTokenId }
+}
+
 private class LoginFakeAuthTokenIssuer : AuthTokenIssuer {
     private var counter = 0
 
@@ -149,7 +157,8 @@ class LoginServiceTest {
     private val tokenIssuer = LoginFakeAuthTokenIssuer()
     private val sessions = LoginInMemoryAuthSessionStore()
     private val attemptLimiter = LoginFakeLoginAttemptLimiter()
-    private val service = LoginService(users, passwordHasher, tokenIssuer, sessions, attemptLimiter, Duration.ofMinutes(30), Clock.systemUTC())
+    private val realtimeConnections = LoginFakeRealtimeConnections()
+    private val service = LoginService(users, passwordHasher, tokenIssuer, sessions, realtimeConnections, attemptLimiter, Duration.ofMinutes(30), Clock.systemUTC())
 
     @Test
     fun `존재하지 않는 사용자명이면 LoginFailedException 이 발생한다`() {
@@ -187,6 +196,7 @@ class LoginServiceTest {
 
         service.login(LoginCommand(username = "user_01", password = "password1"))
         assertTrue(sessions.isAccessTokenBlacklisted(firstAccessTokenId))
+        assertTrue(realtimeConnections.closeNowCalls.contains(firstAccessTokenId))
     }
 
     @Test

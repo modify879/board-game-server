@@ -1,8 +1,8 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
 import com.jayway.jsonpath.JsonPath
+import com.jsm.boardgame.common.error.CommonErrorCode
 import com.jsm.boardgame.common.web.StompSessionRegistry
-import com.jsm.boardgame.common.web.StompSessionRevalidator
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
@@ -46,6 +46,7 @@ import java.util.UUID
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import javax.crypto.spec.SecretKeySpec
+import jakarta.servlet.http.Cookie
 
 /**
  * holdem STOMP CONNECT 인증과 SUBSCRIBE 인가 통합 테스트.
@@ -75,9 +76,6 @@ class HoldemStompIntegrationTest {
 
     @Autowired
     private lateinit var stompSessionRegistry: StompSessionRegistry
-
-    @Autowired
-    private lateinit var stompSessionRevalidator: StompSessionRevalidator
 
     @Autowired
     private lateinit var holdemTableRepository: HoldemTableRepository
@@ -127,6 +125,36 @@ class HoldemStompIntegrationTest {
         val password = "password123"
         val id = idFromLocation(signUp(username, password).andExpect(status().isCreated))
         return id to login(username, password)
+    }
+
+    // 로그인 응답 본문의 accessToken 뿐 아니라, Set-Cookie 로 온 refresh_token 값도 함께 돌려준다 —
+    // POST /api/auth/refresh 가 그 쿠키로만 리프레시 토큰을 받기 때문이다(AuthController 참고).
+    private fun loginCapturingRefreshCookie(username: String, password: String): Pair<String, String> {
+        val result = mockMvc.perform(
+            post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"username":"$username","password":"$password"}"""),
+        ).andExpect(status().isOk).andReturn()
+        val accessToken = JsonPath.read<String>(result.response.contentAsString, "$.accessToken")
+        val refreshCookie = result.response.getCookie("refresh_token")?.value
+            ?: error("refresh_token 쿠키가 없다")
+        return accessToken to refreshCookie
+    }
+
+    private fun signUpAndLoginCapturingRefreshCookie(): Triple<Long, String, String> {
+        val username = uniqueUsername()
+        val password = "password123"
+        val id = idFromLocation(signUp(username, password).andExpect(status().isCreated))
+        val (accessToken, refreshCookie) = loginCapturingRefreshCookie(username, password)
+        return Triple(id, accessToken, refreshCookie)
+    }
+
+    /** REST 리프레시를 실제로 호출해 같은 사용자의 진짜 새 액세스 토큰을 받는다. */
+    private fun refreshAccessToken(refreshCookie: String): String {
+        val result = mockMvc.perform(
+            post("/api/auth/refresh").cookie(Cookie("refresh_token", refreshCookie)),
+        ).andExpect(status().isOk).andReturn()
+        return JsonPath.read(result.response.contentAsString, "$.accessToken")
     }
 
     private fun authPost(url: String, accessToken: String, body: String? = null): ResultActions {
@@ -586,15 +614,13 @@ class HoldemStompIntegrationTest {
     }
 
     @Test
-    fun `로그아웃한 토큰으로 연결된 세션은 재검증 스윕에서 끊긴다`() {
+    fun `로그아웃하면 연결된 세션이 즉시 끊긴다`() {
         val (_, accessToken) = signUpAndLogin()
         val (session, _) = tryConnect(accessToken)
         checkNotNull(session)
         assertThat(session.isConnected).isTrue()
 
         authPost("/api/auth/logout", accessToken).andExpect(status().isNoContent)
-
-        stompSessionRevalidator.sweep()
 
         val deadline = System.currentTimeMillis() + 3_000
         while (session.isConnected && System.currentTimeMillis() < deadline) {
@@ -604,25 +630,63 @@ class HoldemStompIntegrationTest {
     }
 
     @Test
-    fun `유효한 토큰의 세션은 재검증 스윕 후에도 연결이 유지된다`() {
-        val (_, accessToken) = signUpAndLogin()
-        val (session, _) = tryConnect(accessToken)
+    fun `유효한 새 액세스 토큰으로 인밴드 리프레시하면 OK 응답을 받고 세션이 유지된다`() {
+        val (_, accessToken, refreshCookie) = signUpAndLoginCapturingRefreshCookie()
+        val (session, handler) = tryConnect(accessToken)
         checkNotNull(session)
 
-        stompSessionRevalidator.sweep()
+        // REST 리프레시로 같은 사용자의 진짜 새 액세스 토큰을 받는다 — RefreshTokenService 의
+        // 30초 유예 경로도 함께 타지만, 테스트는 그 안에서 끝나므로 옛 토큰의 만료는 문제되지 않는다.
+        val newAccessToken = refreshAccessToken(refreshCookie)
 
-        Thread.sleep(200)
+        val (authHandler, authQueue) = capturingFrameHandler()
+        session.subscribe("/user/queue/auth", authHandler)
+
+        val sendHeaders = StompHeaders()
+        sendHeaders.destination = "/app/auth/refresh"
+        sendHeaders.contentType = MediaType.APPLICATION_JSON
+        session.send(sendHeaders, """{"accessToken":"$newAccessToken"}""".toByteArray(Charsets.UTF_8))
+
+        val reply = authQueue.poll(5, TimeUnit.SECONDS)
+        assertThat(reply).isNotNull()
+        assertThat(JsonPath.read<String>(reply, "$.result")).isEqualTo("OK")
+        assertThat(handler.errorFrames).isEmpty()
         assertThat(session.isConnected).isTrue()
+
         session.disconnect()
     }
 
     @Test
-    fun `STOMP 세션 id 는 WebSocketSession id 와 같아 재검증 스윕이 소켓을 찾을 수 있다`() {
+    fun `남의 유효한 토큰으로 인밴드 리프레시하면 ACCESS_DENIED 를 응답하고 세션은 유지된다`() {
+        val (_, tokenA) = signUpAndLogin()
+        val (_, tokenB) = signUpAndLogin()
+        val (session, _) = tryConnect(tokenA)
+        checkNotNull(session)
+
+        val (authHandler, authQueue) = capturingFrameHandler()
+        session.subscribe("/user/queue/auth", authHandler)
+
+        val sendHeaders = StompHeaders()
+        sendHeaders.destination = "/app/auth/refresh"
+        sendHeaders.contentType = MediaType.APPLICATION_JSON
+        session.send(sendHeaders, """{"accessToken":"$tokenB"}""".toByteArray(Charsets.UTF_8))
+
+        val reply = authQueue.poll(5, TimeUnit.SECONDS)
+        assertThat(reply).isNotNull()
+        assertThat(JsonPath.read<String>(reply, "$.result")).isEqualTo("ERROR")
+        assertThat(JsonPath.read<String>(reply, "$.errorCode")).isEqualTo(CommonErrorCode.ACCESS_DENIED.code)
+        assertThat(session.isConnected).isTrue()
+
+        session.disconnect()
+    }
+
+    @Test
+    fun `STOMP 세션 id 는 WebSocketSession id 와 같아 세션 종료 처리가 소켓을 찾을 수 있다`() {
         val (_, accessToken) = signUpAndLogin()
         val (session, _) = tryConnect(accessToken)
         checkNotNull(session)
 
-        val tokenSessionIds = stompSessionRegistry.tokenSnapshot().keys
+        val tokenSessionIds = stompSessionRegistry.registeredSessionIds()
         val webSocketSessionIds = stompSessionRegistry.sessionIds()
 
         assertThat(tokenSessionIds).isNotEmpty()

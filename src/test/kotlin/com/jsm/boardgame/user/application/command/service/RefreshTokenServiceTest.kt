@@ -5,6 +5,7 @@ import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
 import com.jsm.boardgame.user.application.port.IssuedTokens
+import com.jsm.boardgame.user.application.port.RealtimeConnections
 import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.application.exception.InvalidRefreshTokenException
 import com.jsm.boardgame.user.domain.exception.UserErrorCode
@@ -50,6 +51,13 @@ private class RefreshFakeAuthTokenIssuer : AuthTokenIssuer {
             refreshTokenExpiresAt = Instant.now().plusSeconds(1_209_600),
         )
     }
+}
+
+private class RefreshFakeRealtimeConnections : RealtimeConnections {
+    val closeNowCalls = mutableListOf<String>()
+    val closeAfterGraceCalls = mutableListOf<String>()
+    override fun closeNow(accessTokenId: String) { closeNowCalls += accessTokenId }
+    override fun closeAfterGrace(accessTokenId: String) { closeAfterGraceCalls += accessTokenId }
 }
 
 /**
@@ -162,8 +170,9 @@ class RefreshTokenServiceTest {
 
     private val tokenIssuer = RefreshFakeAuthTokenIssuer()
     private val sessions = RefreshInMemoryAuthSessionStore()
+    private val realtimeConnections = RefreshFakeRealtimeConnections()
     private val users = RefreshFakeUserRepository()
-    private val service = RefreshTokenService(tokenIssuer, sessions, users, Duration.ofMinutes(30), Clock.systemUTC())
+    private val service = RefreshTokenService(tokenIssuer, sessions, realtimeConnections, users, Duration.ofMinutes(30), Clock.systemUTC())
 
     private fun loginSession(userId: Long, role: UserRole = UserRole.USER): IssuedTokens {
         users.put(userId, role)
@@ -184,6 +193,7 @@ class RefreshTokenServiceTest {
         // 직전 한 세대는 응답 유실 재시도를 위한 유예 대상이라 아직 통과한다 —
         // "완전히 무효화됨"은 두 세대 전부터다. 아래 두 세대 전 테스트가 그 경계를 검증한다.
         assertTrue(sessions.matchesRefreshToken(userId, first.refreshToken))
+        assertTrue(realtimeConnections.closeAfterGraceCalls.contains(first.accessTokenId))
     }
 
     @Test
@@ -251,6 +261,7 @@ class RefreshTokenServiceTest {
         // 유예는 바로 직전 한 세대에만 적용된다. first 가 유예 밖(두 세대 전)이 되도록
         // 한 번 더 회전시켜야, 이 테스트가 순수한 재사용 탐지(유예 대상이 아닌 경우)를 검증한다.
         val rotatedAgain = service.refresh(RefreshTokenCommand(rotated.refreshToken))
+        val rotatedAgainAccessTokenId = sessions.currentAccessTokenId(userId)!!
 
         val e = assertFailsWith<InvalidRefreshTokenException> {
             service.refresh(RefreshTokenCommand(first.refreshToken))
@@ -260,6 +271,7 @@ class RefreshTokenServiceTest {
         // 재사용 탐지로 세션 전체가 폐기됐으므로, 아직 회수하지 않은 최신 토큰마저 통하지 않는다.
         assertFalse(sessions.matchesRefreshToken(userId, rotatedAgain.refreshToken))
         assertNull(sessions.currentAccessTokenId(userId))
+        assertTrue(realtimeConnections.closeNowCalls.contains(rotatedAgainAccessTokenId))
     }
 
     @Test
