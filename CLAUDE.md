@@ -150,13 +150,13 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 - 유일성·존재는 DB 가 보장한다. 응용 계층의 `existsBy...` 는 친절한 오류용이고 동시 요청을 막지 못한다.
   이름 붙인 제약(`uk_users_username`, `fk_wallets_user`)이 실제 보장이고, 어댑터가 그 이름으로 번역한다
 - **제약을 번역하는 어댑터는 `saveAndFlush` 를 쓴다.** `save()` 만 쓰면 UPDATE 가 커밋 시점에야
-  flush 되어 CHECK·`@Version` 위반이 `catch` 를 지나친다. INSERT 는 IDENTITY 채번 때문에 즉시 flush 되어
+  flush 되어 CHECK 위반이 `catch` 를 지나친다. INSERT 는 IDENTITY 채번 때문에 즉시 flush 되어
   우연히 통과하므로 UPDATE 경로에서만 드러난다. 회귀 테스트는 UPDATE 경로로 잡는다.
 - **assigned id 엔티티는 `Persistable` 로 새 행을 알린다.** PK 가 자동 채번이 아니라 애플리케이션이
   정하는 값이라 Spring Data 가 새 행인지 스스로 판단하지 못한다 — `Long = 0` 버전 필드로 판단하게
   하면 첫 저장도 `merge` 로 가고, Hibernate 가 없는 행의 merge 를 거부해 INSERT 가 전부 실패한다.
   `isNew()` 를 생성 시 `true`, 저장·조회 후 `false` 로 내리는 `Persistable` 이 이 자리를 대신한다
-  (`WalletAdjustmentKeyJpaEntity`. `HandInProgressJpaEntity` 는 다른 브랜치에서 같은 방식으로 바뀐다)
+  (`WalletAdjustmentKeyJpaEntity`, `HandInProgressJpaEntity`)
 - **돈을 잠그는 순서는 항상 요청·테이블 → 지갑이다.** 홀덤 테이블 → 지갑, 충전·환전 요청 → 지갑
   순으로 잠근다. 지갑을 먼저 잠근 뒤 요청 행이나 홀덤 테이블을 잠그지 않는다 — 순서를 뒤집으면
   데드락이다.
