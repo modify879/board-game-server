@@ -6,6 +6,7 @@ import com.jsm.boardgame.user.application.command.usecase.RefreshTokenUseCase
 import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
+import com.jsm.boardgame.user.application.port.RealtimeConnections
 import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.application.exception.AccountLockedException
 import com.jsm.boardgame.user.application.exception.InvalidRefreshTokenException
@@ -26,6 +27,7 @@ import java.time.Instant
 class RefreshTokenService(
     private val tokenIssuer: AuthTokenIssuer,
     private val sessions: AuthSessionStore,
+    private val realtimeConnections: RealtimeConnections,
     private val users: UserRepository,
     @Value("\${app.jwt.access-token-ttl}") private val accessTokenTtl: Duration,
     private val clock: Clock,
@@ -64,6 +66,9 @@ class RefreshTokenService(
             is RotationResult.Rotated -> {
                 result.previousAccessTokenId?.let { previousAccessTokenId ->
                     sessions.blacklistAccessToken(previousAccessTokenId, Instant.now(clock).plus(accessTokenTtl))
+                    // 유예를 두고 닫는다 — 클라이언트가 이 REST 응답을 받고 곧바로 인밴드로 새 토큰을
+                    // 보낼 시간을 준다(StompRealtimeConnections 의 ROTATION_GRACE 참고).
+                    realtimeConnections.closeAfterGrace(previousAccessTokenId)
                 }
                 AuthTokens(
                     accessToken = tokens.accessToken,
@@ -86,6 +91,8 @@ class RefreshTokenService(
                 val currentAccessTokenId = sessions.currentAccessTokenId(userId)
                 if (currentAccessTokenId != null) {
                     sessions.blacklistAccessToken(currentAccessTokenId, Instant.now(clock).plus(accessTokenTtl))
+                    // 소켓을 닫는 것은 상태 방송이 아니다 — 커밋 전에 불러도 규칙 6을 어기지 않는다.
+                    realtimeConnections.closeNow(currentAccessTokenId)
                     sessions.clear(userId)
                     throw InvalidRefreshTokenException("리프레시 토큰 재사용 탐지: userId=$userId — 세션 전체 폐기")
                 } else {

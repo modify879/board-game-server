@@ -8,6 +8,7 @@ import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
 import com.jsm.boardgame.user.application.port.LoginAttemptLimiter
+import com.jsm.boardgame.user.application.port.RealtimeConnections
 import com.jsm.boardgame.user.application.exception.AccountLockedException
 import com.jsm.boardgame.user.application.exception.LoginFailedException
 import com.jsm.boardgame.user.domain.model.RawPassword
@@ -41,6 +42,7 @@ class LoginService(
     private val passwordHasher: PasswordHasher,
     private val tokenIssuer: AuthTokenIssuer,
     private val sessions: AuthSessionStore,
+    private val realtimeConnections: RealtimeConnections,
     private val loginAttemptLimiter: LoginAttemptLimiter,
     // JwtProperties 는 infrastructure 타입이라 application 이 참조할 수 없다. 값만 @Value 로 받는다.
     @Value("\${app.jwt.access-token-ttl}") private val accessTokenTtl: Duration,
@@ -81,6 +83,8 @@ class LoginService(
         // 단일 기기 정책: 새 로그인은 이전 기기의 액세스 토큰을 즉시 무효화한다.
         sessions.currentAccessTokenId(userId)?.let { previousAccessTokenId ->
             sessions.blacklistAccessToken(previousAccessTokenId, Instant.now(clock).plus(accessTokenTtl))
+            // 소켓을 닫는 것은 상태 방송이 아니다 — 커밋 전에 불러도 규칙 6을 어기지 않는다.
+            realtimeConnections.closeNow(previousAccessTokenId)
         }
 
         val tokens = tokenIssuer.issue(userId, user.role)

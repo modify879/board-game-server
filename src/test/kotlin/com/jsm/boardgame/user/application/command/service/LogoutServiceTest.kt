@@ -5,6 +5,7 @@ import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
 import com.jsm.boardgame.user.application.port.IssuedTokens
+import com.jsm.boardgame.user.application.port.RealtimeConnections
 import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.application.exception.InvalidRefreshTokenException
 import com.jsm.boardgame.user.domain.model.Nickname
@@ -72,6 +73,18 @@ private class LogoutFakeAuthSessionStore : AuthSessionStore {
     }
 }
 
+private class LogoutFakeRealtimeConnections : RealtimeConnections {
+    val closeNowCalls = mutableListOf<String>()
+    val closeAfterGraceCalls = mutableListOf<String>()
+    override fun closeNow(accessTokenId: String) { closeNowCalls += accessTokenId }
+    override fun closeAfterGrace(accessTokenId: String) { closeAfterGraceCalls += accessTokenId }
+}
+
+private class LogoutRefreshFakeRealtimeConnections : RealtimeConnections {
+    override fun closeNow(accessTokenId: String) {}
+    override fun closeAfterGrace(accessTokenId: String) {}
+}
+
 private class LogoutFakeUserRepository : UserRepository {
     private val stored = mutableMapOf<Long, User>()
 
@@ -96,9 +109,10 @@ private class LogoutFakeUserRepository : UserRepository {
 class LogoutServiceTest {
 
     private val sessions = LogoutFakeAuthSessionStore()
+    private val realtimeConnections = LogoutFakeRealtimeConnections()
     private val tokenIssuer = LogoutFakeAuthTokenIssuer()
     private val users = LogoutFakeUserRepository()
-    private val service = LogoutService(sessions, Duration.ofMinutes(30), Clock.systemUTC())
+    private val service = LogoutService(sessions, realtimeConnections, Duration.ofMinutes(30), Clock.systemUTC())
 
     private fun loggedIn(userId: Long): IssuedTokens {
         users.put(userId)
@@ -120,7 +134,7 @@ class LogoutServiceTest {
 
         service.logout(1L)
 
-        val refreshService = RefreshTokenService(tokenIssuer, sessions, users, Duration.ofMinutes(30), Clock.systemUTC())
+        val refreshService = RefreshTokenService(tokenIssuer, sessions, LogoutRefreshFakeRealtimeConnections(), users, Duration.ofMinutes(30), Clock.systemUTC())
         assertFailsWith<InvalidRefreshTokenException> {
             refreshService.refresh(RefreshTokenCommand(issued.refreshToken))
         }
@@ -133,6 +147,7 @@ class LogoutServiceTest {
         service.logout(1L)
 
         assertTrue(sessions.isAccessTokenBlacklisted(issued.accessTokenId))
+        assertTrue(realtimeConnections.closeNowCalls.contains(issued.accessTokenId))
     }
 
     @Test
