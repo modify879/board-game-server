@@ -22,6 +22,13 @@ interface JoinQueue {
     fun entriesOf(tableId: TableId): List<JoinQueueEntry>
 
     fun isQueued(userId: Long): Boolean
+
+    /** userId 가 대기 중인 테이블. 대기 중이 아니면 null. */
+    fun tableOf(userId: Long): TableId?
+
+    /** 이 테이블의 대기열 처리(착석)와 취소를 한 줄로 세운다. 착석 트랜잭션이 도는 동안 맨 앞
+     *  항목이 취소되면 취소 성공 뒤에 착석되는 경합이 생긴다. 블로킹이며 재진입 가능. */
+    fun <T> withTableLock(tableId: TableId, block: () -> T): T
 }
 
 data class JoinQueueEntry(val userId: Long, val buyIn: Chips, val postBlindImmediately: Boolean)

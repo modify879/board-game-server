@@ -6,6 +6,7 @@ import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.TableId
 import org.springframework.stereotype.Component
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * [JoinQueue] 의 인메모리 구현. 단일 인스턴스 배포를 전제한다 — 여러 인스턴스면 각자 자기
@@ -16,6 +17,9 @@ import org.springframework.stereotype.Component
  * 작업(지갑 이체·DB 저장)은 이 락 밖(AdmitJoinRequestService 의 REQUIRES_NEW 트랜잭션)에서
  * 일어나므로 경합이 오래 붙들리지 않는다. 테이블별 트래픽이 실제로 이 락에서 병목이 되면
  * 테이블별 락으로 바꾼다.
+ *
+ * 락 순서: [withTableLock] 의 테이블 락을 잡은 채로 아래 내부 [lock] 을 잡는 것은 안전하다
+ * (그 반대는 절대 안 된다) — 이 클래스의 다른 메서드가 모두 그 순서로만 호출되기 때문이다.
  */
 @Component
 class InMemoryJoinQueue : JoinQueue {
@@ -26,6 +30,9 @@ class InMemoryJoinQueue : JoinQueue {
     private val lock = Any()
     private val tableQueues = mutableMapOf<Long, MutableList<Entry>>()
     private val userToTable = mutableMapOf<Long, Long>()
+
+    // ponytail: 정리되지 않는다 — 테이블은 몇 개뿐이고 삭제되지 않아, 엔트리가 쌓여도 무해하다.
+    private val tableLocks = ConcurrentHashMap<Long, Any>()
 
     override fun enqueue(tableId: TableId, userId: Long, buyIn: Chips, postBlindImmediately: Boolean): Int =
         synchronized(lock) {
@@ -53,4 +60,11 @@ class InMemoryJoinQueue : JoinQueue {
     }
 
     override fun isQueued(userId: Long): Boolean = synchronized(lock) { userId in userToTable }
+
+    override fun tableOf(userId: Long): TableId? = synchronized(lock) {
+        userToTable[userId]?.let { TableId(it) }
+    }
+
+    override fun <T> withTableLock(tableId: TableId, block: () -> T): T =
+        synchronized(tableLocks.computeIfAbsent(tableId.value) { Any() }) { block() }
 }

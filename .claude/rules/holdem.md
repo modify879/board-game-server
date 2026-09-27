@@ -75,7 +75,7 @@ paths: ["**/holdem/**"]
   비워져도 안전하다(복구할 게 없다). 트리거는 셋: 대기열 삽입 커밋(SitDownService), 핸드 정산(HandSettler),
   기립 커밋(StandUpService, 좌석 하나가 빈다). 항목마다 커밋 후 별도 트랜잭션(AdmitJoinRequestService,
   REQUIRES_NEW)으로 처리한다 — 같은 트랜잭션이면 지갑 이체 실패 하나가 다른 처리 전체를 롤백시킨다. 연결이
-  끊기면 대기열에서도 빠진다(ConnectionTimer). 처리 못 하는 항목은 버린다
+  끊기면 대기열에서도 빠진다(ConnectionTimer). 처리 못 하는 항목은 버린다. 취소는 착석 처리와 같은 테이블 락을 잡는다.
 - **공개/개인 뷰에는 테이블별 순번(`seq`, `TableViewSequence`)이 붙는다.** `HandBroadcaster` 는 커밋 후가 아니라
   `BEFORE_COMMIT` 에서 순번을 따는데, 같은 행을 바꾸는 트랜잭션들은 `saveAndFlush` 의 행 락으로 커밋 순서대로만
   여기 도달하기 때문이다(순번 순서 = 커밋 순서). 실제 전송은 여전히 `afterCommit` 이라 규칙 6은 그대로 지켜진다.
