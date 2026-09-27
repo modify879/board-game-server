@@ -54,9 +54,9 @@ private class ChangeRoleFakeAuthSessionStore : AuthSessionStore {
 }
 
 private class ChangeRoleFakeRealtimeConnections : RealtimeConnections {
-    val closeNowCalls = mutableListOf<String>()
+    val closeAllOfCalls = mutableListOf<Long>()
     val closeAfterGraceCalls = mutableListOf<String>()
-    override fun closeNow(accessTokenId: String) { closeNowCalls += accessTokenId }
+    override fun closeAllOf(userId: Long) { closeAllOfCalls += userId }
     override fun closeAfterGrace(accessTokenId: String) { closeAfterGraceCalls += accessTokenId }
 }
 
@@ -108,7 +108,7 @@ class ChangeUserRoleServiceTest {
         service.changeRole(ChangeUserRoleCommand(1L, "USER"))
 
         assertTrue(sessions.isAccessTokenBlacklisted("jti-1"))
-        assertTrue(realtimeConnections.closeNowCalls.contains("jti-1"))
+        assertTrue(realtimeConnections.closeAllOfCalls.contains(1L))
     }
 
     @Test

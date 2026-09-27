@@ -118,7 +118,7 @@ class StompSessionRegistryTest {
     }
 
     @Test
-    fun `closeNow 는 같은 jti 로 연결된 세션만 닫고 다른 jti 의 세션은 그대로 둔다`() {
+    fun `closeAllOf 는 같은 userId 로 연결된 세션만 닫고 다른 사용자의 세션은 그대로 둔다`() {
         val session1 = RegistryFakeWebSocketSession("session-1")
         val session2 = RegistryFakeWebSocketSession("session-2")
         registry.registerSession("session-1", session1)
@@ -126,14 +126,54 @@ class StompSessionRegistryTest {
         registry.register("session-1", "jti-1", 1L, fixedInstant.plusSeconds(60))
         registry.register("session-2", "jti-2", 2L, fixedInstant.plusSeconds(60))
 
-        registry.closeNow("jti-1")
+        registry.closeAllOf(1L)
+
+        // 실제 닫기는 캐치스레드가 아니라 스케줄러에 위임된다 — 즉시 예약된 작업을 직접 실행해야 닫힌다.
+        assertThat(scheduler.scheduled[0].future.cancelled).isTrue()
+        assertThat(scheduler.scheduled).hasSize(3)
+        scheduler.scheduled[2].task.run()
 
         assertThat(session1.closeStatus?.code).isEqualTo(CloseStatus.POLICY_VIOLATION.code)
         assertThat(session1.closeStatus?.reason).isEqualTo("AUTHENTICATION_REQUIRED")
-        assertThat(scheduler.scheduled[0].future.cancelled).isTrue()
 
         assertThat(session2.closeStatus).isNull()
         assertThat(scheduler.scheduled[1].future.cancelled).isFalse()
+    }
+
+    @Test
+    fun `register 를 같은 세션에 두 번 호출하면 첫 예약이 취소되고 새 예약으로 바뀐다`() {
+        registry.registerSession("session-1", RegistryFakeWebSocketSession("session-1"))
+        registry.register("session-1", "jti-1", 1L, fixedInstant.plusSeconds(60))
+
+        registry.register("session-1", "jti-2", 1L, fixedInstant.plusSeconds(120))
+
+        assertThat(scheduler.scheduled[0].future.cancelled).isTrue()
+        assertThat(scheduler.scheduled).hasSize(2)
+        assertThat(scheduler.scheduled[1].time).isEqualTo(fixedInstant.plusSeconds(120))
+    }
+
+    @Test
+    fun `세션이 닫히면 소켓 매핑도 함께 지워진다`() {
+        registry.registerSession("session-1", RegistryFakeWebSocketSession("session-1"))
+        registry.register("session-1", "jti-1", 1L, fixedInstant.plusSeconds(60))
+
+        scheduler.scheduled[0].task.run()
+
+        assertThat(registry.sessionIds()).doesNotContain("session-1")
+    }
+
+    @Test
+    fun `replaceToken 으로 jti 가 바뀐 뒤에도 closeAllOf 는 userId 로 그 세션을 찾아 닫는다`() {
+        val session = RegistryFakeWebSocketSession("session-1")
+        registry.registerSession("session-1", session)
+        registry.register("session-1", "jti-A", 1L, fixedInstant.plusSeconds(60))
+        registry.replaceToken("session-1", "jti-B", fixedInstant.plusSeconds(120))
+
+        registry.closeAllOf(1L)
+        scheduler.scheduled.last().task.run()
+
+        assertThat(session.closeStatus?.code).isEqualTo(CloseStatus.POLICY_VIOLATION.code)
+        assertThat(session.closeStatus?.reason).isEqualTo("AUTHENTICATION_REQUIRED")
     }
 
     @Test

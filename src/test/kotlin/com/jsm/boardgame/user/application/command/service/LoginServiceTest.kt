@@ -87,9 +87,9 @@ private class LoginFakePasswordHasher : PasswordHasher {
 }
 
 private class LoginFakeRealtimeConnections : RealtimeConnections {
-    val closeNowCalls = mutableListOf<String>()
+    val closeAllOfCalls = mutableListOf<Long>()
     val closeAfterGraceCalls = mutableListOf<String>()
-    override fun closeNow(accessTokenId: String) { closeNowCalls += accessTokenId }
+    override fun closeAllOf(userId: Long) { closeAllOfCalls += userId }
     override fun closeAfterGrace(accessTokenId: String) { closeAfterGraceCalls += accessTokenId }
 }
 
@@ -196,7 +196,7 @@ class LoginServiceTest {
 
         service.login(LoginCommand(username = "user_01", password = "password1"))
         assertTrue(sessions.isAccessTokenBlacklisted(firstAccessTokenId))
-        assertTrue(realtimeConnections.closeNowCalls.contains(firstAccessTokenId))
+        assertTrue(realtimeConnections.closeAllOfCalls.contains(1L))
     }
 
     @Test

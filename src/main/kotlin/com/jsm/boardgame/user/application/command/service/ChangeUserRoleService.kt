@@ -45,7 +45,7 @@ class ChangeUserRoleService(
             sessions.blacklistAccessToken(it, Instant.now(clock).plus(accessTokenTtl))
             // 소켓을 닫는 것은 상태 방송이 아니다 — 커밋 전에 불러도 규칙 6(BEFORE_COMMIT 방송 금지)을
             // 어기지 않는다. 위 블랙리스트도 이미 커밋 여부와 무관한 즉시 Redis 쓰기라 같은 성격이다.
-            realtimeConnections.closeNow(it)
+            realtimeConnections.closeAllOf(command.targetUserId)
         }
 
         // 리프레시 토큰 세션은 여기서 끊지 않는다(sessions.clear() 호출 안 함). 클라이언트가
