@@ -2,24 +2,27 @@ package com.jsm.boardgame.holdem.infrastructure.timer
 
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
-import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.TableExecutor
-import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.scheduling.Trigger
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneOffset
 import java.util.concurrent.Delayed
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+/** 남은 지연(delayMillis)을 테스트가 직접 조작한다 — 실제 스레드풀 없이 [NextHandTimer.remaining] 을 검증하기 위해서다. */
 private class NextHandTimerFakeScheduledFuture : ScheduledFuture<Any?> {
     var cancelled = false
         private set
+    var delayMillis: Long = 0
 
     override fun cancel(mayInterruptIfRunning: Boolean): Boolean {
         cancelled = true
@@ -31,7 +34,7 @@ private class NextHandTimerFakeScheduledFuture : ScheduledFuture<Any?> {
     override fun get(): Any? = null
     override fun get(timeout: Long, unit: TimeUnit?): Any? = null
     override fun compareTo(other: Delayed?): Int = 0
-    override fun getDelay(unit: TimeUnit): Long = 0
+    override fun getDelay(unit: TimeUnit): Long = unit.convert(delayMillis, TimeUnit.MILLISECONDS)
 }
 
 private class NextHandTimerFakeTaskScheduler : TaskScheduler {
@@ -75,78 +78,75 @@ private class NextHandTimerFakeTableExecutor : TableExecutor {
 
 class NextHandTimerTest {
 
-    private val fixedInstant = Instant.parse("2026-01-01T00:00:00Z")
+    private val fixedInstant: Instant = Instant.parse("2026-01-01T00:00:00Z")
+    private val clock: Clock = Clock.fixed(fixedInstant, ZoneOffset.UTC)
+    private val nextHandDelay: Duration = Duration.ofSeconds(5)
 
-    private fun eventWithNextHandAt(tableId: TableId, nextHandAt: Instant?): HandBroadcastRequested {
-        var table = HoldemTable.create("test-table")
-        if (nextHandAt != null) table.scheduleNextHand(nextHandAt)
-        return HandBroadcastRequested(tableId, table, hand = null)
-    }
+    private val scheduler = NextHandTimerFakeTaskScheduler()
+    private val useCase = NextHandTimerFakeStartScheduledHandUseCase()
+    private val timer = NextHandTimer(scheduler, useCase, NextHandTimerFakeTableExecutor(), clock, nextHandDelay)
+    private val tableId = TableId(1L)
 
     @Test
-    fun `nextHandAt 이 있는 이벤트를 받으면 그 시각으로 예약된다`() {
-        val scheduler = NextHandTimerFakeTaskScheduler()
-        val useCase = NextHandTimerFakeStartScheduledHandUseCase()
-        val timer = NextHandTimer(scheduler, useCase, NextHandTimerFakeTableExecutor())
-        val at = fixedInstant.plus(Duration.ofSeconds(5))
-
-        timer.onHandBroadcastRequested(eventWithNextHandAt(TableId(1L), at))
+    fun `restart 는 설정된 지연 뒤로 새로 건다`() {
+        timer.restart(tableId)
 
         assertEquals(1, scheduler.scheduledCalls.size)
-        assertEquals(at, scheduler.scheduledCalls[0].time)
+        assertEquals(fixedInstant.plus(nextHandDelay), scheduler.scheduledCalls[0].time)
     }
 
     @Test
-    fun `nextHandAt 이 없는 이벤트는 예약하지 않는다`() {
-        val scheduler = NextHandTimerFakeTaskScheduler()
-        val useCase = NextHandTimerFakeStartScheduledHandUseCase()
-        val timer = NextHandTimer(scheduler, useCase, NextHandTimerFakeTableExecutor())
-
-        timer.onHandBroadcastRequested(eventWithNextHandAt(TableId(1L), null))
-
-        assertEquals(0, scheduler.scheduledCalls.size)
-    }
-
-    @Test
-    fun `같은 테이블에 새 이벤트가 오면 이전 예약이 취소되고 다시 잡힌다`() {
-        val scheduler = NextHandTimerFakeTaskScheduler()
-        val useCase = NextHandTimerFakeStartScheduledHandUseCase()
-        val timer = NextHandTimer(scheduler, useCase, NextHandTimerFakeTableExecutor())
-        val tableId = TableId(1L)
-
-        timer.onHandBroadcastRequested(eventWithNextHandAt(tableId, fixedInstant.plus(Duration.ofSeconds(5))))
+    fun `restart 를 두 번 부르면 이전 예약을 취소하고 처음부터 다시 건다 — 리셋된다`() {
+        timer.restart(tableId)
         val first = scheduler.scheduledCalls[0]
-        timer.onHandBroadcastRequested(eventWithNextHandAt(tableId, fixedInstant.plus(Duration.ofSeconds(10))))
+
+        timer.restart(tableId)
 
         assertTrue(first.future.cancelled)
         assertEquals(2, scheduler.scheduledCalls.size)
+        assertEquals(fixedInstant.plus(nextHandDelay), scheduler.scheduledCalls[1].time)
     }
 
     @Test
-    fun `nextHandAt 이 없는 새 이벤트가 오면 기존 예약을 취소만 하고 다시 잡지 않는다`() {
-        val scheduler = NextHandTimerFakeTaskScheduler()
-        val useCase = NextHandTimerFakeStartScheduledHandUseCase()
-        val timer = NextHandTimer(scheduler, useCase, NextHandTimerFakeTableExecutor())
-        val tableId = TableId(1L)
+    fun `cancel 은 걸려 있던 예약을 취소하고 remaining 을 null 로 만든다`() {
+        timer.restart(tableId)
 
-        timer.onHandBroadcastRequested(eventWithNextHandAt(tableId, fixedInstant.plus(Duration.ofSeconds(5))))
-        val first = scheduler.scheduledCalls[0]
-        timer.onHandBroadcastRequested(eventWithNextHandAt(tableId, null))
+        timer.cancel(tableId)
 
-        assertTrue(first.future.cancelled)
-        assertEquals(1, scheduler.scheduledCalls.size)
+        assertTrue(scheduler.scheduledCalls[0].future.cancelled)
+        assertNull(timer.remaining(tableId))
     }
 
     @Test
-    fun `토큰이 바뀐 뒤 깨어난 stale 작업은 유스케이스를 부르지 않는다`() {
-        val scheduler = NextHandTimerFakeTaskScheduler()
-        val useCase = NextHandTimerFakeStartScheduledHandUseCase()
-        val timer = NextHandTimer(scheduler, useCase, NextHandTimerFakeTableExecutor())
-        val tableId = TableId(1L)
+    fun `remaining 은 걸린 예약이 없으면 null 이다`() {
+        assertNull(timer.remaining(tableId))
+    }
 
-        timer.scheduleAt(tableId, fixedInstant.plus(Duration.ofSeconds(5)))
+    @Test
+    fun `remaining 은 예약된 future 의 남은 지연을 그대로 따라가며 줄어든다`() {
+        timer.restart(tableId)
+        val future = scheduler.scheduledCalls[0].future
+
+        future.delayMillis = 3_000
+        assertEquals(Duration.ofMillis(3_000), timer.remaining(tableId))
+
+        future.delayMillis = 500
+        assertEquals(Duration.ofMillis(500), timer.remaining(tableId))
+    }
+
+    @Test
+    fun `remaining 은 음수 지연을 0 으로 clamp 한다`() {
+        timer.restart(tableId)
+        scheduler.scheduledCalls[0].future.delayMillis = -50
+
+        assertEquals(Duration.ZERO, timer.remaining(tableId))
+    }
+
+    @Test
+    fun `토큰이 바뀐 뒤 깨어난 stale 작업은 유스케이스를 부르지 않고, 최신 토큰만 실행돼 예약을 정리한다`() {
+        timer.restart(tableId)
         val stale = scheduler.scheduledCalls[0]
-        timer.scheduleAt(tableId, fixedInstant.plus(Duration.ofSeconds(10)))
+        timer.restart(tableId)
         val fresh = scheduler.scheduledCalls[1]
 
         stale.task.run()
@@ -155,5 +155,19 @@ class NextHandTimerTest {
         fresh.task.run()
         assertEquals(1, useCase.calls.size)
         assertEquals(tableId.value, useCase.calls[0].tableId)
+        assertNull(timer.remaining(tableId))
+    }
+
+    @Test
+    fun `발화는 벽시계와 무관하다 — Clock 이 크게 어긋나도 정상 발화한다`() {
+        val skewedScheduler = NextHandTimerFakeTaskScheduler()
+        val skewedUseCase = NextHandTimerFakeStartScheduledHandUseCase()
+        val farPastClock = Clock.fixed(Instant.parse("2000-01-01T00:00:00Z"), ZoneOffset.UTC)
+        val skewedTimer = NextHandTimer(skewedScheduler, skewedUseCase, NextHandTimerFakeTableExecutor(), farPastClock, nextHandDelay)
+
+        skewedTimer.restart(tableId)
+        skewedScheduler.scheduledCalls[0].task.run()
+
+        assertEquals(1, skewedUseCase.calls.size)
     }
 }

@@ -40,7 +40,6 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.web.socket.client.standard.StandardWebSocketClient
 import org.springframework.web.socket.messaging.WebSocketStompClient
 import java.lang.reflect.Type
-import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.LinkedBlockingQueue
@@ -91,9 +90,6 @@ class HoldemShowdownIntegrationTest {
 
     @Autowired
     private lateinit var startScheduledHandUseCase: StartScheduledHandUseCase
-
-    @Autowired
-    private lateinit var clock: Clock
 
     @Autowired
     private lateinit var fixedShuffler: ShowdownFixedShuffler
@@ -198,11 +194,8 @@ class HoldemShowdownIntegrationTest {
         error("착석이 시간 안에 끝나지 않았습니다: userId=$userId")
     }
 
-    /** 수동 시작 엔드포인트가 없으므로 nextHandAt 을 과거로 당겨 시스템 진입점을 직접 불러 결정적으로 시작시킨다. */
+    /** 수동 시작 엔드포인트가 없으므로 시스템 진입점을 직접 불러 결정적으로 시작시킨다. */
     private fun startHand(tableId: Long) {
-        val table = holdemTableRepository.findById(TableId(tableId))!!
-        table.scheduleNextHand(Instant.now(clock).minusSeconds(1))
-        holdemTableRepository.save(table)
         startScheduledHandUseCase.start(StartScheduledHandCommand(tableId))
     }
 

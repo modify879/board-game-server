@@ -33,8 +33,7 @@ private class SitDownFakeHoldemTableRepository : HoldemTableRepository {
 
     override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
-    override fun findAllPendingNextHandTableIds(): List<TableId> =
-        stored.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
+    override fun findAllTableIds(): List<TableId> = stored.values.mapNotNull { it.id }
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: run { sequence += 1; TableId(sequence) }
@@ -45,7 +44,6 @@ private class SitDownFakeHoldemTableRepository : HoldemTableRepository {
             bigBlind = table.bigBlind,
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
-            nextHandAt = table.nextHandAt,
         )
         stored[id.value] = saved
         return saved

@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Card
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -13,10 +14,7 @@ import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
-import java.time.Clock
 import java.time.Duration
-import java.time.Instant
-import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -44,13 +42,12 @@ private class HandSettlerFakeTableRepository : HoldemTableRepository {
             bigBlind = table.bigBlind,
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
-            nextHandAt = table.nextHandAt,
         )
         store[id.value] = saved
         return saved
     }
 
-    override fun findAllPendingNextHandTableIds(): List<TableId> = store.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
+    override fun findAllTableIds(): List<TableId> = store.values.mapNotNull { it.id }
 }
 
 private class HandSettlerFakeHandStore : HandStore {
@@ -81,15 +78,21 @@ private class HandSettlerFakeEventPublisher : ApplicationEventPublisher {
     override fun publishEvent(event: Any) { events += event }
 }
 
+private class HandSettlerFakeNextHandCountdown : NextHandCountdown {
+    val restarted = mutableListOf<TableId>()
+    val cancelled = mutableListOf<TableId>()
+    override fun restart(tableId: TableId) { restarted += tableId }
+    override fun cancel(tableId: TableId) { cancelled += tableId }
+    override fun remaining(tableId: TableId): Duration? = null
+}
+
 class HandSettlerTest {
 
     private val tables = HandSettlerFakeTableRepository()
     private val handStore = HandSettlerFakeHandStore()
     private val eventPublisher = HandSettlerFakeEventPublisher()
-    private val fixedInstant: Instant = Instant.parse("2026-01-01T00:00:00Z")
-    private val clock: Clock = Clock.fixed(fixedInstant, ZoneOffset.UTC)
-    private val nextHandDelay: Duration = Duration.ofSeconds(5)
-    private val settler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
+    private val countdown = HandSettlerFakeNextHandCountdown()
+    private val settler = HandSettler(tables, handStore, eventPublisher, countdown)
 
     private fun seatedTable(vararg stacks: Pair<Int, Long>): HoldemTable {
         val seats = stacks.associate { (seatNo, stack) ->
@@ -187,7 +190,7 @@ class HandSettlerTest {
     }
 
     @Test
-    fun `정산하면 다음 핸드 시작 시각이 5초 뒤로 예약된다`() {
+    fun `정산 후 후보가 2명 이상이면 다음 핸드 카운트다운을 새로 건다`() {
         val table = seatedTable(1 to 10_000L, 2 to 10_000L)
         val tableId = table.id!!
         val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
@@ -197,8 +200,21 @@ class HandSettlerTest {
 
         settler.settle(tableId, table, hand)
 
-        val savedTable = tables.findById(tableId)!!
-        assertEquals(fixedInstant.plus(Duration.ofSeconds(5)), savedTable.nextHandAt)
+        assertTrue(countdown.restarted.contains(tableId))
+    }
+
+    @Test
+    fun `정산 후 스택이 0이 돼 후보가 2명 미만이 되면 다음 핸드 카운트다운을 걸지 않는다`() {
+        val table = seatedTable(1 to 200L, 2 to 200L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(200), 2 to Chips.of(200))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), bustingShuffler)
+        handStore.save(tableId, hand)
+        hand.act(1, BettingAction.Call)
+
+        settler.settle(tableId, table, hand)
+
+        assertTrue(countdown.restarted.isEmpty())
     }
 
     @Test

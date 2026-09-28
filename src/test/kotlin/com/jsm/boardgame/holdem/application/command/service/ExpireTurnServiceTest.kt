@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -12,10 +13,7 @@ import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
-import java.time.Clock
 import java.time.Duration
-import java.time.Instant
-import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -33,8 +31,7 @@ private class ExpireTurnFakeTableRepository : HoldemTableRepository {
 
     override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
-    override fun findAllPendingNextHandTableIds(): List<TableId> =
-        store.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
+    override fun findAllTableIds(): List<TableId> = store.values.mapNotNull { it.id }
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: TableId(nextId++)
@@ -51,7 +48,6 @@ private class ExpireTurnFakeTableRepository : HoldemTableRepository {
             bigBlind = table.bigBlind,
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
-            nextHandAt = table.nextHandAt,
         )
 }
 
@@ -78,6 +74,12 @@ private class ExpireTurnFakeWalletTransfer : WalletTransfer {
     }
 }
 
+private class ExpireTurnFakeNextHandCountdown : NextHandCountdown {
+    override fun restart(tableId: TableId) {}
+    override fun cancel(tableId: TableId) {}
+    override fun remaining(tableId: TableId): Duration? = null
+}
+
 class ExpireTurnServiceTest {
 
     private val tables = ExpireTurnFakeTableRepository()
@@ -85,9 +87,7 @@ class ExpireTurnServiceTest {
     private val walletTransfer = ExpireTurnFakeWalletTransfer()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
-    private val clock: Clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
-    private val nextHandDelay: Duration = Duration.ofSeconds(5)
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
+    private val handSettler = HandSettler(tables, handStore, eventPublisher, ExpireTurnFakeNextHandCountdown())
     private val service = ExpireTurnService(tables, handStore, handSettler, walletTransfer, eventPublisher)
 
     /** userId = seatNo * 1000 으로 대응시킨다. */

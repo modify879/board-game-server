@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
+import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
@@ -25,6 +26,7 @@ class HandBroadcaster(
     private val messagingTemplate: SimpMessagingTemplate,
     private val userRegistry: SimpUserRegistry,
     private val sequence: TableViewSequence,
+    private val nextHandCountdown: NextHandCountdown,
 ) {
 
     /**
@@ -50,7 +52,7 @@ class HandBroadcaster(
     fun publish(tableId: TableId, table: HoldemTable, hand: Hand?, seq: Long) {
         messagingTemplate.convertAndSend(
             HoldemDestinations.publicTopicOf(tableId.value),
-            publicViewOf(tableId, table, hand, seq),
+            publicViewOf(tableId, table, hand, seq, nextHandCountdown.remaining(tableId)),
         )
 
         hand ?: return

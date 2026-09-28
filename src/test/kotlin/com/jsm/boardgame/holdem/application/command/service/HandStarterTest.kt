@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
@@ -9,10 +10,7 @@ import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
-import java.time.Clock
 import java.time.Duration
-import java.time.Instant
-import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -32,8 +30,7 @@ private class HandStarterFakeTableRepository : HoldemTableRepository {
 
     override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
-    override fun findAllPendingNextHandTableIds(): List<TableId> =
-        store.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
+    override fun findAllTableIds(): List<TableId> = store.values.mapNotNull { it.id }
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: TableId(nextId++)
@@ -52,7 +49,6 @@ private class HandStarterFakeTableRepository : HoldemTableRepository {
             seats = table.occupiedSeats().associateBy { it.seatNo },
             smallBlindSeatNo = table.smallBlindSeatNo,
             bigBlindSeatNo = table.bigBlindSeatNo,
-            nextHandAt = table.nextHandAt,
         )
 }
 
@@ -65,16 +61,23 @@ private class HandStarterFakeHandStore : HandStore {
     override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
 }
 
+private class HandStarterFakeNextHandCountdown : NextHandCountdown {
+    val restarted = mutableListOf<TableId>()
+    val cancelled = mutableListOf<TableId>()
+    override fun restart(tableId: TableId) { restarted += tableId }
+    override fun cancel(tableId: TableId) { cancelled += tableId }
+    override fun remaining(tableId: TableId): Duration? = null
+}
+
 class HandStarterTest {
 
     private val tables = HandStarterFakeTableRepository()
     private val handStore = HandStarterFakeHandStore()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
-    private val clock: Clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
-    private val nextHandDelay: Duration = Duration.ofSeconds(5)
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
-    private val handStarter = HandStarter(tables, handStore, identityShuffler, handSettler, eventPublisher, clock, nextHandDelay)
+    private val countdown = HandStarterFakeNextHandCountdown()
+    private val handSettler = HandSettler(tables, handStore, eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, identityShuffler, handSettler, eventPublisher, countdown)
 
     private fun start(tableId: TableId) {
         val table = tables.findById(tableId)!!
@@ -96,6 +99,15 @@ class HandStarterTest {
         val table = tables.findById(tableId)!!
         table.sitDown(userId = seatNo.toLong(), buyIn = Chips.of(buyIn), postBlindImmediately = postBlindImmediately)
         tables.save(table)
+    }
+
+    @Test
+    fun `핸드가 시작되면 다음 핸드 카운트다운을 취소한다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+
+        start(tableId)
+
+        assertTrue(countdown.cancelled.contains(tableId))
     }
 
     @Test

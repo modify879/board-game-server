@@ -32,7 +32,6 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.web.socket.client.standard.StandardWebSocketClient
 import org.springframework.web.socket.messaging.WebSocketStompClient
-import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -49,8 +48,8 @@ import java.util.concurrent.TimeUnit
  * 실제 착석·지갑 차감 결과를 확인해야 하는 곳은 `awaitSeated()` 로 폴링해 기다린다.
  *
  * build.gradle.kts 가 테스트 전역으로 1h 를 준다 — 실제 5초 타이머가 테스트 도중 우연히
- * 발화하지 않는다. 핸드 시작은 startHand() 헬퍼가 nextHandAt 을 과거로 강제로 당겨
- * StartScheduledHandUseCase 를 직접 불러 결정적으로 일으킨다(수동 시작 엔드포인트는 더 이상 없다).
+ * 발화하지 않는다. 핸드 시작은 startHand() 헬퍼가 StartScheduledHandUseCase 를 직접 불러
+ * 결정적으로 일으킨다(수동 시작 엔드포인트는 더 이상 없다).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
@@ -74,9 +73,6 @@ class HoldemApiIntegrationTest {
 
     @Autowired
     private lateinit var startScheduledHandUseCase: StartScheduledHandUseCase
-
-    @Autowired
-    private lateinit var clock: Clock
 
     @LocalServerPort
     private var port: Int = 0
@@ -173,11 +169,8 @@ class HoldemApiIntegrationTest {
         return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{"buyIn":$buyIn}""")
     }
 
-    /** 수동 시작 엔드포인트가 없으므로 nextHandAt 을 과거로 당겨 시스템 진입점을 직접 불러 결정적으로 시작시킨다. */
+    /** 수동 시작 엔드포인트가 없으므로 시스템 진입점을 직접 불러 결정적으로 시작시킨다. */
     private fun startHand(tableId: Long) {
-        val table = holdemTableRepository.findById(TableId(tableId))!!
-        table.scheduleNextHand(Instant.now(clock).minusSeconds(1))
-        holdemTableRepository.save(table)
         startScheduledHandUseCase.start(StartScheduledHandCommand(tableId))
     }
 

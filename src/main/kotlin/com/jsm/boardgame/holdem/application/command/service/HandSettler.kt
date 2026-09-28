@@ -3,18 +3,15 @@ package com.jsm.boardgame.holdem.application.command.service
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.SeatStatus
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
-import java.time.Clock
-import java.time.Duration
-import java.time.Instant
 
 /**
  * 핸드 종료 정산. StartScheduledHandService·PlayActionService·ExpireTurnService 가 공유한다 —
@@ -34,17 +31,16 @@ import java.time.Instant
  * 이체를 건너뛰는 것과 같은 이유). 이 클래스는 WalletTransfer 를 전혀 부르지 않는다 — 핸드 도중 남은
  * 참가 요청의 바이인 이체는 커밋 후 별도 트랜잭션(JoinRequestsProcessor)에서 처리한다.
  *
- * 정산 뒤 다음 핸드 시작 시각(nextHandAt)을 [nextHandDelay] 뒤로 예약한다. DB 에 두는 이유는
- * 재시작해도 이어지고, 대기 중에는 수동 시작을 막아 다른 좌석의 그 시간(기립 결정 시간)을
- * 빼앗지 않기 위해서다. `NextHandTimer` 가 이 값을 보고 `StartScheduledHandUseCase` 를 건다.
+ * 정산 뒤 후보(스택이 있는 점유 좌석)가 2명 이상이면 다음 핸드 카운트다운을 새로 건다 — 핸드가
+ * 도는 동안은 카운트다운이 없었으므로 항상 처음부터 시작하는 셈이다. `NextHandCountdown` 이 상대
+ * 시간(단조 시계)만 쓴다.
  */
 @Component
 class HandSettler(
     private val tables: HoldemTableRepository,
     private val handStore: HandStore,
     private val eventPublisher: ApplicationEventPublisher,
-    private val clock: Clock,
-    @Value("\${app.holdem.next-hand-delay}") private val nextHandDelay: Duration,
+    private val countdown: NextHandCountdown,
 ) {
     fun settle(tableId: TableId, table: HoldemTable, hand: Hand) {
         val stacks = hand.seatNos.associateWith { seatNo -> hand.stackOf(seatNo) }
@@ -66,7 +62,9 @@ class HandSettler(
 
         handStore.remove(tableId)
 
-        table.scheduleNextHand(Instant.now(clock).plus(nextHandDelay))
+        if (table.candidateSeatNos().size >= 2) {
+            countdown.restart(tableId)
+        }
 
         tables.save(table)
         // 정산 후에도 hand 를 null 로 넘기지 않는다 — 클라이언트가 쇼다운 결과(showdownRanks/payouts)를

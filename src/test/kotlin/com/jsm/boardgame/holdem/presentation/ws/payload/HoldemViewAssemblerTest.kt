@@ -8,7 +8,7 @@ import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.service.Shuffler
-import java.time.Instant
+import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -41,7 +41,7 @@ class HoldemViewAssemblerTest {
     fun `핸드가 없으면 공개 뷰는 진행 중이 아니고 좌석은 SITTING_OUT 이다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
 
-        val view = publicViewOf(TableId(1), table, null, 1L)
+        val view = publicViewOf(TableId(1), table, null, 1L, null)
 
         assertFalse(view.handInProgress)
         assertNull(view.street)
@@ -60,7 +60,7 @@ class HoldemViewAssemblerTest {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         table.markPresence(100, SeatPresence.DISCONNECTED)
 
-        val view = publicViewOf(TableId(1), table, null, 1L)
+        val view = publicViewOf(TableId(1), table, null, 1L, null)
 
         assertEquals("DISCONNECTED", view.seats.first { it.seatNo == 1 }.presence)
         assertEquals("SEATED", view.seats.first { it.seatNo == 2 }.presence)
@@ -107,7 +107,7 @@ class HoldemViewAssemblerTest {
 
         hand.act(toAct, BettingAction.Fold)
 
-        val view = publicViewOf(TableId(1), table, hand, 1L)
+        val view = publicViewOf(TableId(1), table, hand, 1L, null)
         assertFalse(hand.isFinished)
         assertTrue(view.handInProgress)
         assertEquals("FOLDED", view.seats.first { it.seatNo == toAct }.status)
@@ -135,7 +135,7 @@ class HoldemViewAssemblerTest {
         )
 
         assertTrue(hand.isFinished)
-        val view = publicViewOf(TableId(1), table, hand, 1L)
+        val view = publicViewOf(TableId(1), table, hand, 1L, null)
         assertFalse(view.handInProgress)
         assertNull(view.toActSeatNo)
         assertTrue(view.seats.all { it.status == "ALL_IN" })
@@ -159,7 +159,7 @@ class HoldemViewAssemblerTest {
 
         hand.act(hand.toActSeatNo!!, BettingAction.Fold)
 
-        val view = publicViewOf(TableId(1), table, hand, 1L)
+        val view = publicViewOf(TableId(1), table, hand, 1L, null)
 
         val result = view.result!!
         assertEquals(listOf(PayoutPublicView(seatNo = 2, amount = 300)), result.payouts)
@@ -197,7 +197,7 @@ class HoldemViewAssemblerTest {
         hand.act(2, BettingAction.Call) // B가 콜 -> 쇼다운
 
         assertEquals(1, hand.showdownLeaderSeatNo)
-        val view = publicViewOf(TableId(1), table, hand, 1L)
+        val view = publicViewOf(TableId(1), table, hand, 1L, null)
 
         val result = view.result!!
         assertEquals(
@@ -235,7 +235,7 @@ class HoldemViewAssemblerTest {
         hand.act(2, BettingAction.Call)
 
         assertEquals(1, hand.showdownLeaderSeatNo)
-        val view = publicViewOf(TableId(1), table, hand, 1L)
+        val view = publicViewOf(TableId(1), table, hand, 1L, null)
         val json = objectMapper.writeValueAsString(view)
 
         val result = view.result!!
@@ -274,7 +274,7 @@ class HoldemViewAssemblerTest {
         }
 
         assertNull(hand.showdownLeaderSeatNo) // 리버에 벳/레이즈가 없었다
-        val view = publicViewOf(TableId(1), table, hand, 1L)
+        val view = publicViewOf(TableId(1), table, hand, 1L, null)
 
         val result = view.result!!
         // 버튼(1) 다음 좌석(2, BB)부터 공개 — KK 인 2가 먼저 보여주고 나면, AA 인 1이 이겨서 뒤이어 보여준다.
@@ -312,7 +312,7 @@ class HoldemViewAssemblerTest {
         }
 
         assertNull(hand.showdownLeaderSeatNo)
-        val view = publicViewOf(TableId(1), table, hand, 1L)
+        val view = publicViewOf(TableId(1), table, hand, 1L, null)
 
         val result = view.result!!
         // 버튼(1) 다음부터: 2(JJ, 약한 패, 먼저 공개) -> 3(QQ, JJ를 이겨 공개) -> 1(KK, 둘 다 이겨 공개)
@@ -351,7 +351,7 @@ class HoldemViewAssemblerTest {
         }
 
         assertNull(hand.showdownLeaderSeatNo)
-        val view = publicViewOf(TableId(1), table, hand, 1L)
+        val view = publicViewOf(TableId(1), table, hand, 1L, null)
         val json = objectMapper.writeValueAsString(view)
 
         val result = view.result!!
@@ -395,7 +395,7 @@ class HoldemViewAssemblerTest {
         }
 
         assertNull(hand.showdownLeaderSeatNo) // 포스트플랍 전부 체크
-        val view = publicViewOf(TableId(1), table, hand, 1L)
+        val view = publicViewOf(TableId(1), table, hand, 1L, null)
         val json = objectMapper.writeValueAsString(view)
 
         val result = view.result!!
@@ -457,17 +457,21 @@ class HoldemViewAssemblerTest {
     }
 
     @Test
-    fun `공개 뷰는 테이블의 nextHandAt 을 담고 ISO-8601 문자열로 직렬화된다`() {
+    fun `공개 뷰는 남은 카운트다운을 ms 로 담는다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        val scheduledTime = Instant.parse("2026-09-24T12:30:45Z")
-        table.scheduleNextHand(scheduledTime)
 
-        val view = publicViewOf(TableId(1), table, null, 1L)
+        val view = publicViewOf(TableId(1), table, null, 1L, Duration.ofMillis(4_500))
 
-        assertEquals(scheduledTime, view.nextHandAt)
-        val json = objectMapper.writeValueAsString(view)
-        assertTrue(json.contains("\"2026-09-24T12:30:45Z\""), "ISO-8601 형식의 ISO 즉시값이 JSON에 없음: $json")
-        assertFalse(json.contains("1695555045"), "Unix 타임스탬프 숫자가 JSON에 포함됨 — Instant 가 숫자로 직렬화됨: $json")
+        assertEquals(4_500L, view.nextHandInMs)
+    }
+
+    @Test
+    fun `카운트다운이 없으면 공개 뷰의 nextHandInMs 는 null 이다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+
+        val view = publicViewOf(TableId(1), table, null, 1L, null)
+
+        assertNull(view.nextHandInMs)
     }
 
     @Test
@@ -484,7 +488,7 @@ class HoldemViewAssemblerTest {
             identityShuffler,
         )
 
-        val publicView = publicViewOf(TableId(1), table, hand, 42L)
+        val publicView = publicViewOf(TableId(1), table, hand, 42L, null)
         val privateView = privateViewOf(TableId(1), 1, hand, 42L)
 
         assertEquals(42L, publicView.seq)

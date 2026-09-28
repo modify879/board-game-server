@@ -5,7 +5,6 @@ import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.InvalidTableNameException
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.exception.TableFullException
-import java.time.Instant
 
 @JvmInline value class TableId(val value: Long)
 
@@ -18,7 +17,6 @@ class HoldemTable private constructor(
     smallBlindSeatNo: Int?,
     bigBlindSeatNo: Int?,
     seats: Map<Int, Seat>,
-    nextHandAt: Instant?,
 ) {
     var buttonSeatNo: Int? = buttonSeatNo
         private set
@@ -38,9 +36,6 @@ class HoldemTable private constructor(
         private set
 
     private val seats: MutableMap<Int, Seat> = seats.toMutableMap()
-
-    var nextHandAt: Instant? = nextHandAt
-        private set
 
     /** 가장 낮은 번호의 빈 좌석에 강제로 앉힌다 — 좌석을 고르지 않는다(FIFO 대기열, ProcessJoinRequestsService). */
     fun sitDown(userId: Long, buyIn: Chips, postBlindImmediately: Boolean = false): Seat {
@@ -209,16 +204,6 @@ class HoldemTable private constructor(
         }
     }
 
-    /** HandSettler 가 핸드 정산 직후 5초 뒤 시각으로 건다. */
-    fun scheduleNextHand(at: Instant) {
-        nextHandAt = at
-    }
-
-    /** HandStarter 가 실제로 핸드를 시작할 때, 또는 후보가 2명 미만으로 떨어졌을 때 부른다. */
-    fun clearNextHand() {
-        nextHandAt = null
-    }
-
     companion object {
         const val MAX_SEATS = 9
         private const val MAX_NAME_LENGTH = 30
@@ -242,7 +227,6 @@ class HoldemTable private constructor(
                 smallBlindSeatNo = null,
                 bigBlindSeatNo = null,
                 seats = emptyMap(),
-                nextHandAt = null,
             )
         }
 
@@ -256,7 +240,6 @@ class HoldemTable private constructor(
             seats: Map<Int, Seat>,
             smallBlindSeatNo: Int? = null,
             bigBlindSeatNo: Int? = null,
-            nextHandAt: Instant? = null,
-        ): HoldemTable = HoldemTable(id, name, smallBlind, bigBlind, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, seats, nextHandAt)
+        ): HoldemTable = HoldemTable(id, name, smallBlind, bigBlind, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, seats)
     }
 }

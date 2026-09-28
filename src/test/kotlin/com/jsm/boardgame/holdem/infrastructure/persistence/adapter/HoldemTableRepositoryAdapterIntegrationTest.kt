@@ -15,8 +15,6 @@ import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
-import java.time.Instant
-import java.time.temporal.ChronoUnit
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -136,24 +134,4 @@ class HoldemTableRepositoryAdapterIntegrationTest {
         assertEquals(HoldemErrorCode.ALREADY_SEATED, e.errorCode)
     }
 
-    @Test
-    fun `nextHandAt 저장 후 복원되고, clearNextHand 후 저장하면 null 로 복원된다`() {
-        val userId = uniqueUserId()
-        val table = HoldemTable.create("t9")
-        table.sitDown(userId, buyIn)
-        val saved = tables.save(table)
-
-        val scheduledAt = Instant.now().truncatedTo(ChronoUnit.MICROS)
-        saved.scheduleNextHand(scheduledAt)
-        tables.save(saved)
-
-        val found = tables.findById(saved.id!!)
-        assertEquals(scheduledAt, found?.nextHandAt)
-
-        found!!.clearNextHand()
-        tables.save(found)
-
-        val clearedFound = tables.findById(saved.id!!)
-        assertNull(clearedFound?.nextHandAt)
-    }
 }

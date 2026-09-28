@@ -1,7 +1,5 @@
 package com.jsm.boardgame.holdem.presentation.ws.payload
 
-import java.time.Instant
-
 /**
  * 브로드캐스트 전용. 홀카드를 담을 필드가 아예 없다 — 이게 이 타입의 존재 이유다.
  * 여기에 카드 필드를 추가하지 마라. 추가하는 순간 규칙 6의 컴파일러 보장이 사라진다.
@@ -21,8 +19,9 @@ data class TablePublicView(
     val buttonSeatNo: Int?,
     val seats: List<SeatPublicView>,
     val result: HandResultPublicView?,
-    /** 다음 핸드 자동 시작 예정 시각. 카운트다운용이며 핸드 진행 중이거나 인원이 모자라면 null. */
-    val nextHandAt: Instant?,
+    /** 다음 핸드까지 남은 ms. 클라이언트는 받은 순간부터 자기 단조 시계로 센다 — 벽시계와
+     *  비교하지 않는다. 카운트다운이 없으면(핸드 진행 중이거나 인원이 모자라면) null. */
+    val nextHandInMs: Long?,
     /**
      * 테이블별 단조 증가 순번(TableViewSequence). 클라이언트 계약: 채널(공개/개인)별로 마지막
      * seq 를 기억하고 `seq < last` 인 메시지는 버린다(같으면 받는다) — clientOutboundChannel 의
