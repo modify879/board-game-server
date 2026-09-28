@@ -3,6 +3,7 @@ package com.jsm.boardgame.holdem.application.command.service
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestCommand
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestResult
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
@@ -15,10 +16,7 @@ import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
-import java.time.Clock
 import java.time.Duration
-import java.time.Instant
-import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -36,13 +34,12 @@ private class AdmitJoinRequestFakeTableRepository : HoldemTableRepository {
         bigBlind = saved.bigBlind,
         buttonSeatNo = saved.buttonSeatNo,
         seats = saved.occupiedSeats().associateBy { it.seatNo },
-        nextHandAt = saved.nextHandAt,
     )
 
     override fun findById(id: TableId): HoldemTable? = store[id.value]?.let { reconstituteFrom(it) }
     override fun findByUserId(userId: Long): HoldemTable? = store.values.find { it.seatOf(userId) != null }
     override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
-    override fun findAllPendingNextHandTableIds(): List<TableId> = store.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
+    override fun findAllTableIds(): List<TableId> = store.values.mapNotNull { it.id }
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: TableId(nextId++)
@@ -53,7 +50,6 @@ private class AdmitJoinRequestFakeTableRepository : HoldemTableRepository {
             bigBlind = table.bigBlind,
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
-            nextHandAt = table.nextHandAt,
         )
         store[id.value] = saved
         return saved
@@ -88,18 +84,22 @@ private class AdmitJoinRequestFakeWalletTransfer(private val failingUserIds: Set
     }
 }
 
+private class AdmitJoinRequestFakeNextHandCountdown : NextHandCountdown {
+    override fun restart(tableId: TableId) {}
+    override fun cancel(tableId: TableId) {}
+    override fun remaining(tableId: TableId): Duration? = null
+}
+
 class AdmitJoinRequestServiceTest {
 
     private val tables = AdmitJoinRequestFakeTableRepository()
     private val handStore = AdmitJoinRequestFakeHandStore()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
-    private val fixedInstant: Instant = Instant.parse("2026-01-01T00:00:00Z")
-    private val clock: Clock = Clock.fixed(fixedInstant, ZoneOffset.UTC)
-    private val nextHandDelay: Duration = Duration.ofSeconds(5)
     private val walletTransfer = AdmitJoinRequestFakeWalletTransfer()
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
-    private val handStarter = HandStarter(tables, handStore, identityShuffler, handSettler, eventPublisher, clock, nextHandDelay)
+    private val countdown = AdmitJoinRequestFakeNextHandCountdown()
+    private val handSettler = HandSettler(tables, handStore, eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, identityShuffler, handSettler, eventPublisher, countdown)
     private val service = AdmitJoinRequestService(tables, handStore, walletTransfer, handStarter)
 
     /** 특정 좌석 번호에 특정 버이인으로 미리 앉혀 둔다 — sitDown 이 더 이상 좌석을 고르지 않으므로

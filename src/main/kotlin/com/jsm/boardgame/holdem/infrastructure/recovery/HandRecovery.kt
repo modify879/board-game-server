@@ -5,11 +5,11 @@ import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandUseCase
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.infrastructure.timer.ConnectionTimer
-import com.jsm.boardgame.holdem.infrastructure.timer.NextHandTimer
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -53,8 +53,10 @@ import java.util.concurrent.atomic.AtomicLong
  * **단일 인스턴스 배포를 전제한다.** 인스턴스가 여럿이면 모두가 같은 행을 복구하려 들어 취소·재개
  * 유스케이스가 중복 호출된다. 다중 인스턴스로 가려면 리더 선출이나 행 잠금이 필요하다.
  *
- * `nextHandAt` 이 채워진 테이블 중 진행 중 핸드가 없는 것만 재무장한다 — 핸드가 있으면 그 핸드가
- * 끝날 때 `HandSettler` 가 다시 스케줄하거나, 이미 진행 중인 복구 흐름이 처리한다.
+ * 진행 중 핸드가 없고 후보(스택이 있는 점유 좌석)가 2명 이상인 테이블마다 다음 핸드 카운트다운을
+ * 새로 건다 — 재시작 전에 몇 초가 남아 있었는지는 알 길이 없고(인메모리라 사라졌다) 알 필요도
+ * 없다, 어차피 상대 시간이라 처음부터 다시 재도 된다. 핸드가 있으면 그 핸드가 끝날 때
+ * `HandSettler` 가 걸거나, 이미 진행 중인 복구 흐름이 처리한다.
  *
  * 착석 대기열은 이제 인메모리(JoinQueue)라 여기서 훑을 게 없다 — 좌석 배정 전이라 재시작하면
  * 그냥 비워지는 게 맞는 동작이다(돈이 걸려 있지 않다).
@@ -68,7 +70,7 @@ class HandRecovery(
     private val resumeHandUseCase: ResumeHandUseCase,
     private val cancelHandUseCase: CancelHandUseCase,
     private val connectionTimer: ConnectionTimer,
-    private val nextHandTimer: NextHandTimer,
+    private val nextHandCountdown: NextHandCountdown,
     private val tableExecutor: TableExecutor,
 ) {
     private class PendingRecovery(
@@ -93,18 +95,16 @@ class HandRecovery(
             tableIds.forEach { beginRecovery(it) }
         }
 
-        rearmPendingNextHandTimers()
+        armNextHandCountdowns()
     }
 
-    private fun rearmPendingNextHandTimers() {
-        val pendingTableIds = tables.findAllPendingNextHandTableIds()
-        for (tableId in pendingTableIds) {
+    private fun armNextHandCountdowns() {
+        for (tableId in tables.findAllTableIds()) {
             if (handStore.find(tableId) != null) continue
             val table = tables.findById(tableId) ?: continue
-            val nextHandAt = table.nextHandAt ?: continue
-            val fireAt = maxOf(Instant.now(clock), nextHandAt)
-            nextHandTimer.scheduleAt(tableId, fireAt)
-            log.info("테이블 {} 자동 시작 예약을 재무장했습니다: at={}", tableId.value, fireAt)
+            if (table.candidateSeatNos().size < 2) continue
+            nextHandCountdown.restart(tableId)
+            log.info("테이블 {} 다음 핸드 카운트다운을 새로 걸었습니다.", tableId.value)
         }
     }
 

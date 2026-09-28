@@ -40,7 +40,6 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.web.socket.client.standard.StandardWebSocketClient
 import org.springframework.web.socket.messaging.WebSocketStompClient
 import java.lang.reflect.Type
-import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.LinkedBlockingQueue
@@ -54,8 +53,8 @@ import jakarta.servlet.http.Cookie
  * 여기는 CONNECT 관문과 구독 인가만 검증한다.
  *
  * build.gradle.kts 가 테스트 전역으로 1h 를 준다 — 실제 5초 타이머가 테스트 도중 우연히 발화하지
- * 않는다. 핸드 시작은 startHandRest() 헬퍼가 nextHandAt 을 과거로 강제로 당겨
- * StartScheduledHandUseCase 를 직접 불러 결정적으로 일으킨다(수동 시작 엔드포인트는 더 이상 없다).
+ * 않는다. 핸드 시작은 startHandRest() 헬퍼가 StartScheduledHandUseCase 를 직접 불러 결정적으로
+ * 일으킨다(수동 시작 엔드포인트는 더 이상 없다).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
@@ -82,9 +81,6 @@ class HoldemStompIntegrationTest {
 
     @Autowired
     private lateinit var startScheduledHandUseCase: StartScheduledHandUseCase
-
-    @Autowired
-    private lateinit var clock: Clock
 
     @LocalServerPort
     private var port: Int = 0
@@ -230,11 +226,8 @@ class HoldemStompIntegrationTest {
         return TablePair(tableId, SeatedUser(userIdA, tokenA, tableId), SeatedUser(userIdB, tokenB, tableId))
     }
 
-    /** 수동 시작 엔드포인트가 없으므로 nextHandAt 을 과거로 당겨 시스템 진입점을 직접 불러 결정적으로 시작시킨다. */
+    /** 수동 시작 엔드포인트가 없으므로 시스템 진입점을 직접 불러 결정적으로 시작시킨다. */
     private fun startHandRest(tableId: Long) {
-        val table = holdemTableRepository.findById(TableId(tableId))!!
-        table.scheduleNextHand(Instant.now(clock).minusSeconds(1))
-        holdemTableRepository.save(table)
         startScheduledHandUseCase.start(StartScheduledHandCommand(tableId))
     }
 
@@ -352,6 +345,21 @@ class HoldemStompIntegrationTest {
         assertThat(publicQueue.poll(5, TimeUnit.SECONDS)).isNotNull()
         assertThat(handler.errorFrames).isEmpty()
         assertThat(session.isConnected).isTrue()
+    }
+
+    @Test
+    fun `카운트다운이 도는 테이블을 구독하면 스냅샷의 nextHandInMs 가 채워져 있다`() {
+        val pair = seatTwoUsersAtSameTable() // 착석 두 번째부터 카운트다운이 시작된다.
+
+        val (session, _) = tryConnect(pair.a.accessToken)
+        checkNotNull(session)
+        val (publicHandler, publicQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.publicTopicOf(pair.tableId), publicHandler)
+
+        val publicJson = publicQueue.poll(5, TimeUnit.SECONDS) ?: error("공개 스냅샷을 받지 못했다")
+        assertThat(JsonPath.read<Boolean>(publicJson, "$.handInProgress")).isFalse()
+        val nextHandInMs = JsonPath.read<Number>(publicJson, "$.nextHandInMs").toLong()
+        assertThat(nextHandInMs).isGreaterThan(0L)
     }
 
     @Test

@@ -5,15 +5,17 @@ import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HandResult
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
+import java.time.Duration
 
 /**
  * TablePublicView/SeatPrivateView 조립기. HandBroadcaster(브로드캐스트)와
  * HoldemSubscriptionSnapshotListener(재접속 1회 스냅샷)가 같이 쓴다 — 그래서 top-level
  * 함수로 뺐다(같은 패키지라도 private 로는 다른 파일에서 못 쓴다).
  *
- * 스프링 타입을 하나도 받지 않는다 — 그래서 스프링 없이 단위 테스트할 수 있다.
+ * 스프링 타입을 하나도 받지 않는다 — 그래서 스프링 없이 단위 테스트할 수 있다. [nextHandRemaining]
+ * 은 NextHandCountdown 포트에서 호출자가 미리 읽어와 넘긴다(단조 시계 기준 남은 시간).
  */
-fun publicViewOf(tableId: TableId, table: HoldemTable, hand: Hand?, seq: Long): TablePublicView {
+fun publicViewOf(tableId: TableId, table: HoldemTable, hand: Hand?, seq: Long, nextHandRemaining: Duration?): TablePublicView {
     val seats = table.occupiedSeats().map { seat ->
         if (hand != null && seat.seatNo in hand.seatNos) {
             SeatPublicView(
@@ -45,7 +47,7 @@ fun publicViewOf(tableId: TableId, table: HoldemTable, hand: Hand?, seq: Long): 
         buttonSeatNo = table.buttonSeatNo,
         seats = seats,
         result = hand?.let { h -> h.result?.let { r -> handResultPublicViewOf(h, r) } },
-        nextHandAt = table.nextHandAt,
+        nextHandInMs = nextHandRemaining?.toMillis(),
         seq = seq,
     )
 }

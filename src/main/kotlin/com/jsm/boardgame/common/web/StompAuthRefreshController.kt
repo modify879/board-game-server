@@ -9,6 +9,8 @@ import org.springframework.security.oauth2.jwt.JwtDecoder
 import org.springframework.security.oauth2.jwt.JwtException
 import org.springframework.stereotype.Controller
 import java.security.Principal
+import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 
 /**
@@ -30,6 +32,7 @@ import java.time.Instant
 class StompAuthRefreshController(
     private val jwtDecoder: JwtDecoder,
     private val stompSessionRegistry: StompSessionRegistry,
+    private val clock: Clock,
 ) {
 
     @MessageMapping("/auth/refresh")
@@ -60,7 +63,8 @@ class StompAuthRefreshController(
 
         stompSessionRegistry.replaceToken(sessionId, accessTokenId, expiresAt)
         log.info("stomp in-band token refresh succeeded, sessionId={}", sessionId)
-        return RefreshTokenReply.ok(expiresAt)
+        val expiresInMs = Duration.between(Instant.now(clock), expiresAt).toMillis().coerceAtLeast(0)
+        return RefreshTokenReply.ok(expiresAt, expiresInMs)
     }
 
     companion object {
@@ -73,10 +77,13 @@ data class RefreshTokenPayload(val accessToken: String)
 data class RefreshTokenReply(
     val result: String,
     val expiresAt: Instant? = null,
+    /** [expiresAt] 까지 남은 ms(벽시계 기준 계산, 클라이언트는 받은 순간부터 자기 단조 시계로 센다). */
+    val expiresInMs: Long? = null,
     val errorCode: String? = null,
 ) {
     companion object {
-        fun ok(expiresAt: Instant) = RefreshTokenReply(result = "OK", expiresAt = expiresAt)
+        fun ok(expiresAt: Instant, expiresInMs: Long) =
+            RefreshTokenReply(result = "OK", expiresAt = expiresAt, expiresInMs = expiresInMs)
         fun error(errorCode: String) = RefreshTokenReply(result = "ERROR", errorCode = errorCode)
     }
 }

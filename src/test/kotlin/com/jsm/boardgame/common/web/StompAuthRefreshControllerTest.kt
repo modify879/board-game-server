@@ -120,7 +120,7 @@ class StompAuthRefreshControllerTest {
         val newExpiresAt = fixedInstant.plus(Duration.ofMinutes(5))
         val newToken = fakeJwt(subject = "1", jti = "new-jti", expiresAt = newExpiresAt)
         val decoder = AuthRefreshFakeJwtDecoder(mapOf("valid-token" to newToken))
-        val controller = StompAuthRefreshController(decoder, registry)
+        val controller = StompAuthRefreshController(decoder, registry, clock)
 
         val reply = controller.refresh(
             RefreshTokenPayload("valid-token"),
@@ -130,6 +130,7 @@ class StompAuthRefreshControllerTest {
 
         assertThat(reply.result).isEqualTo("OK")
         assertThat(reply.expiresAt).isEqualTo(newExpiresAt)
+        assertThat(reply.expiresInMs).isEqualTo(Duration.ofMinutes(5).toMillis())
         assertThat(scheduler.scheduled).hasSize(2)
         assertThat(scheduler.scheduled[0].future.cancelled).isTrue()
         assertThat(scheduler.scheduled[1].time).isEqualTo(newExpiresAt)
@@ -140,7 +141,7 @@ class StompAuthRefreshControllerTest {
         registry.registerSession("session-1", AuthRefreshFakeWebSocketSession("session-1"))
         registry.register("session-1", "old-jti", 1L, fixedInstant.plusSeconds(60))
         val decoder = AuthRefreshFakeJwtDecoder(emptyMap())
-        val controller = StompAuthRefreshController(decoder, registry)
+        val controller = StompAuthRefreshController(decoder, registry, clock)
 
         val reply = controller.refresh(
             RefreshTokenPayload("invalid-token"),
@@ -160,7 +161,7 @@ class StompAuthRefreshControllerTest {
         registry.register("session-1", "old-jti", 1L, fixedInstant.plusSeconds(60))
         val otherUsersToken = fakeJwt(subject = "2", jti = "new-jti", expiresAt = fixedInstant.plus(Duration.ofMinutes(5)))
         val decoder = AuthRefreshFakeJwtDecoder(mapOf("other-users-token" to otherUsersToken))
-        val controller = StompAuthRefreshController(decoder, registry)
+        val controller = StompAuthRefreshController(decoder, registry, clock)
 
         val reply = controller.refresh(
             RefreshTokenPayload("other-users-token"),

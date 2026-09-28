@@ -44,16 +44,17 @@ import java.util.concurrent.atomic.AtomicLong
  * 다음 핸드 자동 시작 타이머 재현 테스트. 실제 스프링 배선(TableExecutor/NextHandTimer/TurnTimer)을
  * 그대로 쓴다 — `app.holdem.next-hand-delay` 만 짧게 줄여 실제 타이머가 초 단위로 발화하게 한다.
  *
- * 재현 대상 버그: 헤즈업에서 한쪽이 시간 초과로 폴드·즉시 기립되면(HandSettler 가 무조건
- * next_hand_at 을 예약), NextHandTimer 가 발화해도 후보가 1명뿐이라 StartScheduledHandService 가
- * next_hand_at 을 지우고 조용히 끝난다. 그 뒤 남은 사용자가 다시 앉으면(HandStarter.rescheduleOnEntry)
- * next_hand_at 이 다시 예약되고 NextHandTimer.scheduleAt 이 다시 걸려야 하는데, 실제로는 다음 핸드가
- * 영영 시작되지 않는 사례가 보고됐다.
+ * 재현 대상 버그(과거): 헤즈업에서 한쪽이 시간 초과로 폴드·즉시 기립되면 후보가 1명뿐이라 자동
+ * 시작을 건너뛴다. 그 뒤 남은 사용자가 다시 앉으면 카운트다운이 다시 걸려야 하는데, 예전에는
+ * DB(`next_hand_at`) 값을 벽시계와 재비교하는 가드가 있어, WSL2 처럼 벽시계가 뒤로 튀는 환경에서
+ * 그 가드가 조용히 실패해 다음 핸드가 영영 시작되지 않는 사례가 보고됐다. 지금은 `NextHandCountdown`
+ * 이 상대 시간(단조 시계)만 쓰고 발화 후 벽시계로 다시 비교하지 않는다 — 이 클래스는 그 배선이
+ * 실제로 동작하는지를 검증한다.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
-@TestPropertySource(properties = ["app.holdem.next-hand-delay=600ms"])
+@TestPropertySource(properties = ["app.holdem.next-hand-delay=1500ms"])
 class NextHandTimerIntegrationTest {
 
     @Autowired
@@ -215,10 +216,10 @@ class NextHandTimerIntegrationTest {
         }
     }
 
-    private fun awaitNextHandAtCleared(tableId: Long, timeoutMs: Long = 3_000) {
-        pollUntil(timeoutMs) { holdemTableRepository.findById(TableId(tableId))?.nextHandAt == null }
-        if (holdemTableRepository.findById(TableId(tableId))?.nextHandAt != null) {
-            error("next_hand_at 이 ${timeoutMs}ms 안에 지워지지 않았습니다.\n${diagnose(tableId)}")
+    private fun awaitCountdownCancelled(tableId: Long, timeoutMs: Long = 3_000) {
+        pollUntil(timeoutMs) { nextHandTimer.remaining(TableId(tableId)) == null }
+        if (nextHandTimer.remaining(TableId(tableId)) != null) {
+            error("카운트다운이 ${timeoutMs}ms 안에 취소되지 않았습니다.\n${diagnose(tableId)}")
         }
     }
 
@@ -251,7 +252,6 @@ class NextHandTimerIntegrationTest {
 
             """
             |now=${Instant.now()}
-            |table.nextHandAt=${table?.nextHandAt}
             |table.candidateSeatNos=${table?.candidateSeatNos()}
             |table.occupiedSeats=${table?.occupiedSeats()?.map { it.seatNo to it.userId }}
             |handStore.find=${handStore.find(tid)}
@@ -297,18 +297,18 @@ class NextHandTimerIntegrationTest {
         // TurnTimer 가 하는 것과 똑같이, 그 테이블의 실행기를 거쳐 시간 초과 처리를 직접 건다.
         tableExecutor.call(TableId(tableId)) { expireTurnUseCase.expire(ExpireTurnCommand(tableId, toActSeatNo)) }
 
-        // 2) 헤즈업이 끝나 즉시 정산되고(HandSettler 가 무조건 next_hand_at 을 예약한다), 폴드한
-        //    사용자는 즉시 기립한다.
+        // 2) 헤즈업이 끝나 즉시 정산되고(HandSettler 가 후보가 있으면 무조건 카운트다운을 새로
+        //    건다), 폴드한 사용자는 즉시 기립한다.
         awaitNoHandInProgress(tableId)
         awaitStoodUp(folderUserId)
         assertThat(holdemTableRepository.findById(TableId(tableId))!!.occupiedSeats()).hasSize(1)
 
-        // 3) NextHandTimer 가 발화하지만 후보가 1명뿐이라 StartScheduledHandService 가 next_hand_at
-        //    을 지우고 조용히 끝난다 — 보고된 버그의 2단계.
-        awaitNextHandAtCleared(tableId)
+        // 3) NextHandTimer 가 발화하지만 후보가 1명뿐이라 StartScheduledHandService 가 조용히
+        //    끝난다 — 카운트다운은 이미 소진돼 남아 있지 않다.
+        awaitCountdownCancelled(tableId)
 
-        // 4) 기립했던 사용자가 다시 앉는다(HandStarter.rescheduleOnEntry 가 next_hand_at 을 다시
-        //    예약하고 HandBroadcastRequested 를 실어 NextHandTimer.scheduleAt 을 다시 걸어야 한다).
+        // 4) 기립했던 사용자가 다시 앉는다(HandStarter.rescheduleOnEntry 가 카운트다운을 다시
+        //    걸어야 한다).
         sitDown(folder.accessToken, tableId).andExpect(status().isAccepted)
         awaitSeated(folderUserId)
 
@@ -323,14 +323,14 @@ class NextHandTimerIntegrationTest {
         val (_, hostToken) = signUpAndLogin()
         val tableId = createTable(hostToken)
         val a = seatNewUserAt(tableId)
-        val b = seatNewUserAt(tableId) // 이 시점부터 600ms 카운트다운이 시작된다.
+        val b = seatNewUserAt(tableId) // 이 시점부터 카운트다운이 시작된다.
 
         // 카운트다운이 아직 발화하기 전에(핸드가 없는 상태에서만 기립 가능) a 를 기립시킨다.
         authDelete("/api/holdem/seat", a.accessToken).andExpect(status().isNoContent)
         awaitStoodUp(a.userId)
 
         // 후보가 1명(b)으로 줄어 rescheduleOnExit 가 카운트다운을 취소했어야 한다.
-        awaitNextHandAtCleared(tableId)
+        awaitCountdownCancelled(tableId)
         awaitNoHandInProgress(tableId, timeoutMs = 500)
 
         // 다음 사용자 c 가 앉아 후보를 다시 2명으로 만든다 — rescheduleOnEntry 가 새로 예약해야 한다.
@@ -338,5 +338,37 @@ class NextHandTimerIntegrationTest {
 
         awaitHandInProgress(tableId)
         assertThat(listOf(b.userId, c.userId)).isNotEmpty()
+    }
+
+    // ---- (d) 사용자 결정: 카운트다운 도중 새 참가자가 들어오면 리셋된다(이어지지 않는다) ----
+
+    @Test
+    fun `카운트다운 도중 세 번째 사용자가 앉으면 그 입장 시각부터 전체 지연만큼 다시 카운트다운된다`() {
+        val (_, hostToken) = signUpAndLogin()
+        val tableId = createTable(hostToken)
+        val a = seatNewUserAt(tableId)
+        val b = seatNewUserAt(tableId) // 이 시점부터 1500ms 카운트다운이 시작된다.
+
+        // 지연의 약 40% 가 지난 시점에 세 번째 사용자가 앉는다 — 아직 카운트다운이 끝나기 전이다.
+        Thread.sleep(600)
+        val beforeEntry = System.nanoTime()
+        val c = seatNewUserAt(tableId)
+
+        // 리셋됐다면 남은 시간은 거의 전체 지연(1500ms)에 가까워야 한다 — 리셋되지 않았다면
+        // 900ms 근처(1500 - 600)에 머물러 있을 것이다.
+        val remainingJustAfterEntry = nextHandTimer.remaining(TableId(tableId))
+            ?: error("착석 직후 카운트다운이 없다.\n${diagnose(tableId)}")
+        assertThat(remainingJustAfterEntry.toMillis()).isGreaterThan(1_200L)
+
+        // 원래(리셋 없었다면) 마감이었을 시각 + 여유를 살짝 지난 시점에도 아직 핸드가 시작되지
+        // 않아야 한다 — 리셋되지 않았다면 이 시점에 이미 시작돼 있을 것이다.
+        Thread.sleep(500) // beforeEntry 기준 약 900ms 경과 — 리셋 없었다면 마감을 이미 지났다
+        assertThat(handStore.find(TableId(tableId))).isNull()
+
+        // 리셋된 마감(= 세 번째 사용자 입장 + 전체 지연)에서는 정상적으로 시작된다.
+        awaitHandInProgress(tableId)
+        val elapsedFromEntryMs = (System.nanoTime() - beforeEntry) / 1_000_000
+        assertThat(elapsedFromEntryMs).isGreaterThan(1_200L) // 리셋되지 않았다면 900ms 근처에서 이미 시작됐을 것이다
+        assertThat(listOf(a.userId, b.userId, c.userId)).isNotEmpty()
     }
 }

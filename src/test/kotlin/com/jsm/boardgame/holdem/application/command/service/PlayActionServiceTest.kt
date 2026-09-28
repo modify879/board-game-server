@@ -5,6 +5,7 @@ import com.jsm.boardgame.holdem.application.exception.HandNotFoundException
 import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
 import com.jsm.boardgame.holdem.application.exception.UnknownActionException
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.exception.IllegalBettingActionException
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
@@ -15,10 +16,7 @@ import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
-import java.time.Clock
 import java.time.Duration
-import java.time.Instant
-import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -35,8 +33,7 @@ private class PlayActionFakeTableRepository : HoldemTableRepository {
 
     override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
-    override fun findAllPendingNextHandTableIds(): List<TableId> =
-        store.values.filter { it.nextHandAt != null }.mapNotNull { it.id }
+    override fun findAllTableIds(): List<TableId> = store.values.mapNotNull { it.id }
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: TableId(nextId++)
@@ -53,7 +50,6 @@ private class PlayActionFakeTableRepository : HoldemTableRepository {
             bigBlind = table.bigBlind,
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
-            nextHandAt = table.nextHandAt,
         )
 }
 
@@ -66,15 +62,19 @@ private class PlayActionFakeHandStore : HandStore {
     override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
 }
 
+private class PlayActionFakeNextHandCountdown : NextHandCountdown {
+    override fun restart(tableId: TableId) {}
+    override fun cancel(tableId: TableId) {}
+    override fun remaining(tableId: TableId): Duration? = null
+}
+
 class PlayActionServiceTest {
 
     private val tables = PlayActionFakeTableRepository()
     private val handStore = PlayActionFakeHandStore()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
-    private val clock: Clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
-    private val nextHandDelay: Duration = Duration.ofSeconds(5)
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, clock, nextHandDelay)
+    private val handSettler = HandSettler(tables, handStore, eventPublisher, PlayActionFakeNextHandCountdown())
     private val service = PlayActionService(tables, handStore, handSettler, eventPublisher)
 
     /** userId = seatNo * 1000 으로 대응시킨다. */

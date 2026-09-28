@@ -65,7 +65,7 @@ class AuthController(
                 HttpHeaders.SET_COOKIE,
                 refreshTokenCookie(tokens.refreshToken, Duration.between(Instant.now(clock), tokens.refreshTokenExpiresAt)).toString(),
             )
-            .body(TokenResponse.from(tokens))
+            .body(TokenResponse.from(tokens, clock))
 
     private fun refreshTokenCookie(value: String, maxAge: Duration): ResponseCookie =
         ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, value)
