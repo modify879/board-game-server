@@ -12,6 +12,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.security.oauth2.jwt.JwtDecoder
+import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver
 import org.springframework.security.web.AuthenticationEntryPoint
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.access.AccessDeniedHandler
@@ -45,6 +47,7 @@ class SecurityConfig {
         jwtAuthenticationConverter: Converter<Jwt, out AbstractAuthenticationToken>,
         authenticationEntryPoint: AuthenticationEntryPoint,
         accessDeniedHandler: AccessDeniedHandler,
+        bearerTokenResolver: BearerTokenResolver,
     ): SecurityFilterChain =
         http
             .csrf { it.disable() }
@@ -65,6 +68,7 @@ class SecurityConfig {
             }
             .oauth2ResourceServer {
                 it
+                    .bearerTokenResolver(bearerTokenResolver)
                     .jwt { jwt -> jwt.decoder(jwtDecoder).jwtAuthenticationConverter(jwtAuthenticationConverter) }
                     .authenticationEntryPoint(authenticationEntryPoint)
                     .accessDeniedHandler(accessDeniedHandler)
@@ -75,6 +79,25 @@ class SecurityConfig {
                     .accessDeniedHandler(accessDeniedHandler)
             }
             .build()
+
+    /**
+     * 로그인·토큰 갱신은 `permitAll` 이지만, 그건 인가 규칙일 뿐이다.
+     * `BearerTokenAuthenticationFilter` 는 인가와 무관하게 Authorization 헤더가 있으면 항상
+     * 검증부터 하므로, 클라이언트가 만료된 액세스 토큰을 그대로 붙여 보내면(흔한 케이스 —
+     * 갱신을 액세스 토큰 만료 후에 호출) permitAll 을 지나기도 전에 401 로 끝난다.
+     * 로그인·갱신은 리프레시 쿠키만으로 동작해야 하므로 이 두 경로에서는 헤더를 아예
+     * 못 본 척한다(`null` 반환 = 헤더 무시). 로그아웃을 포함한 그 외 모든 경로는
+     * `DefaultBearerTokenResolver` 로 그대로 위임한다 — 규칙 8 의 401/403 계약은 유지된다.
+     */
+    @Bean
+    fun bearerTokenResolver(): BearerTokenResolver {
+        val default = DefaultBearerTokenResolver()
+        return BearerTokenResolver { request ->
+            val ignoresBearer = request.method == "POST" &&
+                (request.requestURI == "/api/auth/login" || request.requestURI == "/api/auth/refresh")
+            if (ignoresBearer) null else default.resolve(request)
+        }
+    }
 
     @Bean
     fun passwordEncoder(): PasswordEncoder = BCryptPasswordEncoder()
