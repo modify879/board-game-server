@@ -4,6 +4,8 @@ import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
+import com.jsm.boardgame.user.infrastructure.security.config.JwtProperties
+import com.nimbusds.jose.jwk.source.ImmutableSecret
 import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -13,6 +15,11 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Import
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm
+import org.springframework.security.oauth2.jwt.JwsHeader
+import org.springframework.security.oauth2.jwt.JwtClaimsSet
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -20,7 +27,9 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import java.time.Instant
 import java.util.UUID
+import javax.crypto.spec.SecretKeySpec
 
 /**
  * `user` 컨텍스트 인증(로그인/토큰 갱신/로그아웃) API 통합 테스트.
@@ -39,6 +48,9 @@ class AuthApiIntegrationTest {
 
     @Autowired
     private lateinit var userRepository: UserRepository
+
+    @Autowired
+    private lateinit var jwtProperties: JwtProperties
 
     private fun uniqueUsername(): String =
         "u" + UUID.randomUUID().toString().replace("-", "").take(9).lowercase()
@@ -68,19 +80,41 @@ class AuthApiIntegrationTest {
     private fun idFromLocation(location: String): Long =
         location.substringAfterLast("/").toLong()
 
-    private fun login(username: String, password: String): ResultActions =
+    private fun login(username: String, password: String, bearerToken: String? = null): ResultActions =
         mockMvc.perform(
             post("/api/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""{"username":"$username","password":"$password"}"""),
+                .content("""{"username":"$username","password":"$password"}""")
+                .let { builder ->
+                    if (bearerToken != null) builder.header(HttpHeaders.AUTHORIZATION, "Bearer $bearerToken") else builder
+                },
         )
 
-    private fun refresh(refreshToken: String?): ResultActions =
+    private fun refresh(refreshToken: String?, bearerToken: String? = null): ResultActions =
         mockMvc.perform(
-            post("/api/auth/refresh").let { builder ->
-                if (refreshToken != null) builder.cookie(Cookie("refresh_token", refreshToken)) else builder
-            },
+            post("/api/auth/refresh")
+                .let { builder ->
+                    if (refreshToken != null) builder.cookie(Cookie("refresh_token", refreshToken)) else builder
+                }
+                .let { builder ->
+                    if (bearerToken != null) builder.header(HttpHeaders.AUTHORIZATION, "Bearer $bearerToken") else builder
+                },
         )
+
+    private fun expiredTokenFor(userId: Long): String {
+        val secretKey = SecretKeySpec(jwtProperties.secret.toByteArray(Charsets.UTF_8), "HmacSHA256")
+        val encoder = NimbusJwtEncoder(ImmutableSecret(secretKey))
+        val now = Instant.now()
+        val claims = JwtClaimsSet.builder()
+            .subject(userId.toString())
+            .claim("role", "USER")
+            .issuedAt(now.minusSeconds(120))
+            .expiresAt(now.minusSeconds(60))
+            .build()
+        return encoder.encode(
+            JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims),
+        ).tokenValue
+    }
 
     private fun logout(accessToken: String): ResultActions =
         mockMvc.perform(
@@ -407,5 +441,50 @@ class AuthApiIntegrationTest {
         assertThat(setCookie).contains("refresh_token=")
         assertThat(setCookie).contains("Path=/api/auth")
         assertThat(maxAgeOf(setCookie)).isZero()
+    }
+
+    @Test
+    fun `만료된 Bearer 헤더를 붙여도 리프레시 쿠키가 유효하면 200 과 새 토큰을 응답한다`() {
+        val username = uniqueUsername()
+        val password = "password123"
+        val signUpResult = signUp(signUpBody(username = username, password = password))
+            .andExpect(status().isCreated)
+        val id = idFromLocation(locationOf(signUpResult))
+
+        val loginResult = login(username, password).andExpect(status().isOk)
+        val oldAccessToken = accessTokenOf(loginResult)
+        val oldRefreshToken = refreshTokenOf(loginResult)
+        val expiredToken = expiredTokenFor(id)
+
+        val refreshResult = refresh(oldRefreshToken, bearerToken = expiredToken)
+            .andExpect(status().isOk)
+
+        assertThat(accessTokenOf(refreshResult)).isNotEqualTo(oldAccessToken)
+        assertThat(refreshTokenOf(refreshResult)).isNotEqualTo(oldRefreshToken)
+    }
+
+    @Test
+    fun `쓰레기 Bearer 헤더를 붙여도 로그인은 평소대로 동작한다`() {
+        val username = uniqueUsername()
+        val password = "password123"
+        signUp(signUpBody(username = username, password = password)).andExpect(status().isCreated)
+
+        login(username, password, bearerToken = "not-a-real-jwt")
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.accessToken").isNotEmpty)
+    }
+
+    @Test
+    fun `만료된 Bearer 헤더로 보호된 엔드포인트를 호출하면 여전히 401 AUTHENTICATION_REQUIRED 다`() {
+        val username = uniqueUsername()
+        val password = "password123"
+        val signUpResult = signUp(signUpBody(username = username, password = password))
+            .andExpect(status().isCreated)
+        val id = idFromLocation(locationOf(signUpResult))
+        val expiredToken = expiredTokenFor(id)
+
+        getProfile(id, expiredToken)
+            .andExpect(status().isUnauthorized)
+            .andExpect(jsonPath("$.errorCode").value("AUTHENTICATION_REQUIRED"))
     }
 }
