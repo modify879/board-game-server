@@ -119,6 +119,15 @@ class HandRecovery(
             return
         }
 
+        // 런아웃 중이면 남은 플레이어 결정이 없다 - 기다리면 질 쪽이 재접속을 안 해서 이미 공개된
+        // 올인을 무효로 만들 수 있을 뿐이다. 유예·감시 중단 없이 바로 재개한다. 안 돌아온 사람은
+        // ConnectionTimer 의 부팅 시딩(@Order(1))이 평소대로 연결 타이머를 건다(suspendWatch 를 안 했으므로).
+        if (hand.isRunningOut) {
+            log.info("테이블 {} 런아웃 중인 핸드라 재접속을 기다리지 않고 바로 재개합니다.", tableId.value)
+            tableExecutor.call(tableId) { resumeHandUseCase.resume(ResumeHandCommand(tableId.value)) }
+            return
+        }
+
         connectionTimer.suspendWatch(allUserIds)
 
         pending.remove(tableId)?.future?.cancel(false)

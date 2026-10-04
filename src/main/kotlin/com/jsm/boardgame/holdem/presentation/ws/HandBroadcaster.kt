@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
+import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -27,6 +28,7 @@ class HandBroadcaster(
     private val userRegistry: SimpUserRegistry,
     private val sequence: TableViewSequence,
     private val nextHandCountdown: NextHandCountdown,
+    private val lastHandResults: LastHandResultStore,
 ) {
 
     /**
@@ -50,9 +52,12 @@ class HandBroadcaster(
     }
 
     fun publish(tableId: TableId, table: HoldemTable, hand: Hand?, seq: Long) {
+        // 핸드가 없으면 직전 결과를 실어 라이브 클라이언트도 재구독자와 같은 보드·결과를 본다.
+        // afterCommit 이라 트랜잭션 밖이지만 어댑터의 단일 조회는 Spring Data 가 자기 읽기 트랜잭션을 연다.
+        val lastResult = if (hand == null) lastHandResults.find(tableId) else null
         messagingTemplate.convertAndSend(
             HoldemDestinations.publicTopicOf(tableId.value),
-            publicViewOf(tableId, table, hand, null, seq, nextHandCountdown.remaining(tableId)),
+            publicViewOf(tableId, table, hand, lastResult, seq, nextHandCountdown.remaining(tableId)),
         )
 
         hand ?: return

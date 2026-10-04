@@ -5,7 +5,9 @@ import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.TableId
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.core.task.TaskRejectedException
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
 import org.springframework.transaction.event.TransactionalEventListener
@@ -44,17 +46,39 @@ class RunoutTimer(
         scheduled.remove(event.tableId)?.future?.cancel(false)
 
         if (event.hand?.isRunningOut != true) return
-        val token = tokens.computeIfAbsent(event.tableId) { AtomicLong() }.incrementAndGet()
-        val future = taskScheduler.schedule(
-            { onStep(event.tableId, token) },
-            Instant.now(clock).plus(stepDelay),
-        )
-        scheduled[event.tableId] = ScheduledStep(future, token)
+        schedule(event.tableId)
+    }
+
+    // AFTER_COMMIT 리스너라 호출자에게 던지면 안 된다.
+    private fun schedule(tableId: TableId) {
+        val token = tokens.computeIfAbsent(tableId) { AtomicLong() }.incrementAndGet()
+        try {
+            val future = taskScheduler.schedule(
+                { onStep(tableId, token) },
+                Instant.now(clock).plus(stepDelay),
+            )
+            scheduled[tableId] = ScheduledStep(future, token)
+        } catch (e: TaskRejectedException) {
+            // 컨텍스트 종료 중에는 런아웃 걸음을 걸 이유가 없고, 이를 ERROR로 두면 진짜 ERROR가 묻힌다
+            log.debug("컨텍스트 종료 중이라 런아웃 진행 예약을 걸지 못했습니다: tableId={}", tableId.value)
+        }
     }
 
     // 낡은 발화는 AdvanceRunoutService 의 isRunningOut 가드가 한 번 더 막는다.
     private fun onStep(tableId: TableId, token: Long) {
         if (tokens[tableId]?.get() != token) return
-        tableExecutor.call(tableId) { advanceRunoutUseCase.advance(AdvanceRunoutCommand(tableId.value)) }
+        try {
+            tableExecutor.call(tableId) { advanceRunoutUseCase.advance(AdvanceRunoutCommand(tableId.value)) }
+        } catch (e: Exception) {
+            // 성공한 걸음은 자기 브로드캐스트가 다음 걸음을 거는데, 실패하면 그 이벤트가 없어 핸드가 영영
+            // 멈춘다(런아웃 중엔 아무도 액션할 수 없다). 같은 걸음을 다시 건다 — 재시도 횟수 제한은 없고,
+            // 낡은 발화가 겹쳐도 AdvanceRunoutService 의 가드가 무해하게 만든다.
+            log.error("런아웃 진행에 실패해 다시 예약합니다: tableId={}", tableId.value, e)
+            if (tokens[tableId]?.get() == token) schedule(tableId)
+        }
+    }
+
+    companion object {
+        private val log = LoggerFactory.getLogger(RunoutTimer::class.java)
     }
 }
