@@ -73,6 +73,7 @@ tasks.withType<Test> {
     // 되돌리던 값을 여기서 테스트 전역 기본값으로 준다(캐시 키에는 안 들어간다 — systemProperty
     // 지 @TestPropertySource 가 아니다). 컨텍스트 캐시 키를 하나 줄이는 효과도 있다.
     systemProperty("app.holdem.next-hand-delay", "1h")
+    systemProperty("app.holdem.runout-step-delay", "1h")
 }
 
 tasks.register<Test>("unitTest") {

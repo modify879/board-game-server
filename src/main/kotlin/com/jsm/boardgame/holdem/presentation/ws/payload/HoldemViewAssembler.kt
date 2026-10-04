@@ -55,6 +55,8 @@ fun publicViewOf(
         buttonSeatNo = table.buttonSeatNo,
         seats = seats,
         result = finished?.let(::handResultPublicViewOf),
+        revealedHands = hand?.revealedSeatNos?.sorted()
+            ?.map { RevealedHandView(it, hand.holeCardsOf(it).map { c -> c.toString() }) } ?: emptyList(),
         nextHandInMs = nextHandRemaining?.toMillis(),
         seq = seq,
     )

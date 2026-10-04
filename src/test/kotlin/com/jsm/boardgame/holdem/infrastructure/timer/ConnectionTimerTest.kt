@@ -170,7 +170,7 @@ class ConnectionTimerTest {
         table.sitDown(2000L, Chips.of(10_000))
         table.moveButtonToNextOccupiedSeat()
         val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
-        return Hand.start(
+        val hand = Hand.start(
             stacks = stacks,
             buttonSeatNo = table.buttonSeatNo!!,
             smallBlindSeatNo = table.buttonSeatNo,
@@ -179,6 +179,8 @@ class ConnectionTimerTest {
             bigBlind = table.bigBlind,
             shuffler = identityShuffler,
         )
+        while (hand.isRunningOut) hand.advanceRunout() // 올인은 런아웃을 거쳐야 끝난다
+        return hand
     }
 
     /** 8000 바이인에 핸드 스택만 100 으로 줘서 블라인드만으로 양쪽이 곧장 올인되게 만든다(기존 HoldemViewAssemblerTest 와 동일한 트릭). */
@@ -188,7 +190,7 @@ class ConnectionTimerTest {
         table.sitDown(2000L, Chips.of(8_000))
         table.moveButtonToNextOccupiedSeat()
         val stacks = mapOf(1 to Chips.of(100), 2 to Chips.of(100))
-        return Hand.start(
+        val hand = Hand.start(
             stacks = stacks,
             buttonSeatNo = table.buttonSeatNo!!,
             smallBlindSeatNo = table.buttonSeatNo,
@@ -197,6 +199,8 @@ class ConnectionTimerTest {
             bigBlind = table.bigBlind,
             shuffler = identityShuffler,
         )
+        while (hand.isRunningOut) hand.advanceRunout() // 올인은 런아웃을 거쳐야 끝난다
+        return hand
     }
 
     @Test

@@ -135,6 +135,7 @@ class HandSettlerTest {
         val stacks = mapOf(1 to Chips.of(200), 2 to Chips.of(200))
         val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), bustingShuffler)
         hand.act(1, BettingAction.Call)
+        while (hand.isRunningOut) hand.advanceRunout()
 
         settler.settle(tableId, table, hand)
 
@@ -155,6 +156,7 @@ class HandSettlerTest {
 
         // 좌석 1(버튼/SB)이 남은 스택을 콜해 둘 다 올인 — 액션 없이 쇼다운까지 진행된다.
         hand.act(1, BettingAction.Call)
+        while (hand.isRunningOut) hand.advanceRunout()
 
         settler.settle(tableId, table, hand)
 
@@ -247,6 +249,7 @@ class HandSettlerTest {
         val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), bustingShuffler)
         handStore.save(tableId, hand)
         hand.act(1, BettingAction.Call)
+        while (hand.isRunningOut) hand.advanceRunout()
 
         settler.settle(tableId, table, hand)
 

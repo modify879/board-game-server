@@ -122,7 +122,7 @@ class HoldemViewAssemblerTest {
     }
 
     @Test
-    fun `블라인드만으로 양쪽이 올인되면 공개 뷰에 ALL_IN 과 최종 보드가 담긴다`() {
+    fun `블라인드만으로 양쪽이 올인되면 런아웃 중이라 보드는 비어 있고 두 좌석의 패가 공개된다`() {
         val table = tableWithSeats(1 to 8_000L, 2 to 8_000L)
         table.moveButtonToNextOccupiedSeat()
         val hand = Hand.start(
@@ -135,12 +135,37 @@ class HoldemViewAssemblerTest {
             identityShuffler,
         )
 
-        assertTrue(hand.isFinished)
+        assertTrue(hand.isRunningOut)
         val view = publicViewOf(TableId(1), table, hand, null, 1L, null)
-        assertFalse(view.handInProgress)
+        assertTrue(view.handInProgress)
         assertNull(view.toActSeatNo)
         assertTrue(view.seats.all { it.status == "ALL_IN" })
-        assertEquals(5, view.board.size) // 리버까지 다 깔렸다
+        assertEquals(0, view.board.size)
+        assertEquals(listOf(1, 2), view.revealedHands.map { it.seatNo })
+        assertEquals(hand.holeCardsOf(1).map { it.toString() }, view.revealedHands[0].holeCards)
+
+        while (hand.isRunningOut) hand.advanceRunout()
+        val finishedView = publicViewOf(TableId(1), table, hand, null, 2L, null)
+        assertFalse(finishedView.handInProgress)
+        assertEquals(5, finishedView.board.size)
+        assertTrue(finishedView.revealedHands.isEmpty()) // 끝난 뒤에는 result.shownHands 만 카드를 싣는다
+    }
+
+    @Test
+    fun `런아웃이 아닌 진행 중 핸드의 공개 뷰는 revealedHands 가 비어 있다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        table.moveButtonToNextOccupiedSeat()
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
+            table.buttonSeatNo!!,
+            smallBlindSeatNo = 1,
+            bigBlindSeatNo = 2,
+            table.smallBlind,
+            table.bigBlind,
+            identityShuffler,
+        )
+
+        assertTrue(publicViewOf(TableId(1), table, hand, null, 1L, null).revealedHands.isEmpty())
     }
 
     @Test

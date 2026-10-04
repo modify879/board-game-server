@@ -186,7 +186,7 @@ class HandStarterTest {
     }
 
     @Test
-    fun `핸드가 시작 직후 끝나면 즉시 정산하고 핸드를 저장하지 않는다`() {
+    fun `블라인드만으로 전원 올인이면 정산하지 않고 런아웃 중인 핸드를 저장한다`() {
         val tableId = tableWithSeats(1 to 8_000L, 2 to 8_000L)
         val table = tables.findById(tableId)!!
         table.applyStacks(mapOf(1 to Chips.of(100), 2 to Chips.of(100)))
@@ -194,10 +194,9 @@ class HandStarterTest {
 
         start(tableId)
 
-        assertNull(handStore.find(tableId))
-        val savedTable = tables.findById(tableId)!!
-        val total = savedTable.seatAt(1)!!.stack + savedTable.seatAt(2)!!.stack
-        assertEquals(Chips.of(200), total)
+        val hand = handStore.find(tableId)!!
+        assertTrue(hand.isRunningOut)
+        assertEquals(0, hand.board.size)
     }
 
     @Test

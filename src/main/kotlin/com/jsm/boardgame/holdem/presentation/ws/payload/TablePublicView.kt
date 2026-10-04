@@ -3,11 +3,13 @@ package com.jsm.boardgame.holdem.presentation.ws.payload
 /**
  * 브로드캐스트 전용. 홀카드를 담을 필드가 아예 없다 — 이게 이 타입의 존재 이유다.
  * 여기에 카드 필드를 추가하지 마라. 추가하는 순간 규칙 6의 컴파일러 보장이 사라진다.
- * 유일한 예외는 [result] 의 [HandResultPublicView.shownHands] 다 — 핸드가 끝났고 쇼다운이 벌어졌을 때만,
+ * 예외는 정확히 둘이다. 하나는 [revealedHands] — 올인으로 더 베팅할 수 없어 런아웃 중일 때만(TDA),
+ * [com.jsm.boardgame.holdem.domain.model.Hand.revealedSeatNos] 로만 채워진다. 다른 하나는
+ * [result] 의 [HandResultPublicView.shownHands] 다 — 핸드가 끝났고 쇼다운이 벌어졌을 때만,
  * [com.jsm.boardgame.holdem.domain.model.HandResult.shownSeatNos] 로만 채워진다(재구독 스냅샷에서는 저장된
  * 직전 결과에서 오는데, 그것도 같은 `shownSeatNos` 로만 만든 것이다) — 쇼다운까지 간 좌석은
  * 전원 공개한다(사용자 결정, 머크 없음). 나열 순서만 TDA 17(마지막 라운드의 마지막 공격자부터, 없으면
- * 버튼 다음 좌석부터)을 따른다. 그 외 어떤 카드 성격의 필드도 이 파일에 추가하지 마라 — 추가하는
+ * 버튼 다음 좌석부터)을 따른다. 그 둘 외에 어떤 카드 성격의 필드도 이 파일에 추가하지 마라 — 추가하는
  * 순간 관전이 정보 유출이 된다.
  */
 data class TablePublicView(
@@ -20,6 +22,8 @@ data class TablePublicView(
     val buttonSeatNo: Int?,
     val seats: List<SeatPublicView>,
     val result: HandResultPublicView?,
+    /** 런아웃 중 공개된 패. 런아웃이 아니면 빈 리스트. */
+    val revealedHands: List<RevealedHandView>,
     /** 다음 핸드까지 남은 ms. 클라이언트는 받은 순간부터 자기 단조 시계로 센다 — 벽시계와
      *  비교하지 않는다. 카운트다운이 없으면(핸드 진행 중이거나 인원이 모자라면) null. */
     val nextHandInMs: Long?,
@@ -52,3 +56,6 @@ data class PayoutPublicView(val seatNo: Int, val amount: Long)
  * 만든다. 폴드한 좌석·폴드 승리·진행 중 핸드의 카드는 여기 오지 않는다.
  */
 data class ShownHandView(val seatNo: Int, val holeCards: List<String>, val category: String)
+
+/** 런아웃 중 공개된 좌석의 패 — [com.jsm.boardgame.holdem.domain.model.Hand.revealedSeatNos] 로만 만든다. */
+data class RevealedHandView(val seatNo: Int, val holeCards: List<String>)
