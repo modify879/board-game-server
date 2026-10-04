@@ -52,7 +52,7 @@ class HandBroadcaster(
     fun publish(tableId: TableId, table: HoldemTable, hand: Hand?, seq: Long) {
         messagingTemplate.convertAndSend(
             HoldemDestinations.publicTopicOf(tableId.value),
-            publicViewOf(tableId, table, hand, seq, nextHandCountdown.remaining(tableId)),
+            publicViewOf(tableId, table, hand, null, seq, nextHandCountdown.remaining(tableId)),
         )
 
         hand ?: return

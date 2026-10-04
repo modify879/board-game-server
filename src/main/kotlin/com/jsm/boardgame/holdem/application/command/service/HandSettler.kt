@@ -3,6 +3,8 @@ package com.jsm.boardgame.holdem.application.command.service
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.LastHandResult
+import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -39,6 +41,7 @@ import org.springframework.stereotype.Component
 class HandSettler(
     private val tables: HoldemTableRepository,
     private val handStore: HandStore,
+    private val lastHandResults: LastHandResultStore,
     private val eventPublisher: ApplicationEventPublisher,
     private val countdown: NextHandCountdown,
 ) {
@@ -61,6 +64,7 @@ class HandSettler(
         }
 
         handStore.remove(tableId)
+        lastHandResults.save(tableId, LastHandResult.of(hand))
 
         if (table.candidateSeatNos().size >= 2) {
             countdown.restart(tableId)

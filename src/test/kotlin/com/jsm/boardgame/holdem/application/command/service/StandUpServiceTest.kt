@@ -4,6 +4,8 @@ import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.LastHandResult
+import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
@@ -94,8 +96,8 @@ class StandUpServiceTest {
     private val walletTransfer = StandUpFakeWalletTransfer()
     private val eventPublisher = StandUpFakeEventPublisher()
     private val countdown = StandUpFakeNextHandCountdown()
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, countdown)
-    private val handStarter = HandStarter(tables, handStore, Shuffler { it }, handSettler, eventPublisher, countdown)
+    private val handSettler = HandSettler(tables, handStore, StandUpServiceFakeLastHandResultStore(), eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, StandUpServiceFakeLastHandResultStore(), Shuffler { it }, handSettler, eventPublisher, countdown)
     private val service = StandUpService(tables, handStore, walletTransfer, handStarter, eventPublisher)
 
     @Test
@@ -183,4 +185,11 @@ class StandUpServiceTest {
         assertTrue(countdown.cancelled.isEmpty())
         assertTrue(countdown.restarted.isEmpty())
     }
+}
+
+private class StandUpServiceFakeLastHandResultStore : LastHandResultStore {
+    val store = mutableMapOf<Long, LastHandResult>()
+    override fun find(tableId: TableId): LastHandResult? = store[tableId.value]
+    override fun save(tableId: TableId, result: LastHandResult) { store[tableId.value] = result }
+    override fun remove(tableId: TableId) { store.remove(tableId.value) }
 }

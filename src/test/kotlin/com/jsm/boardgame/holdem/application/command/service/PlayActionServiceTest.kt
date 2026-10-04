@@ -5,6 +5,8 @@ import com.jsm.boardgame.holdem.application.exception.HandNotFoundException
 import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
 import com.jsm.boardgame.holdem.application.exception.UnknownActionException
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.LastHandResult
+import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.exception.IllegalBettingActionException
@@ -74,7 +76,7 @@ class PlayActionServiceTest {
     private val handStore = PlayActionFakeHandStore()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, PlayActionFakeNextHandCountdown())
+    private val handSettler = HandSettler(tables, handStore, PlayActionServiceFakeLastHandResultStore(), eventPublisher, PlayActionFakeNextHandCountdown())
     private val service = PlayActionService(tables, handStore, handSettler, eventPublisher)
 
     /** userId = seatNo * 1000 으로 대응시킨다. */
@@ -209,4 +211,11 @@ class PlayActionServiceTest {
         assertEquals(Chips.of(20_000), total)
         assertEquals(Chips.of(10_000), savedTable.seatAt(3)!!.stack)
     }
+}
+
+private class PlayActionServiceFakeLastHandResultStore : LastHandResultStore {
+    val store = mutableMapOf<Long, LastHandResult>()
+    override fun find(tableId: TableId): LastHandResult? = store[tableId.value]
+    override fun save(tableId: TableId, result: LastHandResult) { store[tableId.value] = result }
+    override fun remove(tableId: TableId) { store.remove(tableId.value) }
 }

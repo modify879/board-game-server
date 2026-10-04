@@ -3,6 +3,8 @@ package com.jsm.boardgame.holdem.application.command.service
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestCommand
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestResult
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.LastHandResult
+import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
@@ -98,8 +100,8 @@ class AdmitJoinRequestServiceTest {
     private val eventPublisher = ApplicationEventPublisher { }
     private val walletTransfer = AdmitJoinRequestFakeWalletTransfer()
     private val countdown = AdmitJoinRequestFakeNextHandCountdown()
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, countdown)
-    private val handStarter = HandStarter(tables, handStore, identityShuffler, handSettler, eventPublisher, countdown)
+    private val handSettler = HandSettler(tables, handStore, AdmitJoinRequestServiceFakeLastHandResultStore(), eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, AdmitJoinRequestServiceFakeLastHandResultStore(), identityShuffler, handSettler, eventPublisher, countdown)
     private val service = AdmitJoinRequestService(tables, handStore, walletTransfer, handStarter)
 
     /** 특정 좌석 번호에 특정 버이인으로 미리 앉혀 둔다 — sitDown 이 더 이상 좌석을 고르지 않으므로
@@ -198,4 +200,11 @@ class AdmitJoinRequestServiceTest {
         assertEquals(AdmitJoinRequestResult.Blocked, result)
         assertTrue(walletTransfer.toGameCalls.isEmpty())
     }
+}
+
+private class AdmitJoinRequestServiceFakeLastHandResultStore : LastHandResultStore {
+    val store = mutableMapOf<Long, LastHandResult>()
+    override fun find(tableId: TableId): LastHandResult? = store[tableId.value]
+    override fun save(tableId: TableId, result: LastHandResult) { store[tableId.value] = result }
+    override fun remove(tableId: TableId) { store.remove(tableId.value) }
 }

@@ -1,6 +1,8 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.LastHandResult
+import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -73,11 +75,12 @@ class HandStarterTest {
 
     private val tables = HandStarterFakeTableRepository()
     private val handStore = HandStarterFakeHandStore()
+    private val lastHandResults = HandStarterFakeLastHandResultStore()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
     private val countdown = HandStarterFakeNextHandCountdown()
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, countdown)
-    private val handStarter = HandStarter(tables, handStore, identityShuffler, handSettler, eventPublisher, countdown)
+    private val handSettler = HandSettler(tables, handStore, lastHandResults, eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, lastHandResults, identityShuffler, handSettler, eventPublisher, countdown)
 
     private fun start(tableId: TableId) {
         val table = tables.findById(tableId)!!
@@ -99,6 +102,16 @@ class HandStarterTest {
         val table = tables.findById(tableId)!!
         table.sitDown(userId = seatNo.toLong(), buyIn = Chips.of(buyIn), postBlindImmediately = postBlindImmediately)
         tables.save(table)
+    }
+
+    @Test
+    fun `새 핸드가 시작되면 직전 핸드 결과를 지운다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        lastHandResults.save(tableId, LastHandResult(emptyList(), emptyList(), emptyList()))
+
+        start(tableId)
+
+        assertNull(lastHandResults.find(tableId))
     }
 
     @Test
@@ -504,4 +517,11 @@ class HandStarterTest {
         assertEquals(Chips.of(10_000) - HoldemTable.BIG_BLIND, hand.stackOf(2))
         assertFalse(tables.findById(tableId)!!.seatAt(2)!!.owesImmediatePost)
     }
+}
+
+private class HandStarterFakeLastHandResultStore : LastHandResultStore {
+    val store = mutableMapOf<Long, LastHandResult>()
+    override fun find(tableId: TableId): LastHandResult? = store[tableId.value]
+    override fun save(tableId: TableId, result: LastHandResult) { store[tableId.value] = result }
+    override fun remove(tableId: TableId) { store.remove(tableId.value) }
 }
