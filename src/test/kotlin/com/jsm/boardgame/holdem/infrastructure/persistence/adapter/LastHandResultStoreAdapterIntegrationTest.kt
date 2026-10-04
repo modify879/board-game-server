@@ -27,8 +27,8 @@ class LastHandResultStoreAdapterIntegrationTest {
 
     private fun result(amount: Long) = LastHandResult(
         board = listOf("As", "Kd", "7c", "2h", "9s"),
-        payouts = listOf(LastHandResult.Payout(2, amount)),
-        shownHands = listOf(LastHandResult.ShownHand(2, listOf("Ah", "Ad"), "THREE_OF_A_KIND")),
+        payouts = listOf(LastHandResult.Payout(2, 2000L, amount)),
+        shownHands = listOf(LastHandResult.ShownHand(2, 2000L, listOf("Ah", "Ad"), "THREE_OF_A_KIND")),
     )
 
     @Test

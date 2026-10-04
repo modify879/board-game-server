@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
@@ -124,7 +125,7 @@ class HandSettlerTest {
 
         val saved = lastHandResults.find(tableId)
         assertNotNull(saved)
-        assertEquals(listOf(LastHandResult.Payout(2, 300)), saved.payouts)
+        assertEquals(listOf(LastHandResult.Payout(2, 2000L, 300)), saved.payouts)
         assertEquals(emptyList(), saved.shownHands)
     }
 
@@ -144,6 +145,25 @@ class HandSettlerTest {
         assertEquals(setOf(1, 2), saved.shownHands.map { it.seatNo }.toSet())
         assertEquals(hand.holeCardsOf(1).map { it.toString() }, saved.shownHands.first { it.seatNo == 1 }.holeCards)
         assertEquals(400L, saved.payouts.sumOf { it.amount })
+    }
+
+    @Test
+    fun `파산해 자동 기립한 좌석의 userId 도 직전 결과와 이벤트에 기록된다`() {
+        val table = seatedTable(1 to 200L, 2 to 200L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(200), 2 to Chips.of(200))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), bustingShuffler)
+        hand.act(1, BettingAction.Call)
+        while (hand.isRunningOut) hand.advanceRunout()
+
+        settler.settle(tableId, table, hand)
+
+        assertNull(tables.findById(tableId)!!.seatAt(2)) // 좌석 2 는 기립했다
+        val saved = lastHandResults.find(tableId)!!
+        assertEquals(setOf(1000L, 2000L), saved.shownHands.map { it.userId }.toSet())
+        assertEquals(listOf(LastHandResult.Payout(1, 1000L, 400)), saved.payouts)
+        val event = eventPublisher.events.filterIsInstance<HandBroadcastRequested>().single()
+        assertEquals(saved, event.lastResult)
     }
 
     @Test

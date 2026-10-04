@@ -13,7 +13,9 @@ import org.springframework.transaction.annotation.Transactional
 
 /**
  * 재시작 복구가 전원 재접속에 실패했을 때 진행 중 핸드를 무른다. 호출자는 사용자가 아니라
- * `HandRecovery` 뿐이다.
+ * `HandRecovery`(전원 재접속 실패)와 `RunoutTimer`(런아웃 걸음이 반복 실패)뿐이다. 후자는 서버 버그라
+ * 사용자가 일으킬 수 없다 — 재접속 여부로 환불을 유발할 수 있는 경로를 `HandRecovery` 가 일부러
+ * 피하는 것과 다르다.
  *
  * 되돌리는 값은 `HandSnapshot.startingStacks` 다 - 핸드 도중 오간 칩은 애초에 `HoldemTable` 의
  * 좌석 스택에 반영되지 않는다(정산은 항상 [HandSettler.settle] 을 거쳐야 좌석에 반영된다). 그래서

@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
+import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.Hand
@@ -46,15 +47,16 @@ class HandBroadcaster(
         val seq = sequence.next(event.tableId)
         TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
             override fun afterCommit() {
-                publish(event.tableId, event.table, event.hand, seq)
+                publish(event.tableId, event.table, event.hand, event.lastResult, seq)
             }
         })
     }
 
-    fun publish(tableId: TableId, table: HoldemTable, hand: Hand?, seq: Long) {
-        // 핸드가 없으면 직전 결과를 실어 라이브 클라이언트도 재구독자와 같은 보드·결과를 본다.
+    fun publish(tableId: TableId, table: HoldemTable, hand: Hand?, eventLastResult: LastHandResult?, seq: Long) {
+        // 핸드가 없으면 직전 결과를 실어 라이브 클라이언트도 재구독자와 같은 보드·결과를 본다. 핸드가 있으면
+        // 이벤트가 실어 온 값(방금 끝난 핸드만 있다)을 그대로 쓴다 — 다시 유도하지 않는다.
         // afterCommit 이라 트랜잭션 밖이지만 어댑터의 단일 조회는 Spring Data 가 자기 읽기 트랜잭션을 연다.
-        val lastResult = if (hand == null) lastHandResults.find(tableId) else null
+        val lastResult = if (hand == null) lastHandResults.find(tableId) else eventLastResult
         messagingTemplate.convertAndSend(
             HoldemDestinations.publicTopicOf(tableId.value),
             publicViewOf(tableId, table, hand, lastResult, seq, nextHandCountdown.remaining(tableId)),

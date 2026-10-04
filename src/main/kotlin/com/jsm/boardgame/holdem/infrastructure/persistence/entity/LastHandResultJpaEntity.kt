@@ -51,18 +51,18 @@ data class LastHandResultJson(
     val payouts: List<PayoutJson>,
     val shownHands: List<ShownHandJson>,
 ) {
-    data class PayoutJson(val seatNo: Int, val amount: Long)
-    data class ShownHandJson(val seatNo: Int, val holeCards: List<String>, val category: String)
+    data class PayoutJson(val seatNo: Int, val userId: Long, val amount: Long)
+    data class ShownHandJson(val seatNo: Int, val userId: Long, val holeCards: List<String>, val category: String)
 }
 
 fun LastHandResult.toJson() = LastHandResultJson(
     board,
-    payouts.map { LastHandResultJson.PayoutJson(it.seatNo, it.amount) },
-    shownHands.map { LastHandResultJson.ShownHandJson(it.seatNo, it.holeCards, it.category) },
+    payouts.map { LastHandResultJson.PayoutJson(it.seatNo, it.userId, it.amount) },
+    shownHands.map { LastHandResultJson.ShownHandJson(it.seatNo, it.userId, it.holeCards, it.category) },
 )
 
 fun LastHandResultJson.toResult() = LastHandResult(
     board,
-    payouts.map { LastHandResult.Payout(it.seatNo, it.amount) },
-    shownHands.map { LastHandResult.ShownHand(it.seatNo, it.holeCards, it.category) },
+    payouts.map { LastHandResult.Payout(it.seatNo, it.userId, it.amount) },
+    shownHands.map { LastHandResult.ShownHand(it.seatNo, it.userId, it.holeCards, it.category) },
 )

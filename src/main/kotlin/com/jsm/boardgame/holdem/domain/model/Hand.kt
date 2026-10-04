@@ -80,9 +80,12 @@ class Hand private constructor(
 
     /**
      * 더 베팅할 수 없어 남은 보드를 한 스트리트씩 진행하는 중 — 라운드도 결과도 없는 상태다.
-     * 저장되는 핸드는 끝난 핸드가 아니므로 스냅샷의 `currentRound == null` 이 곧 이 상태다(따로 저장하지 않는다).
+     * `currentRound == null && result == null` 로 추론하지 않고 명시 플래그로 둔다 — 추론하면 라운드도
+     * 결과도 없는 어떤 손상·구버전 상태든 홀카드를 공개하게 된다(fail-open). 스냅샷에 담기며,
+     * 없는 예전 행은 false 로 읽혀 공개하지 않는다.
      */
-    val isRunningOut: Boolean get() = currentRound == null && result == null
+    var isRunningOut: Boolean = false
+        private set
 
     /**
      * 런아웃 중 공개되는 좌석(TDA: 올인으로 액션이 끝나면 패를 모두 펼친다). 공개 뷰가 홀카드를
@@ -134,6 +137,7 @@ class Hand private constructor(
         statuses = statuses.toMap(),
         totalContributed = totalContributed.toMap(),
         currentRound = currentRound?.snapshot(),
+        runningOut = isRunningOut,
         showdownLeaderSeatNo = showdownLeaderSeatNo,
     )
 
@@ -181,7 +185,12 @@ class Hand private constructor(
         // advanceRunout 이 한 스트리트씩 진행한다. 보드가 다 깔렸으면 바로 쇼다운한다.
         val activeCount = statuses.values.count { it == SeatStatus.ACTIVE }
         if (activeCount <= 1) {
-            if (boardCards.size == 5) finishShowdown() else currentRound = null
+            if (boardCards.size == 5) {
+                finishShowdown()
+            } else {
+                currentRound = null
+                isRunningOut = true
+            }
             return
         }
 
@@ -243,6 +252,7 @@ class Hand private constructor(
         }
         result = handResult
         currentRound = null
+        isRunningOut = false
     }
 
     /** 버튼 다음 참가 좌석부터 시계 방향으로 좌석 번호 오름차순 순환 — 팟 분배 시 나머지 칩을 돌리는 순서. */
@@ -352,7 +362,7 @@ class Hand private constructor(
 
         /**
          * 영속 복원 전용 — 검증하지 않는다(매퍼 규약: `reconstitute()` 는 검증하지 않는다).
-         * 진행 중인 핸드만 대상이다(라운드가 열려 있거나, `currentRound == null` 인 런아웃 중) —
+         * 진행 중인 핸드만 대상이다(라운드가 열려 있거나, [HandSnapshot.runningOut] 인 런아웃 중) —
          * 이미 끝난 핸드는 정산이 끝나 복구할 상태가 없어 애초에 저장 대상이 아니다.
          * 덱은 스냅샷에 없다 — 이미 딜된 카드(홀카드+보드)를 뺀 나머지를 [shuffler] 로 새로 섞어
          * 다시 만든다. 아직 아무도 본 적 없는 카드라 어떤 순열이든 통계적으로 동일하다.
@@ -390,6 +400,7 @@ class Hand private constructor(
             hand.street = snapshot.street
             hand.boardCards.addAll(snapshot.board)
             hand.showdownLeaderSeatNo = snapshot.showdownLeaderSeatNo
+            hand.isRunningOut = snapshot.runningOut
             return hand
         }
     }

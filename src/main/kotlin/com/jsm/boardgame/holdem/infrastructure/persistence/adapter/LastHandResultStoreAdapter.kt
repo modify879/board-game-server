@@ -34,8 +34,6 @@ class LastHandResultStoreAdapter(
     }
 
     override fun remove(tableId: TableId) {
-        val entity = jpa.findById(tableId.value).orElse(null) ?: return
-        jpa.delete(entity)
-        jpa.flush()
+        jpa.deleteById(tableId.value)
     }
 }

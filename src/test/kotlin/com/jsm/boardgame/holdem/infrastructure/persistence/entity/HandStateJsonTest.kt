@@ -6,7 +6,9 @@ import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import tools.jackson.databind.json.JsonMapper
 import tools.jackson.module.kotlin.KotlinModule
 
@@ -36,6 +38,27 @@ class HandStateJsonTest {
         assertEquals(json, restored)
         assertEquals(1, restored.showdownLeaderSeatNo)
         assertEquals(1, restored.currentRound!!.lastAggressorSeatNo)
+    }
+
+    @Test
+    fun `런아웃 중 스냅샷은 JSON 왕복에서 runningOut 이 보존된다`() {
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(1_000), 2 to Chips.of(1_000)),
+            buttonSeatNo = 1,
+            smallBlindSeatNo = 1,
+            bigBlindSeatNo = 2,
+            smallBlind = Chips.of(100),
+            bigBlind = Chips.of(200),
+            shuffler = identityShuffler,
+        )
+        hand.act(1, BettingAction.RaiseTo(Chips.of(1_000)))
+        hand.act(2, BettingAction.Call)
+
+        val json = hand.snapshot().toJson()
+        val restored = objectMapper.readValue(objectMapper.writeValueAsString(json), HandStateJson::class.java)
+
+        assertTrue(restored.runningOut)
+        assertEquals(hand.snapshot(), restored.toSnapshot())
     }
 
     @Test
@@ -71,5 +94,6 @@ class HandStateJsonTest {
 
         assertNull(restored.showdownLeaderSeatNo)
         assertNull(restored.currentRound!!.lastAggressorSeatNo)
+        assertFalse(restored.runningOut)
     }
 }

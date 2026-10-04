@@ -294,6 +294,31 @@ class HandTest {
         assertEquals(chips(3_000), sumStacks(listOf(1, 2, 3), restored))
     }
 
+    @Test
+    fun `라운드도 결과도 없지만 런아웃 플래그가 꺼진 스냅샷은 패를 공개하지 않고 베팅은 HAND_ALREADY_FINISHED 다`() {
+        val snapshot = preflopAllIn().snapshot()
+        assertTrue(snapshot.runningOut)
+
+        val restored = Hand.reconstitute(snapshot.copy(runningOut = false), identityShuffler)
+
+        assertFalse(restored.isRunningOut)
+        assertEquals(emptySet(), restored.revealedSeatNos)
+        val e = assertFailsWith<IllegalHandStateException> { restored.act(1, BettingAction.Check) }
+        assertEquals(HoldemErrorCode.HAND_ALREADY_FINISHED, e.errorCode)
+    }
+
+    @Test
+    fun `런아웃 플래그는 스냅샷 왕복에서 보존되고 쇼다운이 끝나면 내려간다`() {
+        val hand = preflopAllIn()
+
+        val snapshot = hand.snapshot()
+        assertTrue(snapshot.runningOut)
+        assertEquals(snapshot, Hand.reconstitute(snapshot, identityShuffler).snapshot())
+
+        while (hand.isRunningOut) hand.advanceRunout()
+        assertFalse(hand.snapshot().runningOut)
+    }
+
     private fun preflopAllIn(): Hand {
         val hand = Hand.start(stacksOf(1 to 1_000, 2 to 1_000, 3 to 1_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
         hand.act(1, BettingAction.RaiseTo(chips(1_000)))

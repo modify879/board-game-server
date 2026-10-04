@@ -2,6 +2,8 @@ package com.jsm.boardgame.holdem.infrastructure.timer
 
 import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutCommand
 import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutUseCase
+import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
+import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.BettingAction
@@ -79,6 +81,15 @@ private class RunoutTimerFakeAdvanceRunoutUseCase : AdvanceRunoutUseCase {
     }
 }
 
+private class RunoutTimerFakeCancelHandUseCase : CancelHandUseCase {
+    val calls = mutableListOf<CancelHandCommand>()
+    var fail = false
+    override fun cancel(command: CancelHandCommand) {
+        calls += command
+        if (fail) throw IllegalStateException("db down")
+    }
+}
+
 /** 그 테이블 스레드에서 바로 실행한 것처럼 인라인으로 돈다. */
 private class RunoutTimerFakeTableExecutor : TableExecutor {
     override fun <T> call(tableId: TableId, task: () -> T): T = task()
@@ -92,7 +103,8 @@ class RunoutTimerTest {
     private val stepDelay = Duration.ofSeconds(2)
     private val scheduler = RunoutTimerFakeTaskScheduler()
     private val useCase = RunoutTimerFakeAdvanceRunoutUseCase()
-    private val timer = RunoutTimer(scheduler, clock, useCase, RunoutTimerFakeTableExecutor(), stepDelay)
+    private val cancelUseCase = RunoutTimerFakeCancelHandUseCase()
+    private val timer = RunoutTimer(scheduler, clock, useCase, cancelUseCase, RunoutTimerFakeTableExecutor(), stepDelay)
     private val tableId = TableId(1L)
 
     private fun hand(allIn: Boolean): Hand {
@@ -166,6 +178,69 @@ class RunoutTimerTest {
         scheduler.scheduledCalls[0].task.run()
 
         assertEquals(1, useCase.calls.size)
+        assertEquals(1, scheduler.scheduledCalls.size)
+    }
+
+    @Test
+    fun `연속 실패하면 stepDelay 의 지수 백오프로 다시 예약한다`() {
+        useCase.failures = 4
+        timer.onHandBroadcastRequested(event(hand(allIn = true)))
+
+        repeat(4) { scheduler.scheduledCalls[it].task.run() }
+
+        assertEquals(
+            listOf(2L, 4L, 8L, 16L).map { fixedInstant.plusSeconds(it) },
+            scheduler.scheduledCalls.drop(1).map { it.time },
+        )
+        assertEquals(0, cancelUseCase.calls.size)
+    }
+
+    @Test
+    fun `다섯 번째 연속 실패에서는 다시 예약하지 않고 핸드를 취소해 환불한다`() {
+        useCase.failures = 5
+        timer.onHandBroadcastRequested(event(hand(allIn = true)))
+
+        repeat(5) { scheduler.scheduledCalls[it].task.run() }
+
+        assertEquals(5, scheduler.scheduledCalls.size)
+        assertEquals(listOf(tableId.value), cancelUseCase.calls.map { it.tableId })
+    }
+
+    @Test
+    fun `취소마저 실패하면 더 재시도하지 않고 멈춘다`() {
+        cancelUseCase.fail = true
+        useCase.failures = 5
+        timer.onHandBroadcastRequested(event(hand(allIn = true)))
+
+        repeat(5) { scheduler.scheduledCalls[it].task.run() }
+
+        assertEquals(1, cancelUseCase.calls.size)
+        assertEquals(5, scheduler.scheduledCalls.size)
+    }
+
+    @Test
+    fun `새 이벤트가 오면 실패 횟수가 0 으로 돌아간다`() {
+        useCase.failures = 4
+        timer.onHandBroadcastRequested(event(hand(allIn = true)))
+        repeat(4) { scheduler.scheduledCalls[it].task.run() } // 4번 실패
+
+        timer.onHandBroadcastRequested(event(hand(allIn = true)))
+        useCase.failures = 1
+        scheduler.scheduledCalls.last().task.run() // 새 카운트의 첫 실패
+
+        assertEquals(0, cancelUseCase.calls.size)
+        assertEquals(fixedInstant.plusSeconds(2), scheduler.scheduledCalls.last().time) // 백오프가 처음부터다
+    }
+
+    @Test
+    fun `런아웃이 아닌 이벤트도 토큰을 올려 대기 중이던 걸음을 무효로 한다`() {
+        timer.onHandBroadcastRequested(event(hand(allIn = true)))
+        val pending = scheduler.scheduledCalls[0]
+
+        timer.onHandBroadcastRequested(event(null))
+        pending.task.run()
+
+        assertEquals(0, useCase.calls.size)
         assertEquals(1, scheduler.scheduledCalls.size)
     }
 }

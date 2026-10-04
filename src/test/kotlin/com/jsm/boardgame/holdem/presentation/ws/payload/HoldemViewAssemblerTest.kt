@@ -36,6 +36,9 @@ private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): HoldemTable {
     return table
 }
 
+/** [tableWithSeats] 가 앉힌 사용자 id(좌석 번호 * 100)로 만든 끝난 핸드의 결과. */
+private fun lastOf(hand: Hand): LastHandResult = LastHandResult.of(hand, hand.seatNos.associateWith { it * 100L })
+
 class HoldemViewAssemblerTest {
 
     @Test
@@ -145,7 +148,7 @@ class HoldemViewAssemblerTest {
         assertEquals(hand.holeCardsOf(1).map { it.toString() }, view.revealedHands[0].holeCards)
 
         while (hand.isRunningOut) hand.advanceRunout()
-        val finishedView = publicViewOf(TableId(1), table, hand, null, 2L, null)
+        val finishedView = publicViewOf(TableId(1), table, hand, lastOf(hand), 2L, null)
         assertFalse(finishedView.handInProgress)
         assertEquals(5, finishedView.board.size)
         assertTrue(finishedView.revealedHands.isEmpty()) // 끝난 뒤에는 result.shownHands 만 카드를 싣는다
@@ -185,10 +188,10 @@ class HoldemViewAssemblerTest {
 
         hand.act(hand.toActSeatNo!!, BettingAction.Fold)
 
-        val view = publicViewOf(TableId(1), table, hand, null, 1L, null)
+        val view = publicViewOf(TableId(1), table, hand, lastOf(hand), 1L, null)
 
         val result = view.result!!
-        assertEquals(listOf(PayoutPublicView(seatNo = 2, amount = 300)), result.payouts)
+        assertEquals(listOf(PayoutPublicView(seatNo = 2, userId = 200L, amount = 300)), result.payouts)
         assertEquals(emptyList(), result.shownHands)
 
         val json = objectMapper.writeValueAsString(view)
@@ -223,13 +226,13 @@ class HoldemViewAssemblerTest {
         hand.act(2, BettingAction.Call) // B가 콜 -> 쇼다운
 
         assertEquals(1, hand.showdownLeaderSeatNo)
-        val view = publicViewOf(TableId(1), table, hand, null, 1L, null)
+        val view = publicViewOf(TableId(1), table, hand, lastOf(hand), 1L, null)
 
         val result = view.result!!
         assertEquals(
             listOf(
-                ShownHandView(seatNo = 1, holeCards = listOf("Kh", "Kd"), category = "PAIR"),
-                ShownHandView(seatNo = 2, holeCards = listOf("Ah", "Ad"), category = "PAIR"),
+                ShownHandView(seatNo = 1, userId = 100L, holeCards = listOf("Kh", "Kd"), category = "PAIR"),
+                ShownHandView(seatNo = 2, userId = 200L, holeCards = listOf("Ah", "Ad"), category = "PAIR"),
             ),
             result.shownHands,
         )
@@ -261,14 +264,14 @@ class HoldemViewAssemblerTest {
         hand.act(2, BettingAction.Call)
 
         assertEquals(1, hand.showdownLeaderSeatNo)
-        val view = publicViewOf(TableId(1), table, hand, null, 1L, null)
+        val view = publicViewOf(TableId(1), table, hand, lastOf(hand), 1L, null)
         val json = objectMapper.writeValueAsString(view)
 
         val result = view.result!!
         assertEquals(
             listOf(
-                ShownHandView(seatNo = 1, holeCards = listOf("Ah", "Ad"), category = "PAIR"),
-                ShownHandView(seatNo = 2, holeCards = listOf("Kh", "Kd"), category = "PAIR"),
+                ShownHandView(seatNo = 1, userId = 100L, holeCards = listOf("Ah", "Ad"), category = "PAIR"),
+                ShownHandView(seatNo = 2, userId = 200L, holeCards = listOf("Kh", "Kd"), category = "PAIR"),
             ),
             result.shownHands,
         )
@@ -300,14 +303,14 @@ class HoldemViewAssemblerTest {
         }
 
         assertNull(hand.showdownLeaderSeatNo) // 리버에 벳/레이즈가 없었다
-        val view = publicViewOf(TableId(1), table, hand, null, 1L, null)
+        val view = publicViewOf(TableId(1), table, hand, lastOf(hand), 1L, null)
 
         val result = view.result!!
         // 버튼(1) 다음 좌석(2, BB)부터 공개 — KK 인 2가 먼저 보여주고 나면, AA 인 1이 이겨서 뒤이어 보여준다.
         assertEquals(
             listOf(
-                ShownHandView(seatNo = 2, holeCards = listOf("Kh", "Kd"), category = "PAIR"),
-                ShownHandView(seatNo = 1, holeCards = listOf("Ah", "Ad"), category = "PAIR"),
+                ShownHandView(seatNo = 2, userId = 200L, holeCards = listOf("Kh", "Kd"), category = "PAIR"),
+                ShownHandView(seatNo = 1, userId = 100L, holeCards = listOf("Ah", "Ad"), category = "PAIR"),
             ),
             result.shownHands,
         )
@@ -338,15 +341,15 @@ class HoldemViewAssemblerTest {
         }
 
         assertNull(hand.showdownLeaderSeatNo)
-        val view = publicViewOf(TableId(1), table, hand, null, 1L, null)
+        val view = publicViewOf(TableId(1), table, hand, lastOf(hand), 1L, null)
 
         val result = view.result!!
         // 버튼(1) 다음부터: 2(JJ, 약한 패, 먼저 공개) -> 3(QQ, JJ를 이겨 공개) -> 1(KK, 둘 다 이겨 공개)
         assertEquals(
             listOf(
-                ShownHandView(seatNo = 2, holeCards = listOf("Jh", "Jd"), category = "PAIR"),
-                ShownHandView(seatNo = 3, holeCards = listOf("Qh", "Qd"), category = "PAIR"),
-                ShownHandView(seatNo = 1, holeCards = listOf("Kh", "Kd"), category = "PAIR"),
+                ShownHandView(seatNo = 2, userId = 200L, holeCards = listOf("Jh", "Jd"), category = "PAIR"),
+                ShownHandView(seatNo = 3, userId = 300L, holeCards = listOf("Qh", "Qd"), category = "PAIR"),
+                ShownHandView(seatNo = 1, userId = 100L, holeCards = listOf("Kh", "Kd"), category = "PAIR"),
             ),
             result.shownHands,
         )
@@ -377,16 +380,16 @@ class HoldemViewAssemblerTest {
         }
 
         assertNull(hand.showdownLeaderSeatNo)
-        val view = publicViewOf(TableId(1), table, hand, null, 1L, null)
+        val view = publicViewOf(TableId(1), table, hand, lastOf(hand), 1L, null)
         val json = objectMapper.writeValueAsString(view)
 
         val result = view.result!!
         // 버튼(1) 다음부터: 2(QQ) -> 3(JJ, QQ 보다 약해도 공개된다) -> 1(KK)
         assertEquals(
             listOf(
-                ShownHandView(seatNo = 2, holeCards = listOf("Qh", "Qd"), category = "PAIR"),
-                ShownHandView(seatNo = 3, holeCards = listOf("Jh", "Jd"), category = "PAIR"),
-                ShownHandView(seatNo = 1, holeCards = listOf("Kh", "Kd"), category = "PAIR"),
+                ShownHandView(seatNo = 2, userId = 200L, holeCards = listOf("Qh", "Qd"), category = "PAIR"),
+                ShownHandView(seatNo = 3, userId = 300L, holeCards = listOf("Jh", "Jd"), category = "PAIR"),
+                ShownHandView(seatNo = 1, userId = 100L, holeCards = listOf("Kh", "Kd"), category = "PAIR"),
             ),
             result.shownHands,
         )
@@ -421,16 +424,16 @@ class HoldemViewAssemblerTest {
         }
 
         assertNull(hand.showdownLeaderSeatNo) // 포스트플랍 전부 체크
-        val view = publicViewOf(TableId(1), table, hand, null, 1L, null)
+        val view = publicViewOf(TableId(1), table, hand, lastOf(hand), 1L, null)
         val json = objectMapper.writeValueAsString(view)
 
         val result = view.result!!
         // 나열 순서 1,2,3 — 사이드팟에서 진 3(QQ)도 쇼다운까지 갔으므로 전원 공개된다.
         assertEquals(
             listOf(
-                ShownHandView(seatNo = 1, holeCards = listOf("Ah", "Ac"), category = "PAIR"),
-                ShownHandView(seatNo = 2, holeCards = listOf("Kh", "Kc"), category = "PAIR"),
-                ShownHandView(seatNo = 3, holeCards = listOf("Qh", "Qc"), category = "PAIR"),
+                ShownHandView(seatNo = 1, userId = 100L, holeCards = listOf("Ah", "Ac"), category = "PAIR"),
+                ShownHandView(seatNo = 2, userId = 200L, holeCards = listOf("Kh", "Kc"), category = "PAIR"),
+                ShownHandView(seatNo = 3, userId = 300L, holeCards = listOf("Qh", "Qc"), category = "PAIR"),
             ),
             result.shownHands,
         )
@@ -526,8 +529,8 @@ class HoldemViewAssemblerTest {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         val last = LastHandResult(
             board = listOf("As", "Kd", "7c", "2h", "9s"),
-            payouts = listOf(LastHandResult.Payout(2, 300)),
-            shownHands = listOf(LastHandResult.ShownHand(2, listOf("Ah", "Ad"), "THREE_OF_A_KIND")),
+            payouts = listOf(LastHandResult.Payout(2, 200L, 300)),
+            shownHands = listOf(LastHandResult.ShownHand(2, 200L, listOf("Ah", "Ad"), "THREE_OF_A_KIND")),
         )
 
         val view = publicViewOf(TableId(1), table, null, last, 1L, null)
@@ -538,8 +541,8 @@ class HoldemViewAssemblerTest {
         assertEquals(last.board, view.board)
         assertEquals(
             HandResultPublicView(
-                listOf(PayoutPublicView(2, 300)),
-                listOf(ShownHandView(2, listOf("Ah", "Ad"), "THREE_OF_A_KIND")),
+                listOf(PayoutPublicView(2, 200L, 300)),
+                listOf(ShownHandView(2, 200L, listOf("Ah", "Ad"), "THREE_OF_A_KIND")),
             ),
             view.result,
         )
@@ -558,12 +561,34 @@ class HoldemViewAssemblerTest {
             table.bigBlind,
             identityShuffler,
         )
-        val stale = LastHandResult(listOf("As"), listOf(LastHandResult.Payout(1, 999)), emptyList())
+        val stale = LastHandResult(listOf("As"), listOf(LastHandResult.Payout(1, 100L, 999)), emptyList())
 
         val view = publicViewOf(TableId(1), table, hand, stale, 1L, null)
 
         assertTrue(view.handInProgress)
         assertEquals(emptyList(), view.board)
         assertNull(view.result)
+    }
+
+    @Test
+    fun `끝난 핸드는 넘겨받은 직전 결과를 그대로 쓴다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        table.moveButtonToNextOccupiedSeat()
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
+            table.buttonSeatNo!!,
+            smallBlindSeatNo = 1,
+            bigBlindSeatNo = 2,
+            table.smallBlind,
+            table.bigBlind,
+            identityShuffler,
+        )
+        hand.act(1, BettingAction.Fold)
+        // 정산 시점 점유자(200)가 아닌 값을 넘겨, 조립기가 hand 에서 다시 유도하지 않는지 본다.
+        val passed = LastHandResult(listOf("As"), listOf(LastHandResult.Payout(2, 777L, 300)), emptyList())
+
+        val view = publicViewOf(TableId(1), table, hand, passed, 1L, null)
+
+        assertEquals(listOf(PayoutPublicView(2, 777L, 300)), view.result!!.payouts)
     }
 }

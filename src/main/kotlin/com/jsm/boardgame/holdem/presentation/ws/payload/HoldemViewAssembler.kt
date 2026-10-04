@@ -22,8 +22,9 @@ fun publicViewOf(
     seq: Long,
     nextHandRemaining: Duration?,
 ): TablePublicView {
-    // hand 가 있으면 lastResult 는 무시한다 — 핸드(진행 중이거나 방금 끝난)가 항상 더 새롭다.
-    val finished = if (hand?.isFinished == true) LastHandResult.of(hand) else lastResult.takeIf { hand == null }
+    // 결과를 보일지는 여기서만 정한다 — 핸드 없음(재구독·취소 뒤) 또는 방금 끝난 핸드일 때만이다.
+    // 호출자는 그 경우의 [lastResult] 를 채워 넘긴다(끝난 핸드는 HandSettler 가 만든 값).
+    val finished = if (hand == null || hand.isFinished) lastResult else null
     val seats = table.occupiedSeats().map { seat ->
         if (hand != null && seat.seatNo in hand.seatNos) {
             SeatPublicView(
@@ -64,8 +65,8 @@ fun publicViewOf(
 
 private fun handResultPublicViewOf(result: LastHandResult): HandResultPublicView =
     HandResultPublicView(
-        result.payouts.map { PayoutPublicView(it.seatNo, it.amount) },
-        result.shownHands.map { ShownHandView(it.seatNo, it.holeCards, it.category) },
+        result.payouts.map { PayoutPublicView(it.seatNo, it.userId, it.amount) },
+        result.shownHands.map { ShownHandView(it.seatNo, it.userId, it.holeCards, it.category) },
     )
 
 /** [seatNo] 자신의 홀카드와 지금 할 수 있는 행동만 담는다. 다른 좌석의 카드는 이 함수의 인자로도 들어오지 않는다. */

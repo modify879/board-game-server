@@ -54,6 +54,10 @@ class HandSettler(
             }
             occupied
         }
+
+        // 기립을 반영하기 전에 좌석별 점유자를 잡는다 — 지급·공개 좌석은 폴드하지 않아 아직 점유돼 있다.
+        val userIdBySeat = hand.seatNos.mapNotNull { seatNo -> table.seatAt(seatNo)?.let { seatNo to it.userId } }.toMap()
+        val lastResult = LastHandResult.of(hand, userIdBySeat)
         table.applyStacks(toApply)
 
         for ((seatNo, stack) in toApply) {
@@ -64,7 +68,7 @@ class HandSettler(
         }
 
         handStore.remove(tableId)
-        lastHandResults.save(tableId, LastHandResult.of(hand))
+        lastHandResults.save(tableId, lastResult)
 
         if (table.candidateSeatNos().size >= 2) {
             countdown.restart(tableId)
@@ -73,7 +77,7 @@ class HandSettler(
         tables.save(table)
         // 정산 후에도 hand 를 null 로 넘기지 않는다 — 클라이언트가 쇼다운 결과(showdownRanks/payouts)를
         // 봐야 한다. HandStore 에서는 이미 지웠을 뿐이다.
-        eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand))
+        eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand, lastResult))
         // 대기열 처리는 여기서 하지 않는다 — 지갑 이체가 이 트랜잭션(정산)과 같은 트랜잭션에서 실패하면
         // 예외를 잡아도 트랜잭션이 rollback-only 가 되어 정산 전체가 롤백된다. 커밋 후 별도 트랜잭션으로
         // 넘긴다(JoinRequestsProcessor → ProcessJoinRequestsService → AdmitJoinRequestService, 항목마다 하나씩).

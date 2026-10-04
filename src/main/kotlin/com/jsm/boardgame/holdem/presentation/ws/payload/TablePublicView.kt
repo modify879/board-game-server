@@ -45,9 +45,14 @@ data class SeatPublicView(
     val presence: String,
 )
 
+/**
+ * 핸드가 끝난 시점의 결과. 정산 직후 0칩 좌석이 기립하고 대기자가 같은 좌석에 앉을 수 있어 좌석 번호만으로는
+ * 주인을 알 수 없다 — 클라이언트는 [PayoutPublicView.userId]·[ShownHandView.userId] 를 그 좌석의 현재 점유자와
+ * 맞춰 보고, 일치하지 않는 항목은 무시한다.
+ */
 data class HandResultPublicView(val payouts: List<PayoutPublicView>, val shownHands: List<ShownHandView>)
 
-data class PayoutPublicView(val seatNo: Int, val amount: Long)
+data class PayoutPublicView(val seatNo: Int, val userId: Long, val amount: Long)
 
 /**
  * 쇼다운까지 간 좌석 전원의 패 — 이겼는지 여부와 무관하다(사용자 결정, 머크 없음). 나열 순서는
@@ -55,7 +60,7 @@ data class PayoutPublicView(val seatNo: Int, val amount: Long)
  * 담을 수 있는 유일한 타입이다 — [com.jsm.boardgame.holdem.domain.model.HandResult.shownSeatNos] 로만
  * 만든다. 폴드한 좌석·폴드 승리·진행 중 핸드의 카드는 여기 오지 않는다.
  */
-data class ShownHandView(val seatNo: Int, val holeCards: List<String>, val category: String)
+data class ShownHandView(val seatNo: Int, val userId: Long, val holeCards: List<String>, val category: String)
 
 /** 런아웃 중 공개된 좌석의 패 — [com.jsm.boardgame.holdem.domain.model.Hand.revealedSeatNos] 로만 만든다. */
 data class RevealedHandView(val seatNo: Int, val holeCards: List<String>)
