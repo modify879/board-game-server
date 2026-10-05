@@ -77,13 +77,8 @@ class HandInProgressStoreAdapter(
         }
     }
 
-    private fun translateHand(e: DataIntegrityViolationException): RuntimeException {
-        val constraintName = e.violatedConstraint(CONSTRAINT_HAND_PK) ?: return e
-        return when (constraintName) {
-            CONSTRAINT_HAND_PK -> HandInProgressException("기본키 제약 위반: $constraintName")
-            else -> e
-        }
-    }
+    private fun translateHand(e: DataIntegrityViolationException): RuntimeException =
+        e.violatedConstraint(CONSTRAINT_HAND_PK)?.let { HandInProgressException("기본키 제약 위반: $it") } ?: e
 
     // 이 핸드가 한 번도 handStore.save() 를 거치지 않고 바로 끝난 경우(딜 직후 전원 올인 등)
     // 대응하는 행이 아예 없을 수 있다 — findById 가 비어 있으면 지울 것도 없으니 그대로 끝낸다.
