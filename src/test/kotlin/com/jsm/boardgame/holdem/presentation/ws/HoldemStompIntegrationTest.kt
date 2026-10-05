@@ -28,6 +28,7 @@ import org.springframework.messaging.simp.stomp.StompFrameHandler
 import org.springframework.messaging.simp.stomp.StompHeaders
 import org.springframework.messaging.simp.stomp.StompSession
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm
 import org.springframework.security.oauth2.jwt.JwsHeader
 import org.springframework.security.oauth2.jwt.JwtClaimsSet
@@ -42,6 +43,7 @@ import org.springframework.web.socket.messaging.WebSocketStompClient
 import java.lang.reflect.Type
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import javax.crypto.spec.SecretKeySpec
@@ -285,6 +287,30 @@ class HoldemStompIntegrationTest {
             null
         }
         return session to handler
+    }
+
+    @Test
+    fun `클라이언트가 0,10000 하트비트로 CONNECT 하면 서버는 10000,0 으로 응답한다`() {
+        val (_, accessToken) = signUpAndLogin()
+        val connected = CompletableFuture<StompHeaders>()
+        val handler = object : StompSessionHandlerAdapter() {
+            override fun afterConnected(session: StompSession, connectedHeaders: StompHeaders) {
+                connected.complete(connectedHeaders)
+            }
+        }
+        val connectHeaders = StompHeaders()
+        connectHeaders.add("Authorization", "Bearer $accessToken")
+        connectHeaders.add("heart-beat", "0,10000")
+
+        // 클라이언트도 TaskScheduler 가 있어야 하트비트를 협상한다.
+        val heartbeatClient = WebSocketStompClient(StandardWebSocketClient()).apply {
+            taskScheduler = ThreadPoolTaskScheduler().apply { initialize() }
+        }
+        val session = heartbeatClient.connectAsync("ws://localhost:$port/ws", null, connectHeaders, handler)
+            .get(5, TimeUnit.SECONDS)
+
+        assertThat(connected.get(5, TimeUnit.SECONDS).getFirst("heart-beat")).isEqualTo("10000,0")
+        session.disconnect()
     }
 
     @Test

@@ -4,11 +4,13 @@ import com.jsm.boardgame.common.web.CapturingWebSocketHandlerDecoratorFactory
 import com.jsm.boardgame.common.web.StompAuthenticationInterceptor
 import com.jsm.boardgame.common.web.StompDestinationGuard
 import com.jsm.boardgame.common.web.StompErrorHandler
+import jakarta.annotation.PreDestroy
 import org.springframework.context.annotation.Configuration
 import org.springframework.messaging.converter.JacksonJsonMessageConverter
 import org.springframework.messaging.converter.MessageConverter
 import org.springframework.messaging.simp.config.ChannelRegistration
 import org.springframework.messaging.simp.config.MessageBrokerRegistry
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer
@@ -32,13 +34,29 @@ class WebSocketConfig(
     private val capturingWebSocketHandlerDecoratorFactory: CapturingWebSocketHandlerDecoratorFactory,
 ) : WebSocketMessageBrokerConfigurer {
 
+    // 하트비트 전용. 빈으로 노출하면 TaskScheduler 를 타입으로 주입받는 holdem 타이머들이 모호해지고,
+    // 게임 타이머와 스레드를 공유하면 하트비트가 밀린다 — 그래서 빈이 아닌 이 설정 소유의 인스턴스다.
+    private val heartbeatScheduler = ThreadPoolTaskScheduler().apply {
+        poolSize = 1
+        setThreadNamePrefix("ws-heartbeat-")
+        initialize()
+    }
+
+    @PreDestroy
+    fun shutdownHeartbeatScheduler() = heartbeatScheduler.shutdown()
+
     override fun registerStompEndpoints(registry: StompEndpointRegistry) {
         registry.addEndpoint("/ws")
         registry.setErrorHandler(stompErrorHandler)
     }
 
     override fun configureMessageBroker(registry: MessageBrokerRegistry) {
+        // 서버→클라이언트 하트비트만 10초 간격으로 보낸다. 클라이언트 하트비트는 기대하지 않는다(0) —
+        // 숨겨진 브라우저 탭에서는 Godot Web 메인 루프가 멈춰 하트비트를 못 보내고, 기대하면 플레이어가
+        // 끊겨 참가 대기열에서 빠진다. TaskScheduler 가 없으면 스프링은 하트비트 설정을 무시한다.
         registry.enableSimpleBroker("/topic", "/queue")
+            .setHeartbeatValue(longArrayOf(10_000, 0))
+            .setTaskScheduler(heartbeatScheduler)
         registry.setApplicationDestinationPrefixes("/app")
         registry.setUserDestinationPrefix("/user")
         // clientOutboundChannel 은 스레드풀이라 기본값으로는 같은 세션으로 보낸 메시지도 순서가
