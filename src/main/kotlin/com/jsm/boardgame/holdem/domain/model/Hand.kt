@@ -78,6 +78,22 @@ class Hand private constructor(
 
     val isFinished: Boolean get() = result != null
 
+    /**
+     * 더 베팅할 수 없어 남은 보드를 한 스트리트씩 진행하는 중 — 라운드도 결과도 없는 상태다.
+     * `currentRound == null && result == null` 로 추론하지 않고 명시 플래그로 둔다 — 추론하면 라운드도
+     * 결과도 없는 어떤 손상·구버전 상태든 홀카드를 공개하게 된다(fail-open). 스냅샷에 담기며,
+     * 없는 예전 행은 false 로 읽혀 공개하지 않는다.
+     */
+    var isRunningOut: Boolean = false
+        private set
+
+    /**
+     * 런아웃 중 공개되는 좌석(TDA: 올인으로 액션이 끝나면 패를 모두 펼친다). 공개 뷰가 홀카드를
+     * 싣는 두 예외 중 하나의 유일한 출처다([HandResult.shownSeatNos] 와 같은 원칙).
+     */
+    val revealedSeatNos: Set<Int>
+        get() = if (isRunningOut) statuses.filterValues { it != SeatStatus.FOLDED }.keys else emptySet()
+
     val toActSeatNo: Int? get() = currentRound?.toActSeatNo
 
     fun availableActionsFor(seatNo: Int): AvailableActions? = currentRound?.availableActionsFor(seatNo)
@@ -121,17 +137,34 @@ class Hand private constructor(
         statuses = statuses.toMap(),
         totalContributed = totalContributed.toMap(),
         currentRound = currentRound?.snapshot(),
+        runningOut = isRunningOut,
         showdownLeaderSeatNo = showdownLeaderSeatNo,
     )
 
     fun act(seatNo: Int, action: BettingAction) {
-        val round = currentRound
-            ?: throw IllegalHandStateException(HoldemErrorCode.HAND_ALREADY_FINISHED, "이미 끝난 핸드입니다: buttonSeatNo=$buttonSeatNo")
+        val round = currentRound ?: throw if (isRunningOut) {
+            IllegalHandStateException(HoldemErrorCode.BETTING_ROUND_CLOSED, "남은 보드를 진행 중이라 베팅할 수 없습니다: buttonSeatNo=$buttonSeatNo")
+        } else {
+            IllegalHandStateException(HoldemErrorCode.HAND_ALREADY_FINISHED, "이미 끝난 핸드입니다: buttonSeatNo=$buttonSeatNo")
+        }
         round.act(seatNo, action)
         // 라운드가 교체되기 전에 읽는다 — round 는 로컬 참조라 currentRound 필드가 바뀌어도 안전하다.
         showdownLeaderSeatNo = round.lastAggressorSeatNo
         if (round.isComplete) {
             onRoundComplete(round)
+        }
+    }
+
+    /** 런아웃을 한 걸음 진행한다 — 보드가 5장 미만이면 다음 스트리트를 깔고, 다 깔렸으면 쇼다운한다. */
+    fun advanceRunout() {
+        if (!isRunningOut) {
+            throw IllegalHandStateException(HoldemErrorCode.HAND_NOT_RUNNING_OUT, "런아웃 중인 핸드가 아닙니다: buttonSeatNo=$buttonSeatNo")
+        }
+        if (boardCards.size < 5) {
+            street = nextStreet(street)
+            dealBoardFor(street)
+        } else {
+            finishShowdown()
         }
     }
 
@@ -148,12 +181,16 @@ class Hand private constructor(
             return
         }
 
-        // 더 배팅할 사람이 없다(전원 올인 등) — 남은 보드를 한 번에 깔고 바로 쇼다운한다.
+        // 더 배팅할 사람이 없다(전원 올인 등) — 보드가 남았으면 라운드 없이 런아웃 상태로 두고
+        // advanceRunout 이 한 스트리트씩 진행한다. 보드가 다 깔렸으면 바로 쇼다운한다.
         val activeCount = statuses.values.count { it == SeatStatus.ACTIVE }
         if (activeCount <= 1) {
-            dealRemainingBoardToRiver()
-            street = Street.RIVER
-            finishShowdown()
+            if (boardCards.size == 5) {
+                finishShowdown()
+            } else {
+                currentRound = null
+                isRunningOut = true
+            }
             return
         }
 
@@ -181,14 +218,6 @@ class Hand private constructor(
             Street.FLOP -> boardCards += deck.draw(3)
             Street.TURN, Street.RIVER -> boardCards += deck.draw(1)
             Street.PREFLOP -> error("프리플랍은 보드를 깔지 않는다")
-        }
-    }
-
-    private fun dealRemainingBoardToRiver() {
-        when (boardCards.size) {
-            0 -> { dealBoardFor(Street.FLOP); dealBoardFor(Street.TURN); dealBoardFor(Street.RIVER) }
-            3 -> { dealBoardFor(Street.TURN); dealBoardFor(Street.RIVER) }
-            4 -> dealBoardFor(Street.RIVER)
         }
     }
 
@@ -223,6 +252,7 @@ class Hand private constructor(
         }
         result = handResult
         currentRound = null
+        isRunningOut = false
     }
 
     /** 버튼 다음 참가 좌석부터 시계 방향으로 좌석 번호 오름차순 순환 — 팟 분배 시 나머지 칩을 돌리는 순서. */
@@ -332,8 +362,8 @@ class Hand private constructor(
 
         /**
          * 영속 복원 전용 — 검증하지 않는다(매퍼 규약: `reconstitute()` 는 검증하지 않는다).
-         * 진행 중(라운드가 열려 있는) 핸드만 대상이다 — 이미 끝난 핸드는 정산이 끝나 복구할 상태가
-         * 없어 애초에 저장 대상이 아니다.
+         * 진행 중인 핸드만 대상이다(라운드가 열려 있거나, [HandSnapshot.runningOut] 인 런아웃 중) —
+         * 이미 끝난 핸드는 정산이 끝나 복구할 상태가 없어 애초에 저장 대상이 아니다.
          * 덱은 스냅샷에 없다 — 이미 딜된 카드(홀카드+보드)를 뺀 나머지를 [shuffler] 로 새로 섞어
          * 다시 만든다. 아직 아무도 본 적 없는 카드라 어떤 순열이든 통계적으로 동일하다.
          */
@@ -370,6 +400,7 @@ class Hand private constructor(
             hand.street = snapshot.street
             hand.boardCards.addAll(snapshot.board)
             hand.showdownLeaderSeatNo = snapshot.showdownLeaderSeatNo
+            hand.isRunningOut = snapshot.runningOut
             return hand
         }
     }

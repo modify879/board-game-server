@@ -2,6 +2,8 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.LastHandResult
+import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.model.BettingAction
@@ -87,7 +89,7 @@ class ExpireTurnServiceTest {
     private val walletTransfer = ExpireTurnFakeWalletTransfer()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, ExpireTurnFakeNextHandCountdown())
+    private val handSettler = HandSettler(tables, handStore, ExpireTurnServiceFakeLastHandResultStore(), eventPublisher, ExpireTurnFakeNextHandCountdown())
     private val service = ExpireTurnService(tables, handStore, handSettler, walletTransfer, eventPublisher)
 
     /** userId = seatNo * 1000 으로 대응시킨다. */
@@ -217,4 +219,11 @@ class ExpireTurnServiceTest {
         val credited = walletTransfer.fromGameCalls.single().amount
         assertEquals(Chips.of(20_000), winnerStack + Chips.of(credited))
     }
+}
+
+private class ExpireTurnServiceFakeLastHandResultStore : LastHandResultStore {
+    val store = mutableMapOf<Long, LastHandResult>()
+    override fun find(tableId: TableId): LastHandResult? = store[tableId.value]
+    override fun save(tableId: TableId, result: LastHandResult) { store[tableId.value] = result }
+    override fun remove(tableId: TableId) { store.remove(tableId.value) }
 }

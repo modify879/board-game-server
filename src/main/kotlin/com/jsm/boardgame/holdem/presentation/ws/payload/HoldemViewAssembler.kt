@@ -1,8 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.ws.payload
 
-import com.jsm.boardgame.holdem.domain.model.Card
+import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.domain.model.Hand
-import com.jsm.boardgame.holdem.domain.model.HandResult
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 import java.time.Duration
@@ -15,7 +14,17 @@ import java.time.Duration
  * 스프링 타입을 하나도 받지 않는다 — 그래서 스프링 없이 단위 테스트할 수 있다. [nextHandRemaining]
  * 은 NextHandCountdown 포트에서 호출자가 미리 읽어와 넘긴다(단조 시계 기준 남은 시간).
  */
-fun publicViewOf(tableId: TableId, table: HoldemTable, hand: Hand?, seq: Long, nextHandRemaining: Duration?): TablePublicView {
+fun publicViewOf(
+    tableId: TableId,
+    table: HoldemTable,
+    hand: Hand?,
+    lastResult: LastHandResult?,
+    seq: Long,
+    nextHandRemaining: Duration?,
+): TablePublicView {
+    // 결과를 보일지는 여기서만 정한다 — 핸드 없음(재구독·취소 뒤) 또는 방금 끝난 핸드일 때만이다.
+    // 호출자는 그 경우의 [lastResult] 를 채워 넘긴다(끝난 핸드는 HandSettler 가 만든 값).
+    val finished = if (hand == null || hand.isFinished) lastResult else null
     val seats = table.occupiedSeats().map { seat ->
         if (hand != null && seat.seatNo in hand.seatNos) {
             SeatPublicView(
@@ -41,31 +50,24 @@ fun publicViewOf(tableId: TableId, table: HoldemTable, hand: Hand?, seq: Long, n
         tableId = tableId.value,
         handInProgress = hand != null && !hand.isFinished,
         street = hand?.street?.name,
-        board = hand?.board?.map { it.toString() } ?: emptyList(),
+        board = hand?.board?.map { it.toString() } ?: lastResult?.board ?: emptyList(),
         pot = hand?.potTotal()?.amount ?: 0L,
         toActSeatNo = hand?.toActSeatNo,
         buttonSeatNo = table.buttonSeatNo,
         seats = seats,
-        result = hand?.let { h -> h.result?.let { r -> handResultPublicViewOf(h, r) } },
+        result = finished?.let(::handResultPublicViewOf),
+        revealedHands = hand?.revealedSeatNos?.sorted()
+            ?.map { RevealedHandView(it, hand.holeCardsOf(it).map { c -> c.toString() }) } ?: emptyList(),
         nextHandInMs = nextHandRemaining?.toMillis(),
         seq = seq,
     )
 }
 
-private fun handResultPublicViewOf(hand: Hand, result: HandResult): HandResultPublicView {
-    val payouts = result.payouts
-        .filterValues { it.isPositive() }
-        .toSortedMap()
-        .map { (seatNo, amount) -> PayoutPublicView(seatNo, amount.amount) }
-    val shownHands = result.showdownOrder.filter { it in result.shownSeatNos }.map { seatNo ->
-        ShownHandView(
-            seatNo = seatNo,
-            holeCards = hand.holeCardsOf(seatNo).map(Card::toString),
-            category = result.showdownRanks.getValue(seatNo).category.name,
-        )
-    }
-    return HandResultPublicView(payouts, shownHands)
-}
+private fun handResultPublicViewOf(result: LastHandResult): HandResultPublicView =
+    HandResultPublicView(
+        result.payouts.map { PayoutPublicView(it.seatNo, it.userId, it.amount) },
+        result.shownHands.map { ShownHandView(it.seatNo, it.userId, it.holeCards, it.category) },
+    )
 
 /** [seatNo] 자신의 홀카드와 지금 할 수 있는 행동만 담는다. 다른 좌석의 카드는 이 함수의 인자로도 들어오지 않는다. */
 fun privateViewOf(tableId: TableId, seatNo: Int, hand: Hand, seq: Long): SeatPrivateView =

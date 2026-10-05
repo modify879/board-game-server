@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
@@ -50,6 +51,7 @@ import org.springframework.stereotype.Component
 class HoldemSubscriptionSnapshotListener(
     private val tables: HoldemTableRepository,
     private val handStore: HandStore,
+    private val lastHandResults: LastHandResultStore,
     // 이 빈이 HoldemWebSocketConfig(WebSocketMessageBrokerConfigurer)의 생성자 인자라
     // DelegatingWebSocketMessageBrokerConfiguration 이 자기 configurer 목록을 채우는 도중에
     // 만들어진다 — 그 시점에 SimpMessagingTemplate(brokerMessagingTemplate 빈)을 즉시 찾으면
@@ -88,10 +90,12 @@ class HoldemSubscriptionSnapshotListener(
         val seq = sequence.current(tableId)
         val table = tables.findById(tableId) ?: return
         val hand = handStore.find(tableId)
+        // 조회 포트(JDSL 프로젝션)가 아니라 저장소 포트로 읽는다 — handStore 를 이미 이렇게 읽으므로 의도적으로 받아들인 편차다.
+        val lastResult = if (hand == null) lastHandResults.find(tableId) else null
 
         messagingTemplate.convertAndSend(
             HoldemDestinations.publicTopicOf(rawTableId),
-            publicViewOf(tableId, table, hand, seq, nextHandCountdown.remaining(tableId)),
+            publicViewOf(tableId, table, hand, lastResult, seq, nextHandCountdown.remaining(tableId)),
         )
 
         // 관전자(좌석 없음)는 여기서 끝난다 — 개인 뷰는 그 사용자가 이 테이블에 착석해 있을 때만 나간다.

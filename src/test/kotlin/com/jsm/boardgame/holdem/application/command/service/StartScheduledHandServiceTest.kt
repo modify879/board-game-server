@@ -2,6 +2,8 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.LastHandResult
+import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
@@ -66,8 +68,8 @@ class StartScheduledHandServiceTest {
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
     private val countdown = StartScheduledHandFakeNextHandCountdown()
-    private val handSettler = HandSettler(tables, handStore, eventPublisher, countdown)
-    private val handStarter = HandStarter(tables, handStore, identityShuffler, handSettler, eventPublisher, countdown)
+    private val handSettler = HandSettler(tables, handStore, StartScheduledHandServiceFakeLastHandResultStore(), eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, StartScheduledHandServiceFakeLastHandResultStore(), identityShuffler, handSettler, eventPublisher, countdown)
     private val service = StartScheduledHandService(tables, handStore, handStarter)
 
     private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): TableId {
@@ -124,4 +126,11 @@ class StartScheduledHandServiceTest {
 
         assertNull(handStore.find(tableId))
     }
+}
+
+private class StartScheduledHandServiceFakeLastHandResultStore : LastHandResultStore {
+    val store = mutableMapOf<Long, LastHandResult>()
+    override fun find(tableId: TableId): LastHandResult? = store[tableId.value]
+    override fun save(tableId: TableId, result: LastHandResult) { store[tableId.value] = result }
+    override fun remove(tableId: TableId) { store.remove(tableId.value) }
 }

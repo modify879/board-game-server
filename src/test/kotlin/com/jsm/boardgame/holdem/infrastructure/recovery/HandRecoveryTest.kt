@@ -18,6 +18,7 @@ import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
 import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.application.port.UserConnections
+import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -476,5 +477,43 @@ class HandRecoveryTest {
         recovery.onApplicationReady()
 
         assertEquals(0, nextHandScheduler.scheduledCalls.size)
+    }
+
+    @Test
+    fun `런아웃 중인 핸드는 재접속을 기다리지 않고 바로 재개하며 연결 감시는 평소대로 걸린다`() {
+        val handStore = HandRecoveryFakeHandStore()
+        val tables = HandRecoveryFakeTableRepository()
+        val scheduler = HandRecoveryFakeTaskScheduler()
+        val resumeUseCase = HandRecoveryFakeResumeHandUseCase()
+        val cancelUseCase = HandRecoveryFakeCancelHandUseCase()
+        val presenceUseCase = HandRecoveryFakeUpdateSeatPresenceUseCase()
+        val connectionTimer = ConnectionTimer(
+            HandRecoveryFakeTaskScheduler(),
+            clock,
+            presenceUseCase,
+            HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null),
+            HandRecoveryFakeStandUpUseCase(),
+            tables,
+            InMemoryJoinQueue(),
+            HandRecoveryFakeJoinQueueNotifier(),
+            HandRecoveryFakeUserConnections(),
+            HandRecoveryFakeTableExecutor(),
+        )
+        val recovery = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase, connectionTimer, NextHandTimer(HandRecoveryFakeTaskScheduler(), HandRecoveryFakeStartScheduledHandUseCase(), HandRecoveryFakeTableExecutor(), clock, nextHandDelay), HandRecoveryFakeTableExecutor())
+
+        val hand = seatTableWithHand(tables, 1L, 1, 2)
+        hand.act(hand.toActSeatNo!!, BettingAction.RaiseTo(Chips.of(10_000)))
+        hand.act(hand.toActSeatNo!!, BettingAction.Call)
+        assertTrue(hand.isRunningOut)
+        handStore.put(TableId(1L), hand)
+
+        recovery.onApplicationReady()
+        connectionTimer.onApplicationReady()
+
+        assertEquals(1, resumeUseCase.calls.size)
+        assertEquals(1L, resumeUseCase.calls[0].tableId)
+        assertEquals(0, cancelUseCase.calls.size)
+        assertEquals(0, scheduler.scheduledCalls.size)
+        assertEquals(2, presenceUseCase.calls.size) // 유예 없이 부팅 시딩이 둘 다 DISCONNECTED 로 감시한다
     }
 }

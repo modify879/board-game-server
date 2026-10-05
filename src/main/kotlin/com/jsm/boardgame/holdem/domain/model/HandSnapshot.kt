@@ -29,6 +29,8 @@ data class HandSnapshot(
     val currentRound: BettingRoundSnapshot?,
     /** 쇼다운 공개 순서(TDA 17)의 시작점. [Hand.showdownLeaderSeatNo] 그대로. */
     val showdownLeaderSeatNo: Int?,
+    /** 올인 런아웃 진행 중 여부. [Hand.isRunningOut] 그대로 — `currentRound == null` 로 추론하지 않는다(공개 여부를 정하므로). */
+    val runningOut: Boolean,
 ) {
     data class BettingSeatSnapshot(
         val seatNo: Int,

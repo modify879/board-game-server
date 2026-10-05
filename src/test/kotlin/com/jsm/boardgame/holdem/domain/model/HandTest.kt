@@ -6,6 +6,7 @@ import com.jsm.boardgame.holdem.domain.service.Shuffler
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class HandTest {
@@ -185,17 +186,145 @@ class HandTest {
     }
 
     @Test
-    fun `전원 올인이면 남은 보드가 한 번에 깔리고 바로 쇼다운한다`() {
-        val hand = Hand.start(stacksOf(1 to 1_000, 2 to 1_000, 3 to 1_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
+    fun `프리플랍 전원 올인이면 런아웃 상태가 되고 보드는 비어 있으며 참가자 패가 공개된다`() {
+        val hand = preflopAllIn()
 
+        assertTrue(hand.isRunningOut)
+        assertFalse(hand.isFinished)
+        assertEquals(0, hand.board.size)
+        assertEquals(null, hand.toActSeatNo)
+        assertEquals(setOf(1, 2, 3), hand.revealedSeatNos)
+    }
+
+    @Test
+    fun `런아웃은 플랍 턴 리버를 한 걸음씩 깔고 그다음 걸음에 쇼다운으로 끝난다`() {
+        val hand = preflopAllIn()
+
+        hand.advanceRunout()
+        assertEquals(3, hand.board.size)
+        assertEquals(Street.FLOP, hand.street)
+        hand.advanceRunout()
+        assertEquals(4, hand.board.size)
+        hand.advanceRunout()
+        assertEquals(5, hand.board.size)
+        assertEquals(Street.RIVER, hand.street)
+        assertTrue(hand.isRunningOut)
+        assertFalse(hand.isFinished)
+
+        hand.advanceRunout()
+        assertTrue(hand.isFinished)
+        assertFalse(hand.isRunningOut)
+        assertEquals(emptySet(), hand.revealedSeatNos)
+        assertEquals(setOf(1, 2, 3), hand.result!!.showdownRanks.keys)
+        assertEquals(chips(3_000), sumStacks(listOf(1, 2, 3), hand))
+    }
+
+    @Test
+    fun `플랍 이후 올인이면 남은 스트리트 두 걸음 뒤 쇼다운한다`() {
+        val hand = Hand.start(stacksOf(1 to 1_000, 2 to 1_000), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, chips(100), chips(200), identityShuffler)
+        hand.act(1, BettingAction.Call)
+        hand.act(2, BettingAction.Check)
+        hand.act(2, BettingAction.RaiseTo(chips(800)))
+        hand.act(1, BettingAction.Call)
+
+        assertTrue(hand.isRunningOut)
+        assertEquals(3, hand.board.size)
+        hand.advanceRunout()
+        hand.advanceRunout()
+        assertEquals(5, hand.board.size)
+        assertTrue(hand.isRunningOut)
+        hand.advanceRunout()
+        assertTrue(hand.isFinished)
+    }
+
+    @Test
+    fun `리버에서 올인이 콜되면 런아웃 없이 바로 쇼다운한다`() {
+        val hand = Hand.start(stacksOf(1 to 1_000, 2 to 1_000), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, chips(100), chips(200), identityShuffler)
+        hand.act(1, BettingAction.Call)
+        hand.act(2, BettingAction.Check)
+        repeat(2) { // 플랍, 턴
+            hand.act(2, BettingAction.Check)
+            hand.act(1, BettingAction.Check)
+        }
+        assertEquals(Street.RIVER, hand.street)
+        hand.act(2, BettingAction.RaiseTo(chips(800)))
+        hand.act(1, BettingAction.Call)
+
+        assertTrue(hand.isFinished)
+        assertFalse(hand.isRunningOut)
+        assertEquals(5, hand.board.size)
+    }
+
+    @Test
+    fun `런아웃 중 베팅하면 BETTING_ROUND_CLOSED 다`() {
+        val hand = preflopAllIn()
+
+        val e = assertFailsWith<IllegalHandStateException> { hand.act(1, BettingAction.Check) }
+        assertEquals(HoldemErrorCode.BETTING_ROUND_CLOSED, e.errorCode)
+    }
+
+    @Test
+    fun `런아웃 중이 아닌 핸드를 진행하면 HAND_NOT_RUNNING_OUT 이다`() {
+        val open = Hand.start(stacksOf(1 to 1_000, 2 to 1_000), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, chips(100), chips(200), identityShuffler)
+        val e = assertFailsWith<IllegalHandStateException> { open.advanceRunout() }
+        assertEquals(HoldemErrorCode.HAND_NOT_RUNNING_OUT, e.errorCode)
+
+        val finished = preflopAllIn()
+        while (finished.isRunningOut) finished.advanceRunout()
+        val e2 = assertFailsWith<IllegalHandStateException> { finished.advanceRunout() }
+        assertEquals(HoldemErrorCode.HAND_NOT_RUNNING_OUT, e2.errorCode)
+    }
+
+    @Test
+    fun `런아웃 중 스냅샷을 복원해도 런아웃이며 끝까지 진행할 수 있다`() {
+        val hand = preflopAllIn()
+        hand.advanceRunout() // 플랍
+
+        val restored = Hand.reconstitute(hand.snapshot(), identityShuffler)
+
+        assertTrue(restored.isRunningOut)
+        assertEquals(hand.board, restored.board)
+        assertEquals(setOf(1, 2, 3), restored.revealedSeatNos)
+        restored.advanceRunout()
+        restored.advanceRunout()
+        assertEquals(5, restored.board.size)
+        assertEquals(5, restored.board.toSet().size)
+        restored.advanceRunout()
+        assertTrue(restored.isFinished)
+        assertEquals(chips(3_000), sumStacks(listOf(1, 2, 3), restored))
+    }
+
+    @Test
+    fun `라운드도 결과도 없지만 런아웃 플래그가 꺼진 스냅샷은 패를 공개하지 않고 베팅은 HAND_ALREADY_FINISHED 다`() {
+        val snapshot = preflopAllIn().snapshot()
+        assertTrue(snapshot.runningOut)
+
+        val restored = Hand.reconstitute(snapshot.copy(runningOut = false), identityShuffler)
+
+        assertFalse(restored.isRunningOut)
+        assertEquals(emptySet(), restored.revealedSeatNos)
+        val e = assertFailsWith<IllegalHandStateException> { restored.act(1, BettingAction.Check) }
+        assertEquals(HoldemErrorCode.HAND_ALREADY_FINISHED, e.errorCode)
+    }
+
+    @Test
+    fun `런아웃 플래그는 스냅샷 왕복에서 보존되고 쇼다운이 끝나면 내려간다`() {
+        val hand = preflopAllIn()
+
+        val snapshot = hand.snapshot()
+        assertTrue(snapshot.runningOut)
+        assertEquals(snapshot, Hand.reconstitute(snapshot, identityShuffler).snapshot())
+
+        while (hand.isRunningOut) hand.advanceRunout()
+        assertFalse(hand.snapshot().runningOut)
+    }
+
+    private fun preflopAllIn(): Hand {
+        val hand = Hand.start(stacksOf(1 to 1_000, 2 to 1_000, 3 to 1_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
         hand.act(1, BettingAction.RaiseTo(chips(1_000)))
         hand.act(2, BettingAction.Call)
         hand.act(3, BettingAction.Call)
-
-        assertTrue(hand.isFinished)
-        assertEquals(Street.RIVER, hand.street)
-        assertEquals(5, hand.board.size)
-        assertEquals(chips(3_000), sumStacks(listOf(1, 2, 3), hand))
+        return hand
     }
 
     @Test
@@ -206,6 +335,7 @@ class HandTest {
 
         hand.act(1, BettingAction.RaiseTo(chips(5_000))) // 버튼 올인
         hand.act(2, BettingAction.Call) // BB는 1,000까지밖에 못 낸다
+        while (hand.isRunningOut) hand.advanceRunout()
 
         assertTrue(hand.isFinished)
         assertEquals(setOf(2), hand.result!!.showdownWinners) // 언콜드 벳 반환만 받은 seat1은 쇼다운 승자가 아니다
@@ -215,13 +345,16 @@ class HandTest {
     }
 
     @Test
-    fun `헤즈업에서 두 좌석 모두 블라인드로 올인이 되면 생성 시점에 바로 쇼다운까지 끝난다`() {
+    fun `헤즈업에서 두 좌석 모두 블라인드로 올인이 되면 생성 시점에 런아웃 상태가 된다`() {
         // 딜 순서(버튼(SB) 다음인 BB부터, 버튼이 마지막): seat2(BB)=Kh,Kc(KK)  seat1(버튼/SB)=Ah,Ac(AA)  보드=2d,7c,9h,Jc,4s
         val shuffler = fixedShuffler("Kh", "Ah", "Kc", "Ac", "2d", "7c", "9h", "Jc", "4s")
         val hand = Hand.start(stacksOf(1 to 100, 2 to 200), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, chips(100), chips(200), shuffler)
 
-        assertTrue(hand.isFinished)
+        assertTrue(hand.isRunningOut)
         assertEquals(null, hand.toActSeatNo)
+        assertEquals(setOf(1, 2), hand.revealedSeatNos)
+        while (hand.isRunningOut) hand.advanceRunout()
+        assertTrue(hand.isFinished)
         assertEquals(5, hand.board.size)
         assertTrue(1 in hand.result!!.showdownRanks)
         assertTrue(2 in hand.result!!.showdownRanks)

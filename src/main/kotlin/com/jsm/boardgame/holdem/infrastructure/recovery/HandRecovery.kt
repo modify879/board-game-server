@@ -53,6 +53,10 @@ import java.util.concurrent.atomic.AtomicLong
  * **단일 인스턴스 배포를 전제한다.** 인스턴스가 여럿이면 모두가 같은 행을 복구하려 들어 취소·재개
  * 유스케이스가 중복 호출된다. 다중 인스턴스로 가려면 리더 선출이나 행 잠금이 필요하다.
  *
+ * 런아웃 중인 핸드는 3분 재접속 유예 없이 바로 재개한다 — 남은 결정이 없어 기다려도 얻는 게 없고, 오히려
+ * 질 쪽이 일부러 돌아오지 않아 이미 공개된 올인을 무효로 만들 수 있다. 안 돌아온 사용자는 유예 중단
+ * (`suspendWatch`)을 하지 않았으므로 평소의 연결 타이머가 그대로 건다.
+ *
  * 진행 중 핸드가 없고 후보(스택이 있는 점유 좌석)가 2명 이상인 테이블마다 다음 핸드 카운트다운을
  * 새로 건다 — 재시작 전에 몇 초가 남아 있었는지는 알 길이 없고(인메모리라 사라졌다) 알 필요도
  * 없다, 어차피 상대 시간이라 처음부터 다시 재도 된다. 핸드가 있으면 그 핸드가 끝날 때
@@ -115,6 +119,15 @@ class HandRecovery(
         val allUserIds = hand.seatNos.mapNotNull { seatNo -> table.seatAt(seatNo)?.userId }.toSet()
         if (allUserIds.isEmpty()) {
             log.info("테이블 {} 복구 대상 좌석을 찾지 못해 바로 재개합니다.", tableId.value)
+            tableExecutor.call(tableId) { resumeHandUseCase.resume(ResumeHandCommand(tableId.value)) }
+            return
+        }
+
+        // 런아웃 중이면 남은 플레이어 결정이 없다 - 기다리면 질 쪽이 재접속을 안 해서 이미 공개된
+        // 올인을 무효로 만들 수 있을 뿐이다. 유예·감시 중단 없이 바로 재개한다. 안 돌아온 사람은
+        // ConnectionTimer 의 부팅 시딩(@Order(1))이 평소대로 연결 타이머를 건다(suspendWatch 를 안 했으므로).
+        if (hand.isRunningOut) {
+            log.info("테이블 {} 런아웃 중인 핸드라 재접속을 기다리지 않고 바로 재개합니다.", tableId.value)
             tableExecutor.call(tableId) { resumeHandUseCase.resume(ResumeHandCommand(tableId.value)) }
             return
         }

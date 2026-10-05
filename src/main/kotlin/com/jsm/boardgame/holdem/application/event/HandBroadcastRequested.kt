@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.event
 
+import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
@@ -11,4 +12,10 @@ import com.jsm.boardgame.holdem.domain.model.TableId
  * 트랜잭션 커밋 후에 한다 — 커밋 전에 내보내면, 그 뒤 예외로 롤백됐을 때 클라이언트만
  * 서버보다 앞선 상태를 보게 된다.
  */
-data class HandBroadcastRequested(val tableId: TableId, val table: HoldemTable, val hand: Hand?)
+data class HandBroadcastRequested(
+    val tableId: TableId,
+    val table: HoldemTable,
+    val hand: Hand?,
+    /** 방금 끝난 [hand] 의 공개 결과. 끝난 핸드를 싣는 HandSettler 만 채운다 — 그 외에는 null. */
+    val lastResult: LastHandResult? = null,
+)

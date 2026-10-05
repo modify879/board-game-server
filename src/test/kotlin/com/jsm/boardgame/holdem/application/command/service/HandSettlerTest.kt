@@ -1,7 +1,10 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.LastHandResult
+import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Card
@@ -90,9 +93,10 @@ class HandSettlerTest {
 
     private val tables = HandSettlerFakeTableRepository()
     private val handStore = HandSettlerFakeHandStore()
+    private val lastHandResults = HandSettlerFakeLastHandResultStore()
     private val eventPublisher = HandSettlerFakeEventPublisher()
     private val countdown = HandSettlerFakeNextHandCountdown()
-    private val settler = HandSettler(tables, handStore, eventPublisher, countdown)
+    private val settler = HandSettler(tables, handStore, lastHandResults, eventPublisher, countdown)
 
     private fun seatedTable(vararg stacks: Pair<Int, Long>): HoldemTable {
         val seats = stacks.associate { (seatNo, stack) ->
@@ -110,6 +114,59 @@ class HandSettlerTest {
     }
 
     @Test
+    fun `정산하면 직전 핸드 결과가 저장되고 폴드 승리는 공개 패 없이 지급만 담는다`() {
+        val table = seatedTable(1 to 10_000L, 2 to 10_000L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
+        hand.act(1, BettingAction.Fold)
+
+        settler.settle(tableId, table, hand)
+
+        val saved = lastHandResults.find(tableId)
+        assertNotNull(saved)
+        assertEquals(listOf(LastHandResult.Payout(2, 2000L, 300)), saved.payouts)
+        assertEquals(emptyList(), saved.shownHands)
+    }
+
+    @Test
+    fun `쇼다운이 벌어지면 직전 핸드 결과에 공개 패와 보드가 담긴다`() {
+        val table = seatedTable(1 to 200L, 2 to 200L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(200), 2 to Chips.of(200))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), bustingShuffler)
+        hand.act(1, BettingAction.Call)
+        while (hand.isRunningOut) hand.advanceRunout()
+
+        settler.settle(tableId, table, hand)
+
+        val saved = lastHandResults.find(tableId)!!
+        assertEquals(5, saved.board.size)
+        assertEquals(setOf(1, 2), saved.shownHands.map { it.seatNo }.toSet())
+        assertEquals(hand.holeCardsOf(1).map { it.toString() }, saved.shownHands.first { it.seatNo == 1 }.holeCards)
+        assertEquals(400L, saved.payouts.sumOf { it.amount })
+    }
+
+    @Test
+    fun `파산해 자동 기립한 좌석의 userId 도 직전 결과와 이벤트에 기록된다`() {
+        val table = seatedTable(1 to 200L, 2 to 200L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(200), 2 to Chips.of(200))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), bustingShuffler)
+        hand.act(1, BettingAction.Call)
+        while (hand.isRunningOut) hand.advanceRunout()
+
+        settler.settle(tableId, table, hand)
+
+        assertNull(tables.findById(tableId)!!.seatAt(2)) // 좌석 2 는 기립했다
+        val saved = lastHandResults.find(tableId)!!
+        assertEquals(setOf(1000L, 2000L), saved.shownHands.map { it.userId }.toSet())
+        assertEquals(listOf(LastHandResult.Payout(1, 1000L, 400)), saved.payouts)
+        val event = eventPublisher.events.filterIsInstance<HandBroadcastRequested>().single()
+        assertEquals(saved, event.lastResult)
+    }
+
+    @Test
     fun `정산 후 스택이 0이 된 좌석은 지갑 이체 없이 자동으로 기립한다`() {
         val table = seatedTable(1 to 200L, 2 to 200L)
         val tableId = table.id!!
@@ -119,6 +176,7 @@ class HandSettlerTest {
 
         // 좌석 1(버튼/SB)이 남은 스택을 콜해 둘 다 올인 — 액션 없이 쇼다운까지 진행된다.
         hand.act(1, BettingAction.Call)
+        while (hand.isRunningOut) hand.advanceRunout()
 
         settler.settle(tableId, table, hand)
 
@@ -211,6 +269,7 @@ class HandSettlerTest {
         val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), bustingShuffler)
         handStore.save(tableId, hand)
         hand.act(1, BettingAction.Call)
+        while (hand.isRunningOut) hand.advanceRunout()
 
         settler.settle(tableId, table, hand)
 
@@ -230,4 +289,11 @@ class HandSettlerTest {
 
         assertTrue(eventPublisher.events.any { it is JoinRequestsDue && it.tableId == tableId })
     }
+}
+
+private class HandSettlerFakeLastHandResultStore : LastHandResultStore {
+    val store = mutableMapOf<Long, LastHandResult>()
+    override fun find(tableId: TableId): LastHandResult? = store[tableId.value]
+    override fun save(tableId: TableId, result: LastHandResult) { store[tableId.value] = result }
+    override fun remove(tableId: TableId) { store.remove(tableId.value) }
 }

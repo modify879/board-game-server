@@ -2,6 +2,8 @@ package com.jsm.boardgame.holdem.presentation.rest
 
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutCommand
+import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
 import com.jsm.boardgame.holdem.application.port.HandStore
@@ -87,6 +89,9 @@ class HoldemShowdownIntegrationTest {
 
     @Autowired
     private lateinit var handStore: HandStore
+
+    @Autowired
+    private lateinit var advanceRunoutUseCase: AdvanceRunoutUseCase
 
     @Autowired
     private lateinit var startScheduledHandUseCase: StartScheduledHandUseCase
@@ -212,6 +217,10 @@ class HoldemShowdownIntegrationTest {
         while (true) {
             val hand = handStore.find(TableId(tableId)) ?: return
             if (hand.isFinished) return
+            if (hand.isRunningOut) { // 올인 런아웃은 타이머(테스트에선 1h) 대신 직접 한 걸음씩 민다
+                advanceRunoutUseCase.advance(AdvanceRunoutCommand(tableId))
+                continue
+            }
             val seatNo = hand.toActSeatNo ?: return
             val action = if (hand.availableActionsFor(seatNo)?.canCheck == true) "CHECK" else "CALL"
             authPost(
@@ -286,7 +295,7 @@ class HoldemShowdownIntegrationTest {
         ).andExpect(status().isNoContent)
 
         // 좌석2는 자기 스택만큼만 콜할 수 있다(숏스택 올인) — 남은 라운드는 이 콜 하나로 끝난다:
-        // 전원 ALL_IN 이 되어 남은 보드가 한 번에 깔리고 곧바로 쇼다운한다.
+        // 전원 ALL_IN 이 되어 런아웃에 들어가고, 헬퍼가 AdvanceRunoutUseCase 로 쇼다운까지 민다.
         playCheckCallToShowdown(tableId, mapOf(1 to tokenA, 2 to tokenB))
 
         val settledTable = holdemTableRepository.findById(TableId(tableId))!!

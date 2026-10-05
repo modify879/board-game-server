@@ -38,3 +38,9 @@ do $$ begin
         add constraint fk_hand_in_progress_table foreign key (table_id) references holdem_tables(id);
 exception when duplicate_object then null;
 end $$
+@@@
+do $$ begin
+    alter table holdem_last_hand_result
+        add constraint fk_last_hand_result_table foreign key (table_id) references holdem_tables(id);
+exception when duplicate_object then null;
+end $$
