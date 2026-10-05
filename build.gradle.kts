@@ -38,10 +38,6 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
     developmentOnly("org.springframework.boot:spring-boot-docker-compose")
 
-    testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
-    testImplementation("org.springframework.boot:spring-boot-starter-data-redis-test")
-    testImplementation("org.springframework.boot:spring-boot-starter-security-test")
-    testImplementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-starter-websocket-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
