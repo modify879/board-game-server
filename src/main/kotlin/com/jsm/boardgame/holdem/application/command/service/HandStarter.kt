@@ -27,7 +27,6 @@ class HandStarter(
     private val handStore: HandStore,
     private val lastHandResults: LastHandResultStore,
     private val shuffler: Shuffler,
-    private val handSettler: HandSettler,
     private val eventPublisher: ApplicationEventPublisher,
     private val countdown: NextHandCountdown,
 ) {
@@ -96,12 +95,7 @@ class HandStarter(
             extraPostSeatNos = extraPostSeatNos,
         )
 
-        if (hand.isFinished) {
-            handSettler.settle(tableId, table, hand)
-            return true
-        }
-
-        // 새 핸드가 시작됐으니 직전 결과는 낡았다. 시작하자마자 끝나는 핸드는 위에서 settle 이 새 결과로 덮어쓴다.
+        // 새 핸드가 시작됐으니 직전 결과는 낡았다.
         lastHandResults.remove(tableId)
         handStore.save(tableId, hand)
         tables.save(table)

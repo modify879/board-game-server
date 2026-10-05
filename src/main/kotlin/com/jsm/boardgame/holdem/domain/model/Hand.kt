@@ -59,6 +59,18 @@ class Hand private constructor(
 ) {
     private val boardCards = mutableListOf<Card>()
 
+    private val departed = mutableMapOf<Int, Long>()
+
+    /** 핸드 도중 폴드한 채 기립한 좌석의 사용자. 핸드를 무를 때 이들의 투입액을 지갑으로 돌려준다. */
+    val departedUserIds: Map<Int, Long> get() = departed.toMap()
+
+    fun recordDeparture(seatNo: Int, userId: Long) {
+        if (seatNo !in seatNos || statusOf(seatNo) != SeatStatus.FOLDED) {
+            throw IllegalHandStateException(HoldemErrorCode.DEPARTURE_NOT_FOLDED, "폴드한 참가 좌석만 이탈로 기록할 수 있습니다: seatNo=$seatNo")
+        }
+        departed[seatNo] = userId
+    }
+
     var street: Street = Street.PREFLOP
         private set
 
@@ -139,6 +151,7 @@ class Hand private constructor(
         currentRound = currentRound?.snapshot(),
         runningOut = isRunningOut,
         showdownLeaderSeatNo = showdownLeaderSeatNo,
+        departedUserIds = departedUserIds,
     )
 
     fun act(seatNo: Int, action: BettingAction) {
@@ -401,6 +414,7 @@ class Hand private constructor(
             hand.boardCards.addAll(snapshot.board)
             hand.showdownLeaderSeatNo = snapshot.showdownLeaderSeatNo
             hand.isRunningOut = snapshot.runningOut
+            hand.departed.putAll(snapshot.departedUserIds)
             return hand
         }
     }

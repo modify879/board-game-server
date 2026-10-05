@@ -68,8 +68,7 @@ class StartScheduledHandServiceTest {
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
     private val countdown = StartScheduledHandFakeNextHandCountdown()
-    private val handSettler = HandSettler(tables, handStore, StartScheduledHandServiceFakeLastHandResultStore(), eventPublisher, countdown)
-    private val handStarter = HandStarter(tables, handStore, StartScheduledHandServiceFakeLastHandResultStore(), identityShuffler, handSettler, eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, StartScheduledHandServiceFakeLastHandResultStore(), identityShuffler, eventPublisher, countdown)
     private val service = StartScheduledHandService(tables, handStore, handStarter)
 
     private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): TableId {

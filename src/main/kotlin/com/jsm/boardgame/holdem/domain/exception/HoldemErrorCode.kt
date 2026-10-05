@@ -20,6 +20,7 @@ enum class HoldemErrorCode(override val kind: ErrorKind) : ErrorCode {
 
     HAND_ALREADY_FINISHED(ErrorKind.CONFLICT),
     HAND_NOT_RUNNING_OUT(ErrorKind.CONFLICT),
+    DEPARTURE_NOT_FOLDED(ErrorKind.CONFLICT),
     NOT_ENOUGH_PLAYERS(ErrorKind.INVALID),
 
     TABLE_NAME_INVALID(ErrorKind.INVALID),

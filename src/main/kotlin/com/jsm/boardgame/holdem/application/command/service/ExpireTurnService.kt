@@ -68,6 +68,7 @@ class ExpireTurnService(
     private fun standUpFoldedSeat(table: HoldemTable, tableId: TableId, seatNo: Int, hand: Hand) {
         val userId = table.seatAt(seatNo)?.userId ?: return
         val remaining = hand.stackOf(seatNo)
+        hand.recordDeparture(seatNo, userId)
         table.applyStacks(mapOf(seatNo to remaining))
         val returned = table.standUp(userId)
         if (returned.isPositive()) {

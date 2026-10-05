@@ -46,6 +46,11 @@ private class HandBroadcasterFakeNextHandCountdown : NextHandCountdown {
     override fun remaining(tableId: TableId): Duration? = null
 }
 
+private class HandBroadcasterThrowingChannel : MessageChannel {
+    override fun send(message: Message<*>): Boolean = throw IllegalStateException("boom")
+    override fun send(message: Message<*>, timeout: Long): Boolean = send(message)
+}
+
 class HandBroadcasterTest {
 
     private val last = LastHandResult(
@@ -71,7 +76,21 @@ class HandBroadcasterTest {
         return channel.payloads.filterIsInstance<TablePublicView>().single()
     }
 
-    private fun publishWithoutHand(stored: LastHandResult?): TablePublicView = publish(stored, null, null)
+    private fun publishWithoutHand(stored: LastHandResult?): TablePublicView = publish(stored, null, stored)
+
+    @Test
+    fun `전송 중 예외는 삼키고 던지지 않는다`() {
+        val broadcaster = HandBroadcaster(
+            SimpMessagingTemplate(HandBroadcasterThrowingChannel()),
+            HandBroadcasterFakeUserRegistry(),
+            TableViewSequence(),
+            HandBroadcasterFakeNextHandCountdown(),
+            HandBroadcasterFakeLastHandResultStore(null),
+        )
+        val table = HoldemTable.create("t")
+
+        broadcaster.publish(TableId(1L), table, null, null, 1L)
+    }
 
     @Test
     fun `끝난 핸드의 브로드캐스트는 저장소가 아니라 이벤트가 실은 직전 결과를 쓴다`() {
