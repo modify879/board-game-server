@@ -79,8 +79,7 @@ class HandStarterTest {
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
     private val countdown = HandStarterFakeNextHandCountdown()
-    private val handSettler = HandSettler(tables, handStore, lastHandResults, eventPublisher, countdown)
-    private val handStarter = HandStarter(tables, handStore, lastHandResults, identityShuffler, handSettler, eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, lastHandResults, identityShuffler, eventPublisher, countdown)
 
     private fun start(tableId: TableId) {
         val table = tables.findById(tableId)!!

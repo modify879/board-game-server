@@ -96,4 +96,27 @@ class HandStateJsonTest {
         assertNull(restored.currentRound!!.lastAggressorSeatNo)
         assertFalse(restored.runningOut)
     }
+
+    @Test
+    fun `departedUserIds 는 JSON 왕복에서 보존되고 필드가 없는 예전 JSON 은 빈 맵으로 읽힌다`() {
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)),
+            buttonSeatNo = 1,
+            smallBlindSeatNo = 2,
+            bigBlindSeatNo = 3,
+            smallBlind = Chips.of(100),
+            bigBlind = Chips.of(200),
+            shuffler = identityShuffler,
+        )
+        hand.act(1, BettingAction.Fold)
+        hand.recordDeparture(1, 77L)
+
+        val text = objectMapper.writeValueAsString(hand.snapshot().toJson())
+        val restored = objectMapper.readValue(text, HandStateJson::class.java)
+        assertEquals(mapOf(1 to 77L), restored.toSnapshot().departedUserIds)
+
+        val old = objectMapper.readTree(text).let { (it as tools.jackson.databind.node.ObjectNode).apply { remove("departedUserIds") } }
+        val oldRestored = objectMapper.readValue(objectMapper.writeValueAsString(old), HandStateJson::class.java)
+        assertTrue(oldRestored.departedUserIds.isEmpty())
+    }
 }

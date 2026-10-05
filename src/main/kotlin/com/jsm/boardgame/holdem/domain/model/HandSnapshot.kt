@@ -31,6 +31,8 @@ data class HandSnapshot(
     val showdownLeaderSeatNo: Int?,
     /** 올인 런아웃 진행 중 여부. [Hand.isRunningOut] 그대로 — `currentRound == null` 로 추론하지 않는다(공개 여부를 정하므로). */
     val runningOut: Boolean,
+    /** 핸드 도중 폴드한 채 기립한 좌석의 사용자. [Hand.departedUserIds] 그대로. */
+    val departedUserIds: Map<Int, Long> = emptyMap(),
 ) {
     data class BettingSeatSnapshot(
         val seatNo: Int,

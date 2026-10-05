@@ -77,6 +77,8 @@ data class HandStateJson(
     val showdownLeaderSeatNo: Int? = null,
     // 기본값 false — 이 필드가 없는 예전 행은 런아웃이 아닌 것으로 읽혀 홀카드를 공개하지 않는다(fail closed).
     val runningOut: Boolean = false,
+    // 기본값 비어 있음 — 이 필드가 없는 예전 행은 이탈자가 없던 핸드다.
+    val departedUserIds: Map<Int, Long> = emptyMap(),
 ) {
     data class BettingSeatJson(
         val seatNo: Int,
@@ -111,6 +113,7 @@ fun HandSnapshot.toJson(): HandStateJson = HandStateJson(
     currentRound = currentRound?.toJson(),
     showdownLeaderSeatNo = showdownLeaderSeatNo,
     runningOut = runningOut,
+    departedUserIds = departedUserIds,
 )
 
 private fun HandSnapshot.BettingRoundSnapshot.toJson(): HandStateJson.BettingRoundJson = HandStateJson.BettingRoundJson(
@@ -145,6 +148,7 @@ fun HandStateJson.toSnapshot(): HandSnapshot = HandSnapshot(
     currentRound = currentRound?.toSnapshot(),
     showdownLeaderSeatNo = showdownLeaderSeatNo,
     runningOut = runningOut,
+    departedUserIds = departedUserIds,
 )
 
 private fun HandStateJson.BettingRoundJson.toSnapshot(): HandSnapshot.BettingRoundSnapshot = HandSnapshot.BettingRoundSnapshot(

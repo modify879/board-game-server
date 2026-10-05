@@ -45,27 +45,33 @@ class HandBroadcaster(
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     fun on(event: HandBroadcastRequested) {
         val seq = sequence.next(event.tableId)
+        // 핸드가 없으면 직전 결과를 실어 라이브 클라이언트도 재구독자와 같은 보드·결과를 본다. 핸드가 있으면
+        // 이벤트가 실어 온 값(방금 끝난 핸드만 있다)을 쓴다. 커밋 전에 읽는다 — afterCommit 에서 읽으면
+        // 그 사이 다른 트랜잭션이 바꾼 값을 볼 수 있어 seq 와 어긋난다.
+        val lastResult = if (event.hand == null) lastHandResults.find(event.tableId) else event.lastResult
         TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
             override fun afterCommit() {
-                publish(event.tableId, event.table, event.hand, event.lastResult, seq)
+                publish(event.tableId, event.table, event.hand, lastResult, seq)
             }
         })
     }
 
-    fun publish(tableId: TableId, table: HoldemTable, hand: Hand?, eventLastResult: LastHandResult?, seq: Long) {
-        // 핸드가 없으면 직전 결과를 실어 라이브 클라이언트도 재구독자와 같은 보드·결과를 본다. 핸드가 있으면
-        // 이벤트가 실어 온 값(방금 끝난 핸드만 있다)을 그대로 쓴다 — 다시 유도하지 않는다.
-        // afterCommit 이라 트랜잭션 밖이지만 어댑터의 단일 조회는 Spring Data 가 자기 읽기 트랜잭션을 연다.
-        val lastResult = if (hand == null) lastHandResults.find(tableId) else eventLastResult
-        messagingTemplate.convertAndSend(
-            HoldemDestinations.publicTopicOf(tableId.value),
-            publicViewOf(tableId, table, hand, lastResult, seq, nextHandCountdown.remaining(tableId)),
-        )
+    fun publish(tableId: TableId, table: HoldemTable, hand: Hand?, lastResult: LastHandResult?, seq: Long) {
+        // 전송은 최선 노력이다 - 이미 커밋된 뒤라 예외를 올려 보내면 호출자(런아웃 타이머 등)가 커밋된
+        // 작업을 실패로 센다. 유실은 seq 와 재구독 스냅샷이 클라이언트를 복구한다.
+        try {
+            messagingTemplate.convertAndSend(
+                HoldemDestinations.publicTopicOf(tableId.value),
+                publicViewOf(tableId, table, hand, lastResult, seq, nextHandCountdown.remaining(tableId)),
+            )
 
-        hand ?: return
-        for (seatNo in hand.seatNos) {
-            val userId = table.seatAt(seatNo)?.userId ?: continue
-            sendPrivate(tableId, userId, privateViewOf(tableId, seatNo, hand, seq))
+            hand ?: return
+            for (seatNo in hand.seatNos) {
+                val userId = table.seatAt(seatNo)?.userId ?: continue
+                sendPrivate(tableId, userId, privateViewOf(tableId, seatNo, hand, seq))
+            }
+        } catch (e: Exception) {
+            log.error("broadcast failed: tableId={}, seq={}", tableId.value, seq, e)
         }
     }
 

@@ -1,7 +1,10 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
+import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.NextHandCountdown
+import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
@@ -10,9 +13,11 @@ import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
+import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 private class CancelHandFakeTableRepository : HoldemTableRepository {
     private val store = mutableMapOf<Long, HoldemTable>()
@@ -54,13 +59,38 @@ private class CancelHandFakeHandStore : HandStore {
     override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
 }
 
+private class CancelHandFakeWalletTransfer : WalletTransfer {
+    data class FromGameCall(val userId: Long, val amount: Long, val tableId: Long, val memo: String?)
+
+    val fromGameCalls = mutableListOf<FromGameCall>()
+
+    override fun toGame(userId: Long, amount: Long, tableId: Long, memo: String?) {
+        error("CancelHandService 는 toGame 을 부르지 않는다")
+    }
+
+    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {
+        fromGameCalls += FromGameCall(userId, amount, tableId, memo)
+    }
+}
+
+private class CancelHandFakeNextHandCountdown : NextHandCountdown {
+    val restarted = mutableListOf<TableId>()
+
+    override fun restart(tableId: TableId) { restarted += tableId }
+    override fun cancel(tableId: TableId) {}
+    override fun remaining(tableId: TableId): Duration? = null
+}
+
 class CancelHandServiceTest {
 
     private val tables = CancelHandFakeTableRepository()
     private val handStore = CancelHandFakeHandStore()
     private val identityShuffler = Shuffler { it }
-    private val eventPublisher = ApplicationEventPublisher { }
-    private val service = CancelHandService(tables, handStore, eventPublisher)
+    private val walletTransfer = CancelHandFakeWalletTransfer()
+    private val countdown = CancelHandFakeNextHandCountdown()
+    private val events = mutableListOf<Any>()
+    private val eventPublisher = ApplicationEventPublisher { events += it }
+    private val service = CancelHandService(tables, handStore, walletTransfer, countdown, eventPublisher)
 
     private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): TableId {
         var table = HoldemTable.create("test-table")
@@ -153,5 +183,75 @@ class CancelHandServiceTest {
 
         val totalAfter = tables.findById(tableId)!!.occupiedSeats().sumOf { it.stack.amount }
         assertEquals(totalBefore, totalAfter)
+    }
+
+    @Test
+    fun `핸드 도중 폴드하고 기립한 좌석은 투입액을 지갑으로 돌려받고 나머지는 시작 스택으로 돌아간다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+        val hand = startAndStoreHand(tableId, mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)))
+        // 버튼(1) 콜 -> SB(2) 폴드(100 투입) 후 즉시 기립. ExpireTurnService 와 같은 절차.
+        hand.act(1, BettingAction.Call)
+        hand.act(2, BettingAction.Fold)
+        val table = tables.findById(tableId)!!
+        hand.recordDeparture(2, 2L)
+        table.applyStacks(mapOf(2 to hand.stackOf(2)))
+        val standUpReturn = table.standUp(2L)
+        tables.save(table)
+
+        service.cancel(CancelHandCommand(tableId.value))
+
+        val saved = tables.findById(tableId)!!
+        assertNull(saved.seatAt(2))
+        assertEquals(Chips.of(10_000), saved.seatAt(1)!!.stack)
+        assertEquals(Chips.of(10_000), saved.seatAt(3)!!.stack)
+        val refund = walletTransfer.fromGameCalls.single()
+        assertEquals(2L, refund.userId)
+        assertEquals(100L, refund.amount)
+        assertEquals(tableId.value, refund.tableId)
+        // 기립 때 받은 잔여 스택 + 취소 환불 = 시작 스택
+        assertEquals(10_000L, standUpReturn.amount + refund.amount)
+        assertEquals(30_000L - 10_000L, saved.occupiedSeats().sumOf { it.stack.amount })
+    }
+
+    @Test
+    fun `이탈한 좌석이 없으면 지갑을 부르지 않는다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        startAndStoreHand(tableId, mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)))
+
+        service.cancel(CancelHandCommand(tableId.value))
+
+        assertTrue(walletTransfer.fromGameCalls.isEmpty())
+    }
+
+    @Test
+    fun `취소 뒤 후보가 2명 이상이면 카운트다운을 다시 걸고 참가 요청 처리를 알린다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        startAndStoreHand(tableId, mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)))
+
+        service.cancel(CancelHandCommand(tableId.value))
+
+        assertEquals(listOf(tableId), countdown.restarted)
+        assertTrue(events.any { it is JoinRequestsDue && it.tableId == tableId })
+    }
+
+    @Test
+    fun `취소 뒤 후보가 2명 미만이면 카운트다운을 걸지 않는다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+        val hand = startAndStoreHand(tableId, mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)))
+        hand.act(1, BettingAction.Fold)
+        hand.act(2, BettingAction.Fold)
+        val table = tables.findById(tableId)!!
+        // 폴드한 두 좌석이 기립하고 나면 남는 후보는 1명이다.
+        for (seatNo in listOf(1, 2)) {
+            hand.recordDeparture(seatNo, seatNo.toLong())
+            table.applyStacks(mapOf(seatNo to hand.stackOf(seatNo)))
+            table.standUp(seatNo.toLong())
+        }
+        tables.save(table)
+
+        service.cancel(CancelHandCommand(tableId.value))
+
+        assertTrue(countdown.restarted.isEmpty())
+        assertTrue(events.any { it is JoinRequestsDue })
     }
 }

@@ -96,8 +96,7 @@ class StandUpServiceTest {
     private val walletTransfer = StandUpFakeWalletTransfer()
     private val eventPublisher = StandUpFakeEventPublisher()
     private val countdown = StandUpFakeNextHandCountdown()
-    private val handSettler = HandSettler(tables, handStore, StandUpServiceFakeLastHandResultStore(), eventPublisher, countdown)
-    private val handStarter = HandStarter(tables, handStore, StandUpServiceFakeLastHandResultStore(), Shuffler { it }, handSettler, eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, StandUpServiceFakeLastHandResultStore(), Shuffler { it }, eventPublisher, countdown)
     private val service = StandUpService(tables, handStore, walletTransfer, handStarter, eventPublisher)
 
     @Test
