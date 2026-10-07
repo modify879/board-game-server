@@ -11,8 +11,8 @@ import java.time.Duration
  * HoldemSubscriptionSnapshotListener(재접속 1회 스냅샷)가 같이 쓴다 — 그래서 top-level
  * 함수로 뺐다(같은 패키지라도 private 로는 다른 파일에서 못 쓴다).
  *
- * 스프링 타입을 하나도 받지 않는다 — 그래서 스프링 없이 단위 테스트할 수 있다. [nextHandRemaining]
- * 은 NextHandCountdown 포트에서 호출자가 미리 읽어와 넘긴다(단조 시계 기준 남은 시간).
+ * 스프링 타입을 하나도 받지 않는다 — 그래서 스프링 없이 단위 테스트할 수 있다. [nextHandRemaining]·
+ * [turnRemaining] 은 NextHandCountdown·TurnCountdown 포트에서 호출자가 미리 읽어와 넘긴다(단조 시계 기준 남은 시간).
  */
 fun publicViewOf(
     tableId: TableId,
@@ -21,6 +21,7 @@ fun publicViewOf(
     lastResult: LastHandResult?,
     seq: Long,
     nextHandRemaining: Duration?,
+    turnRemaining: Duration?,
 ): TablePublicView {
     // 결과를 보일지는 여기서만 정한다 — 핸드 없음(재구독·취소 뒤) 또는 방금 끝난 핸드일 때만이다.
     // 호출자는 그 경우의 [lastResult] 를 채워 넘긴다(끝난 핸드는 HandSettler 가 만든 값).
@@ -59,6 +60,7 @@ fun publicViewOf(
         revealedHands = hand?.revealedSeatNos?.sorted()
             ?.map { RevealedHandView(it, hand.holeCardsOf(it).map { c -> c.toString() }) } ?: emptyList(),
         nextHandInMs = nextHandRemaining?.toMillis(),
+        turnRemainingMs = if (hand != null && !hand.isFinished && hand.toActSeatNo != null) turnRemaining?.toMillis() else null,
         seq = seq,
     )
 }
