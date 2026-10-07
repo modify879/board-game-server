@@ -31,8 +31,8 @@ Docker 가 떠 있어야 한다. 접속 정보는 `application.yaml` 에 적지 
 - 테스트 이름은 백틱을 쓴 한국어 문장
 - 지갑을 여는 통합 테스트(wallet, 바이인하는 holdem)는 `UserRepository` 로 **실제 `users` 행을 먼저 만든다**.
   `fk_wallets_user` 때문에 합성 userId 로 지갑을 열면 FK 위반이다
-- 규칙을 테스트로 못 박을 때는 성격이 다른 경로를 여럿 잡는다. 이 저장소에서 세 번
-  같은 식으로 뚫렸다 — 사전 체크 경로만 타서 DB 제약 번역이 한 번도 안 돌았다
+- 규칙을 테스트로 못 박을 때는 성격이 다른 경로를 여럿 잡는다 — 사전 체크 경로만 타면
+  DB 제약 번역이 한 번도 돌지 않은 채 테스트가 통과한다
 
 ## 구조
 
@@ -108,7 +108,7 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 5. 무작위성은 주입받는다. 각 게임이 자기 `Shuffler`/`DiceRoller` 포트를 정의한다.
    시계는 `common/config` 의 `Clock` 빈 하나를 공유한다 — `Instant.now()` 가 한 곳만 남아도 TTL 테스트가 흔들린다
 6. 히든 정보는 뷰어별로 마스킹한다. WebSocket 으로 도메인 객체나 전체 게임 상태를 내보내지 않는다.
-   `game.viewFor(viewer)` 를 거친다. 브로드캐스트의 기본값은 뷰어별로 다른 페이로드다
+   공개 뷰와 개인 뷰를 별도 타입으로 조립한다(holdem: `publicViewOf`/`privateViewOf`). 브로드캐스트의 기본값은 뷰어별로 다른 페이로드다
    - 개인 채널은 `/user/queue/...` 로만 구독한다. 원시 `/queue` 구독은 `StompDestinationGuard` 가 막는다 —
      열어두면 세션 id 만 알아도 남의 개인 큐를 엿본다
    - 구독 인가 인터셉터는 목적지를 해석하지 못하면 거부한다(fail-closed). 통과시키면 형식만 비튼 목적지로
@@ -133,7 +133,7 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
    - 4xx 는 WARN 스택 없이, 5xx 는 ERROR 스택 포함
    - **시큐리티 필터 단계의 401·403 도 같은 계약을 따른다.** `@RestControllerAdvice` 를 안 거치므로
      `AuthenticationEntryPoint`/`AccessDeniedHandler` 를 `exceptionHandling` 과 `oauth2ResourceServer`
-     **양쪽에** 등록해야 한다. 한쪽만 하면 토큰이 있고 검증에 실패한 경우가 빠진다 — 두 번 뚫린 자리다
+     **양쪽에** 등록해야 한다. 한쪽만 하면 토큰이 있고 검증에 실패한 경우가 빠진다
    - 로그에 비밀번호를 남기지 않는다
 
 ## 표준 형태
