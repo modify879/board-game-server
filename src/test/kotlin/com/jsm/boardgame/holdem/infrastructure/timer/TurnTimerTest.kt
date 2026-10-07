@@ -11,6 +11,8 @@ import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.scheduling.Trigger
+import org.springframework.transaction.support.TransactionSynchronizationManager
+import org.springframework.transaction.support.TransactionSynchronizationUtils
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -20,9 +22,10 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-private class TurnTimerFakeScheduledFuture : ScheduledFuture<Any?> {
+private class TurnTimerFakeScheduledFuture(private val delayMs: Long = 0) : ScheduledFuture<Any?> {
     var cancelled = false
         private set
 
@@ -36,11 +39,11 @@ private class TurnTimerFakeScheduledFuture : ScheduledFuture<Any?> {
     override fun get(): Any? = null
     override fun get(timeout: Long, unit: TimeUnit?): Any? = null
     override fun compareTo(other: Delayed?): Int = 0
-    override fun getDelay(unit: TimeUnit): Long = 0
+    override fun getDelay(unit: TimeUnit): Long = unit.convert(delayMs, TimeUnit.MILLISECONDS)
 }
 
 /** 실제 스레드풀 없이, schedule 로 넘어온 작업을 기록만 해뒀다가 테스트가 직접 run() 시킨다. */
-private class TurnTimerFakeTaskScheduler : TaskScheduler {
+private class TurnTimerFakeTaskScheduler(private val now: Instant = Instant.parse("2026-01-01T00:00:00Z")) : TaskScheduler {
     class Scheduled(val task: Runnable, val time: Instant, val future: TurnTimerFakeScheduledFuture)
 
     val scheduledCalls = mutableListOf<Scheduled>()
@@ -48,7 +51,7 @@ private class TurnTimerFakeTaskScheduler : TaskScheduler {
     override fun schedule(task: Runnable, trigger: Trigger): ScheduledFuture<*> = throw UnsupportedOperationException()
 
     override fun schedule(task: Runnable, startTime: Instant): ScheduledFuture<*> {
-        val future = TurnTimerFakeScheduledFuture()
+        val future = TurnTimerFakeScheduledFuture(Duration.between(now, startTime).toMillis())
         scheduledCalls += Scheduled(task, startTime, future)
         return future
     }
@@ -77,6 +80,16 @@ private class TurnTimerFakeExpireTurnUseCase : ExpireTurnUseCase {
 private class TurnTimerFakeTableExecutor : TableExecutor {
     override fun <T> call(tableId: TableId, task: () -> T): T = task()
     override fun post(tableId: TableId, task: () -> Unit) = task()
+}
+
+private fun TurnTimer.commit(event: HandBroadcastRequested) {
+    TransactionSynchronizationManager.initSynchronization()
+    try {
+        onHandBroadcastRequested(event)
+        TransactionSynchronizationUtils.triggerAfterCommit()
+    } finally {
+        TransactionSynchronizationManager.clear()
+    }
 }
 
 class TurnTimerTest {
@@ -116,7 +129,7 @@ class TurnTimerTest {
         val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor())
         val hand = handWithToAct(1 to 10_000L, 2 to 10_000L)
 
-        timer.onHandBroadcastRequested(event(hand))
+        timer.commit(event(hand))
 
         assertEquals(1, scheduler.scheduledCalls.size)
         assertEquals(fixedInstant.plus(Duration.ofMinutes(1)), scheduler.scheduledCalls[0].time)
@@ -129,12 +142,25 @@ class TurnTimerTest {
         val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor())
         val hand = handWithToAct(1 to 10_000L, 2 to 10_000L)
 
-        timer.onHandBroadcastRequested(event(hand))
+        timer.commit(event(hand))
         val first = scheduler.scheduledCalls[0]
-        timer.onHandBroadcastRequested(event(hand))
+        timer.commit(event(hand))
 
         assertTrue(first.future.cancelled)
         assertEquals(2, scheduler.scheduledCalls.size)
+    }
+
+    @Test
+    fun `remaining 은 예약 전에는 null 이고 차례가 예약되면 남은 시간을 돌려주고 차례가 없어지면 다시 null 이다`() {
+        val timer = TurnTimer(TurnTimerFakeTaskScheduler(), clock, TurnTimerFakeExpireTurnUseCase(), TurnTimerFakeTableExecutor())
+        val tableId = TableId(1L)
+        assertNull(timer.remaining(tableId))
+
+        timer.commit(event(handWithToAct(1 to 10_000L, 2 to 10_000L), tableId))
+        assertEquals(Duration.ofMinutes(1), timer.remaining(tableId))
+
+        timer.commit(event(null, tableId))
+        assertNull(timer.remaining(tableId))
     }
 
     @Test
@@ -143,7 +169,7 @@ class TurnTimerTest {
         val useCase = TurnTimerFakeExpireTurnUseCase()
         val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor())
 
-        timer.onHandBroadcastRequested(event(null))
+        timer.commit(event(null))
 
         assertEquals(0, scheduler.scheduledCalls.size)
     }
@@ -156,9 +182,9 @@ class TurnTimerTest {
         val tableId = TableId(1L)
         val hand = handWithToAct(1 to 10_000L, 2 to 10_000L)
 
-        timer.onHandBroadcastRequested(event(hand, tableId))
+        timer.commit(event(hand, tableId))
         val stale = scheduler.scheduledCalls[0]
-        timer.onHandBroadcastRequested(event(hand, tableId))
+        timer.commit(event(hand, tableId))
         val fresh = scheduler.scheduledCalls[1]
 
         // cancel() 을 안 믿고, 이미 시작된 것처럼 stale 쪽을 직접 실행시켜본다.

@@ -389,6 +389,40 @@ class HoldemStompIntegrationTest {
     }
 
     @Test
+    fun `핸드를 시작하면 그 핸드를 실은 공개 브로드캐스트에 turnRemainingMs 가 이미 채워져 있다`() {
+        val pair = seatTwoUsersAtSameTable()
+        val (session, _) = tryConnect(pair.a.accessToken)
+        checkNotNull(session)
+        val (publicHandler, publicQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.publicTopicOf(pair.tableId), publicHandler)
+        assertThat(publicQueue.poll(5, TimeUnit.SECONDS)).isNotNull() // 구독 스냅샷
+
+        startHandRest(pair.tableId)
+
+        // 차례 타이머 재예약이 브로드캐스트 전송보다 먼저 돌아야 첫 메시지가 예약을 읽는다.
+        val publicJson = publicQueue.poll(5, TimeUnit.SECONDS) ?: error("공개 브로드캐스트를 받지 못했다")
+        assertThat(JsonPath.read<Boolean>(publicJson, "$.handInProgress")).isTrue()
+        val turnRemainingMs = JsonPath.read<Number>(publicJson, "$.turnRemainingMs").toLong()
+        assertThat(turnRemainingMs).isBetween(1L, 60_000L)
+    }
+
+    @Test
+    fun `핸드가 진행 중인 테이블을 구독하면 스냅샷의 turnRemainingMs 가 채워져 있다`() {
+        val pair = seatTwoUsersAtSameTable()
+        startHandRest(pair.tableId)
+
+        val (session, _) = tryConnect(pair.a.accessToken)
+        checkNotNull(session)
+        val (publicHandler, publicQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.publicTopicOf(pair.tableId), publicHandler)
+
+        val publicJson = publicQueue.poll(5, TimeUnit.SECONDS) ?: error("공개 스냅샷을 받지 못했다")
+        assertThat(JsonPath.read<Boolean>(publicJson, "$.handInProgress")).isTrue()
+        val turnRemainingMs = JsonPath.read<Number>(publicJson, "$.turnRemainingMs").toLong()
+        assertThat(turnRemainingMs).isBetween(1L, 60_000L)
+    }
+
+    @Test
     fun `다른 테이블에 앉은 사용자도 남의 topic 을 구독할 수 있다`() {
         val target = seatNewUser()
         val other = seatNewUser()

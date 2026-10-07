@@ -4,15 +4,21 @@ import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.TableExecutor
+import com.jsm.boardgame.holdem.application.port.TurnCountdown
 import com.jsm.boardgame.holdem.domain.model.TableId
+import org.springframework.core.Ordered
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
+import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -30,7 +36,7 @@ class TurnTimer(
     private val clock: Clock,
     private val expireTurnUseCase: ExpireTurnUseCase,
     private val tableExecutor: TableExecutor,
-) {
+) : TurnCountdown {
     private class ScheduledExpiry(val future: ScheduledFuture<*>, val token: Long)
 
     private val scheduled = ConcurrentHashMap<TableId, ScheduledExpiry>()
@@ -40,8 +46,21 @@ class TurnTimer(
     // (그 사이 새 이벤트가 다시 예약했다는 뜻이니) 낡은 실행으로 보고 무시한다.
     private val tokens = ConcurrentHashMap<TableId, AtomicLong>()
 
-    @TransactionalEventListener
+    // AFTER_COMMIT 리스너는 afterCompletion 에서 돌아 HandBroadcaster 의 afterCommit 보다 늦다 - 그러면
+    // 브로드캐스트가 이전 예약을 읽는다(turnRemainingMs). 그래서 BEFORE_COMMIT 에서 동기화를 등록하고,
+    // 가장 앞선 order 의 afterCommit 에서 재예약한다(getSynchronizations 가 order 로 정렬한다).
+    // 롤백되면 afterCommit 이 안 돌아 예약도 남지 않는다.
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     fun onHandBroadcastRequested(event: HandBroadcastRequested) {
+        TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+            override fun getOrder(): Int = Ordered.HIGHEST_PRECEDENCE
+            override fun afterCommit() {
+                reschedule(event)
+            }
+        })
+    }
+
+    private fun reschedule(event: HandBroadcastRequested) {
         scheduled.remove(event.tableId)?.future?.cancel(false)
 
         val seatNo = event.hand?.toActSeatNo ?: return
@@ -51,6 +70,11 @@ class TurnTimer(
             Instant.now(clock).plus(TURN_TIMEOUT),
         )
         scheduled[event.tableId] = ScheduledExpiry(future, token)
+    }
+
+    override fun remaining(tableId: TableId): Duration? {
+        val future = scheduled[tableId]?.future ?: return null
+        return Duration.ofMillis(maxOf(0L, future.getDelay(TimeUnit.MILLISECONDS)))
     }
 
     // TableExecutor 가 이 만료를 그 테이블의 실제 플레이어 액션과 같은 스레드에 직렬화하므로,

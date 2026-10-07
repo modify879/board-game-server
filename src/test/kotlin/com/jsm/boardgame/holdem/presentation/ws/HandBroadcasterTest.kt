@@ -3,6 +3,7 @@ package com.jsm.boardgame.holdem.presentation.ws
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
+import com.jsm.boardgame.holdem.application.port.TurnCountdown
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
@@ -40,6 +41,10 @@ private class HandBroadcasterFakeLastHandResultStore(private val result: LastHan
     override fun remove(tableId: TableId) {}
 }
 
+private class HandBroadcasterFakeTurnCountdown : TurnCountdown {
+    override fun remaining(tableId: TableId): Duration? = null
+}
+
 private class HandBroadcasterFakeNextHandCountdown : NextHandCountdown {
     override fun restart(tableId: TableId) {}
     override fun cancel(tableId: TableId) {}
@@ -66,6 +71,7 @@ class HandBroadcasterTest {
             HandBroadcasterFakeUserRegistry(),
             TableViewSequence(),
             HandBroadcasterFakeNextHandCountdown(),
+            HandBroadcasterFakeTurnCountdown(),
             HandBroadcasterFakeLastHandResultStore(stored),
         )
         val table = HoldemTable.create("t")
@@ -85,6 +91,7 @@ class HandBroadcasterTest {
             HandBroadcasterFakeUserRegistry(),
             TableViewSequence(),
             HandBroadcasterFakeNextHandCountdown(),
+            HandBroadcasterFakeTurnCountdown(),
             HandBroadcasterFakeLastHandResultStore(null),
         )
         val table = HoldemTable.create("t")

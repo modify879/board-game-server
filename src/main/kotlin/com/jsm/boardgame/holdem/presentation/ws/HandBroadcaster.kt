@@ -4,6 +4,7 @@ import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
+import com.jsm.boardgame.holdem.application.port.TurnCountdown
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
@@ -29,6 +30,7 @@ class HandBroadcaster(
     private val userRegistry: SimpUserRegistry,
     private val sequence: TableViewSequence,
     private val nextHandCountdown: NextHandCountdown,
+    private val turnCountdown: TurnCountdown,
     private val lastHandResults: LastHandResultStore,
 ) {
 
@@ -62,7 +64,7 @@ class HandBroadcaster(
         try {
             messagingTemplate.convertAndSend(
                 HoldemDestinations.publicTopicOf(tableId.value),
-                publicViewOf(tableId, table, hand, lastResult, seq, nextHandCountdown.remaining(tableId)),
+                publicViewOf(tableId, table, hand, lastResult, seq, nextHandCountdown.remaining(tableId), turnCountdown.remaining(tableId)),
             )
 
             hand ?: return

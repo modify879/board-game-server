@@ -3,6 +3,7 @@ package com.jsm.boardgame.holdem.presentation.ws
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
+import com.jsm.boardgame.holdem.application.port.TurnCountdown
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.presentation.ws.payload.privateViewOf
@@ -60,6 +61,7 @@ class HoldemSubscriptionSnapshotListener(
     @Lazy private val messagingTemplate: SimpMessagingTemplate,
     private val sequence: TableViewSequence,
     private val nextHandCountdown: NextHandCountdown,
+    private val turnCountdown: TurnCountdown,
 ) : ExecutorChannelInterceptor {
 
     override fun afterMessageHandled(message: Message<*>, channel: MessageChannel, handler: MessageHandler, ex: Exception?) {
@@ -95,7 +97,7 @@ class HoldemSubscriptionSnapshotListener(
 
         messagingTemplate.convertAndSend(
             HoldemDestinations.publicTopicOf(rawTableId),
-            publicViewOf(tableId, table, hand, lastResult, seq, nextHandCountdown.remaining(tableId)),
+            publicViewOf(tableId, table, hand, lastResult, seq, nextHandCountdown.remaining(tableId), turnCountdown.remaining(tableId)),
         )
 
         // 관전자(좌석 없음)는 여기서 끝난다 — 개인 뷰는 그 사용자가 이 테이블에 착석해 있을 때만 나간다.
