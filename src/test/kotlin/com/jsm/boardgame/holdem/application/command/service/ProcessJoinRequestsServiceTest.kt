@@ -65,9 +65,9 @@ class ProcessJoinRequestsServiceTest {
     @Test
     fun `대기열 맨 앞부터 순서대로 좌석에 앉히고 완료되면 대기열이 빈다`() {
         val queue = InMemoryJoinQueue()
-        queue.enqueue(tableId, 101L, Chips.of(8_000), false)
-        queue.enqueue(tableId, 102L, Chips.of(8_000), false)
-        queue.enqueue(tableId, 103L, Chips.of(8_000), false)
+        queue.enqueue(tableId, 101L, false)
+        queue.enqueue(tableId, 102L, false)
+        queue.enqueue(tableId, 103L, false)
         val admit = ProcessJoinRequestsFakeAdmitUseCase(
             mapOf(
                 101L to { AdmitJoinRequestResult.Seated(1) },
@@ -97,7 +97,7 @@ class ProcessJoinRequestsServiceTest {
     @Test
     fun `핸드가 진행 중이면 대기열을 그대로 두고 처리를 멈춘다`() {
         val queue = InMemoryJoinQueue()
-        queue.enqueue(tableId, 101L, Chips.of(8_000), false)
+        queue.enqueue(tableId, 101L, false)
         val admit = ProcessJoinRequestsFakeAdmitUseCase(mapOf(101L to { AdmitJoinRequestResult.Blocked }))
         val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
         val service = ProcessJoinRequestsService(queue, admit, notifier)
@@ -115,8 +115,8 @@ class ProcessJoinRequestsServiceTest {
     @Test
     fun `지갑 실패로 앞사람이 버려져도 다음 사람은 계속 처리된다`() {
         val queue = InMemoryJoinQueue()
-        queue.enqueue(tableId, 101L, Chips.of(8_000), false)
-        queue.enqueue(tableId, 102L, Chips.of(8_000), false)
+        queue.enqueue(tableId, 101L, false)
+        queue.enqueue(tableId, 102L, false)
         val admit = ProcessJoinRequestsFakeAdmitUseCase(
             mapOf(
                 101L to { throw BuyInOutOfRangeException("wallet failure simulation") },
@@ -143,7 +143,7 @@ class ProcessJoinRequestsServiceTest {
     @Test
     fun `착석 처리 중에는 취소가 기다리다가 결국 착석되고 취소는 JOIN_REQUEST_NOT_FOUND 로 실패한다`() {
         val queue = InMemoryJoinQueue()
-        queue.enqueue(tableId, 101L, Chips.of(8_000), false)
+        queue.enqueue(tableId, 101L, false)
         val admitStarted = CountDownLatch(1)
         val releaseAdmit = CountDownLatch(1)
         val admit = ProcessJoinRequestsFakeAdmitUseCase(

@@ -182,9 +182,9 @@ class HoldemStompIntegrationTest {
 
     // 착석은 이제 반드시 STOMP 연결이 있어야 대기열에 들어간다(SitDownService) — 이 헬퍼가 그
     // 연결을 먼저 만든다. 반환된 세션은 쓰지 않는다(연결 자체가 목적이라 fire-and-forget).
-    private fun sitDown(accessToken: String, tableId: Long, buyIn: Long): ResultActions {
+    private fun sitDown(accessToken: String, tableId: Long): ResultActions {
         tryConnect(accessToken)
-        return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{"buyIn":$buyIn}""")
+        return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{}""")
     }
 
     private data class SeatedUser(val userId: Long, val accessToken: String, val tableId: Long)
@@ -202,27 +202,27 @@ class HoldemStompIntegrationTest {
         error("착석이 시간 안에 끝나지 않았습니다: userId=$userId")
     }
 
-    private fun seatNewUser(buyIn: Long = 10_000L, fundAmount: Long = 15_000L): SeatedUser {
+    private fun seatNewUser(fundAmount: Long = 10_000L): SeatedUser {
         val (userId, accessToken) = signUpAndLogin()
         fundWallet(userId, fundAmount)
         val tableId = createTable(accessToken)
-        sitDown(accessToken, tableId, buyIn).andExpect(status().isAccepted)
+        sitDown(accessToken, tableId).andExpect(status().isAccepted)
         awaitSeated(userId)
         return SeatedUser(userId, accessToken, tableId)
     }
 
     private data class TablePair(val tableId: Long, val a: SeatedUser, val b: SeatedUser)
 
-    private fun seatTwoUsersAtSameTable(buyIn: Long = 10_000L, fundAmount: Long = 15_000L): TablePair {
+    private fun seatTwoUsersAtSameTable(fundAmount: Long = 10_000L): TablePair {
         val (userIdA, tokenA) = signUpAndLogin()
         fundWallet(userIdA, fundAmount)
         val tableId = createTable(tokenA)
-        sitDown(tokenA, tableId, buyIn).andExpect(status().isAccepted)
+        sitDown(tokenA, tableId).andExpect(status().isAccepted)
         awaitSeated(userIdA)
 
         val (userIdB, tokenB) = signUpAndLogin()
         fundWallet(userIdB, fundAmount)
-        sitDown(tokenB, tableId, buyIn).andExpect(status().isAccepted)
+        sitDown(tokenB, tableId).andExpect(status().isAccepted)
         awaitSeated(userIdB)
 
         return TablePair(tableId, SeatedUser(userIdA, tokenA, tableId), SeatedUser(userIdB, tokenB, tableId))

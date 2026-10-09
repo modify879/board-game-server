@@ -64,8 +64,8 @@ private class CancelHandFakeWalletTransfer : WalletTransfer {
 
     val fromGameCalls = mutableListOf<FromGameCall>()
 
-    override fun toGame(userId: Long, amount: Long, tableId: Long, memo: String?) {
-        error("CancelHandService 는 toGame 을 부르지 않는다")
+    override fun allToGame(userId: Long, tableId: Long, memo: String?): Long {
+        error("CancelHandService 는 allToGame 을 부르지 않는다")
     }
 
     override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {

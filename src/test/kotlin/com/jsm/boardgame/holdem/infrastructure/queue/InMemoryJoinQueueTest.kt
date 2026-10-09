@@ -18,9 +18,9 @@ class InMemoryJoinQueueTest {
         val queue = InMemoryJoinQueue()
         val tableId = TableId(1L)
 
-        val position1 = queue.enqueue(tableId, 100L, Chips.of(10_000), false)
-        val position2 = queue.enqueue(tableId, 200L, Chips.of(10_000), false)
-        val position3 = queue.enqueue(tableId, 300L, Chips.of(10_000), false)
+        val position1 = queue.enqueue(tableId, 100L, false)
+        val position2 = queue.enqueue(tableId, 200L, false)
+        val position3 = queue.enqueue(tableId, 300L, false)
 
         assertEquals(1, position1)
         assertEquals(2, position2)
@@ -35,10 +35,10 @@ class InMemoryJoinQueueTest {
         val tableB = TableId(2L)
         val userId = 100L
 
-        queue.enqueue(tableA, userId, Chips.of(10_000), false)
+        queue.enqueue(tableA, userId, false)
 
         val exception = assertFailsWith<AlreadySeatedException> {
-            queue.enqueue(tableB, userId, Chips.of(10_000), false)
+            queue.enqueue(tableB, userId, false)
         }
         assertEquals(HoldemErrorCode.ALREADY_SEATED, exception.errorCode)
     }
@@ -51,9 +51,9 @@ class InMemoryJoinQueueTest {
         val userB = 200L
         val userC = 300L
 
-        queue.enqueue(tableId, userA, Chips.of(10_000), false)
-        queue.enqueue(tableId, userB, Chips.of(10_000), false)
-        queue.enqueue(tableId, userC, Chips.of(10_000), false)
+        queue.enqueue(tableId, userA, false)
+        queue.enqueue(tableId, userB, false)
+        queue.enqueue(tableId, userC, false)
 
         val removedTableId = queue.removeByUserId(userA)
 
@@ -70,8 +70,8 @@ class InMemoryJoinQueueTest {
 
         assertNull(queue.peekHead(neverUsedTableId))
 
-        queue.enqueue(tableId, 100L, Chips.of(10_000), false)
-        queue.enqueue(tableId, 200L, Chips.of(10_000), false)
+        queue.enqueue(tableId, 100L, false)
+        queue.enqueue(tableId, 200L, false)
 
         assertEquals(100L, queue.peekHead(tableId)?.userId)
     }
@@ -85,7 +85,7 @@ class InMemoryJoinQueueTest {
 
         assertFalse(queue.isQueued(userId))
 
-        queue.enqueue(tableId, userId, Chips.of(10_000), false)
+        queue.enqueue(tableId, userId, false)
         assertTrue(queue.isQueued(userId))
         assertFalse(queue.isQueued(neverQueuedUserId))
 

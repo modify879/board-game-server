@@ -72,8 +72,8 @@ private class StandUpFakeWalletTransfer : WalletTransfer {
 
     val fromGameCalls = mutableListOf<FromGameCall>()
 
-    override fun toGame(userId: Long, amount: Long, tableId: Long, memo: String?) {
-        error("StandUp 은 toGame 을 부르지 않는다")
+    override fun allToGame(userId: Long, tableId: Long, memo: String?): Long {
+        error("StandUp 는 allToGame 을 부르지 않는다")
     }
 
     override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {
@@ -96,7 +96,7 @@ class StandUpServiceTest {
     private val walletTransfer = StandUpFakeWalletTransfer()
     private val eventPublisher = StandUpFakeEventPublisher()
     private val countdown = StandUpFakeNextHandCountdown()
-    private val handStarter = HandStarter(tables, handStore, StandUpServiceFakeLastHandResultStore(), Shuffler { it }, eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, StandUpServiceFakeLastHandResultStore(), Shuffler { it }, eventPublisher, countdown, walletTransfer)
     private val service = StandUpService(tables, handStore, walletTransfer, handStarter, eventPublisher)
 
     @Test

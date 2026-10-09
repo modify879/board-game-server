@@ -3,7 +3,6 @@ package com.jsm.boardgame.holdem.infrastructure.queue
 import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
-import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.TableId
 import org.springframework.stereotype.Component
 
@@ -19,21 +18,21 @@ import org.springframework.stereotype.Component
  */
 @Component
 class InMemoryJoinQueue : JoinQueue {
-    private data class Entry(val userId: Long, val buyIn: Chips, val postBlindImmediately: Boolean) {
-        fun toView() = JoinQueueEntry(userId, buyIn, postBlindImmediately)
+    private data class Entry(val userId: Long, val postBlindImmediately: Boolean) {
+        fun toView() = JoinQueueEntry(userId, postBlindImmediately)
     }
 
     private val lock = Any()
     private val tableQueues = mutableMapOf<Long, MutableList<Entry>>()
     private val userToTable = mutableMapOf<Long, Long>()
 
-    override fun enqueue(tableId: TableId, userId: Long, buyIn: Chips, postBlindImmediately: Boolean): Int =
+    override fun enqueue(tableId: TableId, userId: Long, postBlindImmediately: Boolean): Int =
         synchronized(lock) {
             if (userId in userToTable) {
                 throw AlreadySeatedException("이미 대기열에 있는 사용자입니다: userId=$userId")
             }
             val queue = tableQueues.getOrPut(tableId.value) { mutableListOf() }
-            queue += Entry(userId, buyIn, postBlindImmediately)
+            queue += Entry(userId, postBlindImmediately)
             userToTable[userId] = tableId.value
             queue.size
         }

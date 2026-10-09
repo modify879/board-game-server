@@ -4,6 +4,7 @@ import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
+import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
@@ -71,6 +72,17 @@ private class HandStarterFakeNextHandCountdown : NextHandCountdown {
     override fun remaining(tableId: TableId): Duration? = null
 }
 
+private class HandStarterFakeWalletTransfer : WalletTransfer {
+    /** 지갑 잔액. allToGame 은 잔액 전부를 돌려주고 0 으로 만든다. */
+    val balances = mutableMapOf<Long, Long>()
+
+    override fun allToGame(userId: Long, tableId: Long, memo: String?): Long = balances.remove(userId) ?: 0
+
+    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {
+        error("HandStarter 는 fromGame 을 부르지 않는다")
+    }
+}
+
 class HandStarterTest {
 
     private val tables = HandStarterFakeTableRepository()
@@ -78,8 +90,9 @@ class HandStarterTest {
     private val lastHandResults = HandStarterFakeLastHandResultStore()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
+    private val walletTransfer = HandStarterFakeWalletTransfer()
     private val countdown = HandStarterFakeNextHandCountdown()
-    private val handStarter = HandStarter(tables, handStore, lastHandResults, identityShuffler, eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, lastHandResults, identityShuffler, eventPublisher, countdown, walletTransfer)
 
     private fun start(tableId: TableId) {
         val table = tables.findById(tableId)!!
@@ -101,6 +114,26 @@ class HandStarterTest {
         val table = tables.findById(tableId)!!
         table.sitDown(userId = seatNo.toLong(), buyIn = Chips.of(buyIn), postBlindImmediately = postBlindImmediately)
         tables.save(table)
+    }
+
+    @Test
+    fun `핸드가 시작되면 착석 중 지갑에 들어온 잔액이 그 좌석 스택에 합쳐진다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        walletTransfer.balances[2L] = 5_000
+
+        start(tableId)
+
+        assertEquals(Chips.of(15_000), tables.findById(tableId)!!.seatAt(2)!!.stack)
+        assertEquals(0L, walletTransfer.balances[2L] ?: 0L)
+    }
+
+    @Test
+    fun `지갑 잔액이 0이면 스택이 그대로다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+
+        start(tableId)
+
+        assertEquals(Chips.of(20_000), tables.findById(tableId)!!.occupiedSeats().fold(Chips.ZERO) { a, s -> a + s.stack })
     }
 
     @Test

@@ -64,7 +64,7 @@ class CancelHandIntegrationTest {
         userIds.forEach { table.sitDown(it, Chips.of(10_000)) }
         table.moveButtonToNextOccupiedSeat()
         val tableId = tables.save(table).id!!
-        userIds.forEach { walletTransfer.toGame(it, 10_000, tableId.value, "holdem") }
+        userIds.forEach { walletTransfer.allToGame(it, tableId.value, "holdem") }
         table = tables.findById(tableId)!!
 
         val seatNos = table.occupiedSeats().map { it.seatNo }.sorted()
