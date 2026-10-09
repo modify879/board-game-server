@@ -6,6 +6,7 @@ import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.infrastructure.persistence.entity.HoldemSeatJpaRepository
 import com.jsm.boardgame.user.domain.model.Nickname
@@ -39,14 +40,14 @@ class HoldemTableRepositoryAdapterIntegrationTest {
     private lateinit var seatJpa: HoldemSeatJpaRepository
 
     // fk_holdem_seats_user 가 걸려 있어 합성 userId 로는 착석 행을 저장할 수 없다 — 실제 사용자 행을 만든다.
-    private fun uniqueUserId(): Long {
+    private fun uniqueUserId(): UserId {
         val suffix = UniqueNames.suffix()
         val user = User.register(
             username = Username.of("u$suffix"),
             passwordHash = PasswordHash("hashed-password-value"),
             nickname = Nickname.of("n" + suffix),
         )
-        return users.save(user).id!!.value
+        return UserId(users.save(user).id!!.value)
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.persistence.adapter
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.common.persistence.violatedConstraint
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.SeatTakenException
@@ -30,12 +31,12 @@ class HoldemTableRepositoryAdapter(
         return tableEntity.toDomain(seatJpa.findAllByTableId(tableEntity.id))
     }
 
-    override fun findByUserId(userId: Long): HoldemTable? {
-        val seatEntity = seatJpa.findByUserId(userId) ?: return null
+    override fun findByUserId(userId: UserId): HoldemTable? {
+        val seatEntity = seatJpa.findByUserId(userId.value) ?: return null
         return findById(TableId(seatEntity.tableId))
     }
 
-    override fun findAllSeatedUserIds(): List<Long> = seatJpa.findAll().map { it.userId }
+    override fun findAllSeatedUserIds(): List<UserId> = seatJpa.findAll().map { UserId(it.userId) }
 
     override fun findAllTableIds(): List<TableId> = tableJpa.findAll().filter { it.closedAt == null }.map { TableId(it.id) }
 
@@ -71,7 +72,7 @@ class HoldemTableRepositoryAdapter(
             id = existingId,
             tableId = tableId,
             seatNo = seatNo,
-            userId = userId,
+            userId = userId.value,
             stack = stack.amount,
             presence = presence.name,
             awaitingBigBlind = awaitingBigBlind,

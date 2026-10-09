@@ -10,6 +10,7 @@ import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
@@ -25,10 +26,10 @@ private class CancelHandFakeTableRepository : HoldemTableRepository {
 
     override fun findById(id: TableId): HoldemTable? = store[id.value]?.let { copyOf(it) }
 
-    override fun findByUserId(userId: Long): HoldemTable? =
+    override fun findByUserId(userId: UserId): HoldemTable? =
         store.values.firstOrNull { it.seatOf(userId) != null }?.let { copyOf(it) }
 
-    override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
+    override fun findAllSeatedUserIds(): List<UserId> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllTableIds(): List<TableId> = store.values.mapNotNull { it.id }
 
@@ -60,15 +61,15 @@ private class CancelHandFakeHandStore : HandStore {
 }
 
 private class CancelHandFakeWalletTransfer : WalletTransfer {
-    data class FromGameCall(val userId: Long, val amount: Long, val tableId: TableId, val memo: String?)
+    data class FromGameCall(val userId: UserId, val amount: Long, val tableId: TableId, val memo: String?)
 
     val fromGameCalls = mutableListOf<FromGameCall>()
 
-    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long {
+    override fun allToGame(userId: UserId, tableId: TableId, memo: String?): Long {
         error("CancelHandService 는 allToGame 을 부르지 않는다")
     }
 
-    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) {
+    override fun fromGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) {
         fromGameCalls += FromGameCall(userId, amount, tableId, memo)
     }
 }
@@ -96,7 +97,7 @@ class CancelHandServiceTest {
         var table = HoldemTable.create("test-table")
         table = tables.save(table)
         for ((seatNo, buyIn) in buyIns) {
-            table.sitDown(userId = seatNo.toLong(), buyIn = Chips.of(buyIn))
+            table.sitDown(userId = UserId(seatNo.toLong()), buyIn = Chips.of(buyIn))
         }
         table = tables.save(table)
         return table.id!!
@@ -193,9 +194,9 @@ class CancelHandServiceTest {
         hand.act(1, BettingAction.Call)
         hand.act(2, BettingAction.Fold)
         val table = tables.findById(tableId)!!
-        hand.recordDeparture(2, 2L)
+        hand.recordDeparture(2, UserId(2L))
         table.applyStacks(mapOf(2 to hand.stackOf(2)))
-        val standUpReturn = table.standUp(2L)
+        val standUpReturn = table.standUp(UserId(2L))
         tables.save(table)
 
         service.cancel(CancelHandCommand(tableId.value))
@@ -205,7 +206,7 @@ class CancelHandServiceTest {
         assertEquals(Chips.of(10_000), saved.seatAt(1)!!.stack)
         assertEquals(Chips.of(10_000), saved.seatAt(3)!!.stack)
         val refund = walletTransfer.fromGameCalls.single()
-        assertEquals(2L, refund.userId)
+        assertEquals(UserId(2L), refund.userId)
         assertEquals(100L, refund.amount)
         assertEquals(tableId, refund.tableId)
         // 기립 때 받은 잔여 스택 + 취소 환불 = 시작 스택
@@ -243,9 +244,9 @@ class CancelHandServiceTest {
         val table = tables.findById(tableId)!!
         // 폴드한 두 좌석이 기립하고 나면 남는 후보는 1명이다.
         for (seatNo in listOf(1, 2)) {
-            hand.recordDeparture(seatNo, seatNo.toLong())
+            hand.recordDeparture(seatNo, UserId(seatNo.toLong()))
             table.applyStacks(mapOf(seatNo to hand.stackOf(seatNo)))
-            table.standUp(seatNo.toLong())
+            table.standUp(UserId(seatNo.toLong()))
         }
         tables.save(table)
 

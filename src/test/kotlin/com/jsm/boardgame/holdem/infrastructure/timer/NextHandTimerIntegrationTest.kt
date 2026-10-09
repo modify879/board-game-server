@@ -10,6 +10,7 @@ import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
@@ -169,7 +170,7 @@ class NextHandTimerIntegrationTest {
     private fun awaitSeated(userId: Long, timeoutMs: Long = 5_000) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            if (holdemTableRepository.findByUserId(userId) != null) return
+            if (holdemTableRepository.findByUserId(UserId(userId)) != null) return
             Thread.sleep(20)
         }
         error("착석이 시간 안에 끝나지 않았습니다: userId=$userId")
@@ -178,7 +179,7 @@ class NextHandTimerIntegrationTest {
     private fun awaitStoodUp(userId: Long, timeoutMs: Long = 5_000) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            if (holdemTableRepository.findByUserId(userId) == null) return
+            if (holdemTableRepository.findByUserId(UserId(userId)) == null) return
             Thread.sleep(20)
         }
         error("기립이 시간 안에 끝나지 않았습니다: userId=$userId")
@@ -293,7 +294,7 @@ class NextHandTimerIntegrationTest {
         val hand = awaitHandInProgress(tableId)
         val toActSeatNo = hand.toActSeatNo ?: error("toActSeatNo 가 없다")
         val folderUserId = holdemTableRepository.findById(TableId(tableId))!!.seatAt(toActSeatNo)!!.userId
-        val folder = listOf(a, b).first { it.userId == folderUserId }
+        val folder = listOf(a, b).first { it.userId == folderUserId.value }
 
         // TurnTimer 가 하는 것과 똑같이, 그 테이블의 실행기를 거쳐 시간 초과 처리를 직접 건다.
         tableExecutor.call(TableId(tableId)) { expireTurnUseCase.expire(ExpireTurnCommand(tableId, toActSeatNo)) }
@@ -301,7 +302,7 @@ class NextHandTimerIntegrationTest {
         // 2) 헤즈업이 끝나 즉시 정산되고(HandSettler 가 후보가 있으면 무조건 카운트다운을 새로
         //    건다), 폴드한 사용자는 즉시 기립한다.
         awaitNoHandInProgress(tableId)
-        awaitStoodUp(folderUserId)
+        awaitStoodUp(folderUserId.value)
         assertThat(holdemTableRepository.findById(TableId(tableId))!!.occupiedSeats()).hasSize(1)
 
         // 3) NextHandTimer 가 발화하지만 후보가 1명뿐이라 StartScheduledHandService 가 조용히
@@ -311,7 +312,7 @@ class NextHandTimerIntegrationTest {
         // 4) 기립했던 사용자가 다시 앉는다(HandStarter.rescheduleOnEntry 가 카운트다운을 다시
         //    걸어야 한다).
         sitDown(folder.accessToken, tableId).andExpect(status().isAccepted)
-        awaitSeated(folderUserId)
+        awaitSeated(folderUserId.value)
 
         // 5) 다음 핸드가 3초 안에 자동 시작돼야 한다 — 실패하면 NextHandTimer 내부 상태를 진단으로 남긴다.
         awaitHandInProgress(tableId)

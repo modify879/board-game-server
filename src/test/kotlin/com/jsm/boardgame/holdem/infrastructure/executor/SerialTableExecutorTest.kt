@@ -3,6 +3,7 @@ package com.jsm.boardgame.holdem.infrastructure.executor
 import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -19,8 +20,8 @@ private class SerialExecutorFakeHoldemTableRepository : HoldemTableRepository {
     val absent = mutableSetOf<TableId>()
 
     override fun findById(id: TableId): HoldemTable? = if (id in absent) null else HoldemTable.create("t")
-    override fun findByUserId(userId: Long): HoldemTable? = null
-    override fun findAllSeatedUserIds(): List<Long> = emptyList()
+    override fun findByUserId(userId: UserId): HoldemTable? = null
+    override fun findAllSeatedUserIds(): List<UserId> = emptyList()
     override fun findAllTableIds(): List<TableId> = emptyList()
     override fun save(table: HoldemTable): HoldemTable = table
 }

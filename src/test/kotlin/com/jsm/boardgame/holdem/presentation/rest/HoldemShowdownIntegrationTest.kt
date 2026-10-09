@@ -11,6 +11,7 @@ import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.domain.model.Card
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
@@ -194,7 +195,7 @@ class HoldemShowdownIntegrationTest {
     private fun awaitSeated(userId: Long, timeoutMs: Long = 5_000) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            if (holdemTableRepository.findByUserId(userId) != null) return
+            if (holdemTableRepository.findByUserId(UserId(userId)) != null) return
             Thread.sleep(20)
         }
         error("착석이 시간 안에 끝나지 않았습니다: userId=$userId")

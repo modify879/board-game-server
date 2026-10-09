@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.rest
 
 import com.jsm.boardgame.common.error.AuthenticationRequiredException
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpUseCase
 import com.jsm.boardgame.holdem.application.port.TableExecutor
@@ -33,7 +34,7 @@ class HoldemSeatController(
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun standUp(@AuthenticationPrincipal jwt: Jwt) {
         val userId = jwt.requireUserId()
-        val tableId = tables.findByUserId(userId)?.id
+        val tableId = tables.findByUserId(UserId(userId))?.id
         if (tableId != null) {
             tableExecutor.call(tableId) { standUpUseCase.standUp(StandUpCommand(userId)) }
         } else {

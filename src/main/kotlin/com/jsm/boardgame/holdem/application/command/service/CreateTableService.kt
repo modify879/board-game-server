@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.CreateTableCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CreateTableUseCase
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -22,7 +23,7 @@ class CreateTableService(
 
     override fun create(command: CreateTableCommand): TableId {
         val saved = tables.save(HoldemTable.create(command.name))
-        seatRequester.request(saved, command.ownerUserId, postBlindImmediately = false)
+        seatRequester.request(saved, UserId(command.ownerUserId), postBlindImmediately = false)
         return saved.id!!
     }
 }

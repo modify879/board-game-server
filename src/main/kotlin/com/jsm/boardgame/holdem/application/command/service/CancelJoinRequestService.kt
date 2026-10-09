@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.CancelJoinRequestCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CancelJoinRequestUseCase
 import com.jsm.boardgame.holdem.application.exception.JoinRequestNotFoundException
@@ -24,10 +25,10 @@ class CancelJoinRequestService(
 ) : CancelJoinRequestUseCase {
 
     override fun cancel(command: CancelJoinRequestCommand) {
-        val tableId = joinQueue.tableOf(command.userId)
+        val tableId = joinQueue.tableOf(UserId(command.userId))
             ?: throw JoinRequestNotFoundException("취소할 참가 요청이 없습니다: userId=${command.userId}")
         tableExecutor.call(tableId) {
-            joinQueue.removeByUserId(command.userId)
+            joinQueue.removeByUserId(UserId(command.userId))
                 ?: throw JoinRequestNotFoundException("취소할 참가 요청이 없습니다: userId=${command.userId}")
             notifier.notifyPositions(tableId, joinQueue.entriesOf(tableId))
         }

@@ -12,6 +12,7 @@ import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import com.jsm.boardgame.user.domain.model.Nickname
@@ -65,14 +66,14 @@ class TableActorRaceIntegrationTest {
     private lateinit var users: UserRepository
 
     // fk_holdem_seats_user 때문에 합성 userId 로는 착석 행을 저장할 수 없다 — 실제 사용자 행을 만든다.
-    private fun uniqueUserId(): Long {
+    private fun uniqueUserId(): UserId {
         val suffix = UniqueNames.suffix()
         val user = User.register(
             username = Username.of("u$suffix"),
             passwordHash = PasswordHash("hashed-password-value"),
             nickname = Nickname.of("n" + suffix),
         )
-        return users.save(user).id!!.value
+        return UserId(users.save(user).id!!.value)
     }
 
     @Test
@@ -123,7 +124,7 @@ class TableActorRaceIntegrationTest {
             ready.await()
             try {
                 tableExecutor.call(tableId) {
-                    playActionUseCase.play(PlayActionCommand(tableId.value, actingUserId, "CALL", null))
+                    playActionUseCase.play(PlayActionCommand(tableId.value, actingUserId.value, "CALL", null))
                 }
             } catch (t: Throwable) {
                 results[1] = t

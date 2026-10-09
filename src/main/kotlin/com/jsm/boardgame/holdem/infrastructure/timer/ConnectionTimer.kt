@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.timer
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
@@ -84,16 +85,16 @@ class ConnectionTimer(
     private class ScheduledExpiry(val future: ScheduledFuture<*>, val token: Long)
 
     // userId 기준 예약이다 - 연결은 테이블이 아니라 사람에게 붙는다.
-    private val scheduled = ConcurrentHashMap<Long, ScheduledExpiry>()
-    private val tokens = ConcurrentHashMap<Long, AtomicLong>()
+    private val scheduled = ConcurrentHashMap<UserId, ScheduledExpiry>()
+    private val tokens = ConcurrentHashMap<UserId, AtomicLong>()
 
-    private val pendingStandUps = ConcurrentHashMap<TableId, MutableSet<Long>>()
+    private val pendingStandUps = ConcurrentHashMap<TableId, MutableSet<UserId>>()
 
-    private val suspended = ConcurrentHashMap.newKeySet<Long>()
+    private val suspended = ConcurrentHashMap.newKeySet<UserId>()
 
     /** 사용자가 앉은 테이블을 찾아 그 테이블의 실행기에서 [task] 를 돌린다 — 못 찾으면(미착석)
      *  테이블 상태를 안 건드리므로 그 자리에서 바로 실행해도 안전하다. */
-    private fun <T> dispatchForUser(userId: Long, task: () -> T): T {
+    private fun <T> dispatchForUser(userId: UserId, task: () -> T): T {
         val tableId = tables.findByUserId(userId)?.id
         return if (tableId != null) tableExecutor.call(tableId, task) else task()
     }
@@ -109,7 +110,7 @@ class ConnectionTimer(
 
     @EventListener
     fun onSessionDisconnect(event: SessionDisconnectEvent) {
-        val userId = event.user?.name?.toLongOrNull() ?: return
+        val userId = event.user?.name?.toLongOrNull()?.let(::UserId) ?: return
 
         if (!userConnections.hasOtherSession(userId, event.sessionId)) {
             val queuedTableId = joinQueue.tableOf(userId)
@@ -128,21 +129,21 @@ class ConnectionTimer(
 
     @EventListener
     fun onSessionConnected(event: SessionConnectedEvent) {
-        val userId = event.user?.name?.toLongOrNull() ?: return
+        val userId = event.user?.name?.toLongOrNull()?.let(::UserId) ?: return
 
         cancelWatch(userId)
         // 만료가 먼저 일어나 이미 퇴장 예약이 걸려 있었을 수도 있다(연결 타이머 예약과 퇴장 예약은
         // 서로 다른 생명주기라 token 만으로는 못 막는다) - 재접속했으니 그 예약도 지운다.
         pendingStandUps.values.forEach { it.remove(userId) }
 
-        dispatchForUser(userId) { updateSeatPresenceUseCase.update(UpdateSeatPresenceCommand(userId, SeatPresence.SEATED.name)) }
+        dispatchForUser(userId) { updateSeatPresenceUseCase.update(UpdateSeatPresenceCommand(userId.value, SeatPresence.SEATED.name)) }
     }
 
     /**
      * 연결 감시를 (다시) 건다 - DISCONNECTED 로 표시하고 [CONNECTION_TIMEOUT] 뒤로 만료를 예약한다.
      * 일반적인 연결 끊김, 부팅 시딩, 복구 유예가 끝났는데 안 돌아온 사용자 셋 다 이 경로를 탄다.
      */
-    fun beginWatch(userId: Long) {
+    fun beginWatch(userId: UserId) {
         suspended.remove(userId)
 
         scheduled.remove(userId)?.future?.cancel(false)
@@ -158,7 +159,7 @@ class ConnectionTimer(
             log.debug("컨텍스트 종료 중이라 연결 만료 예약을 걸지 못했습니다: userId={}", userId)
         }
         // 타이머를 먼저 건다 — DB 장애로 presence 갱신이 던져도 만료 타이머는 이미 걸려 있어야 사용자가 치워진다.
-        dispatchForUser(userId) { updateSeatPresenceUseCase.update(UpdateSeatPresenceCommand(userId, SeatPresence.DISCONNECTED.name)) }
+        dispatchForUser(userId) { updateSeatPresenceUseCase.update(UpdateSeatPresenceCommand(userId.value, SeatPresence.DISCONNECTED.name)) }
     }
 
     /**
@@ -166,7 +167,7 @@ class ConnectionTimer(
      * 사용자에게 쓴다 - 유예 중엔 [onSessionDisconnect] 가 애초에 감시를 걸지 않으므로 지울 예약이
      * 없는 게 정상이지만, 방어적으로 같이 처리한다.
      */
-    fun cancelWatch(userId: Long) {
+    fun cancelWatch(userId: UserId) {
         suspended.remove(userId)
         scheduled.remove(userId)?.future?.cancel(false)
         // cancel() 은 최선 노력이라, 이미 시작된 실행이 있다면 토큰을 바꿔 무효화한다.
@@ -174,14 +175,14 @@ class ConnectionTimer(
     }
 
     /** `HandRecovery` 가 테이블 복구를 시작하며 그 참가자들의 연결 감시를 유예시킨다. */
-    fun suspendWatch(userIds: Collection<Long>) {
+    fun suspendWatch(userIds: Collection<UserId>) {
         suspended.addAll(userIds)
     }
 
-    private fun onExpire(userId: Long, token: Long) {
+    private fun onExpire(userId: UserId, token: Long) {
         if (tokens[userId]?.get() != token) return
         val reservedTableId = try {
-            dispatchForUser(userId) { expireConnectionUseCase.expire(ExpireConnectionCommand(userId)) }
+            dispatchForUser(userId) { expireConnectionUseCase.expire(ExpireConnectionCommand(userId.value)) }
         } catch (e: Exception) {
             log.error("연결 만료 처리에 실패했습니다: userId={}", userId, e)
             rearmWatch(userId, token)
@@ -205,7 +206,7 @@ class ConnectionTimer(
         tableExecutor.call(event.tableId) {
             for (userId in userIds) {
                 try {
-                    standUpUseCase.standUp(StandUpCommand(userId))
+                    standUpUseCase.standUp(StandUpCommand(userId.value))
                     log.info("핸드 종료로 예약된 퇴장을 실행했습니다: userId={}, tableId={}", userId, event.tableId.value)
                 } catch (e: Exception) {
                     // 한 명의 실패가 나머지 퇴장을 버리면 안 된다 — 일반 3분 감시로 되돌려 자가 치유한다.
@@ -217,7 +218,7 @@ class ConnectionTimer(
     }
 
     /** 실패한 만료를 일반 3분 감시로 되돌린다. 그 사이 재접속했거나 감시가 바뀌었으면(토큰·연결 확인) 건드리지 않는다. */
-    private fun rearmWatch(userId: Long, token: Long?) {
+    private fun rearmWatch(userId: UserId, token: Long?) {
         if (tokens[userId]?.get() != token || userConnections.isConnected(userId)) return
         try {
             beginWatch(userId)

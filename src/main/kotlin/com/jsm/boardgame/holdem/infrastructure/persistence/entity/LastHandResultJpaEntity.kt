@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.persistence.entity
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -57,12 +58,12 @@ data class LastHandResultJson(
 
 fun LastHandResult.toJson() = LastHandResultJson(
     board,
-    payouts.map { LastHandResultJson.PayoutJson(it.seatNo, it.userId, it.amount) },
-    shownHands.map { LastHandResultJson.ShownHandJson(it.seatNo, it.userId, it.holeCards, it.category) },
+    payouts.map { LastHandResultJson.PayoutJson(it.seatNo, it.userId.value, it.amount) },
+    shownHands.map { LastHandResultJson.ShownHandJson(it.seatNo, it.userId.value, it.holeCards, it.category) },
 )
 
 fun LastHandResultJson.toResult() = LastHandResult(
     board,
-    payouts.map { LastHandResult.Payout(it.seatNo, it.userId, it.amount) },
-    shownHands.map { LastHandResult.ShownHand(it.seatNo, it.userId, it.holeCards, it.category) },
+    payouts.map { LastHandResult.Payout(it.seatNo, UserId(it.userId), it.amount) },
+    shownHands.map { LastHandResult.ShownHand(it.seatNo, UserId(it.userId), it.holeCards, it.category) },
 )

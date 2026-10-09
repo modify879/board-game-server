@@ -3,6 +3,7 @@ package com.jsm.boardgame.holdem.infrastructure.persistence.entity
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -109,11 +110,11 @@ class HandStateJsonTest {
             shuffler = identityShuffler,
         )
         hand.act(1, BettingAction.Fold)
-        hand.recordDeparture(1, 77L)
+        hand.recordDeparture(1, UserId(77L))
 
         val text = objectMapper.writeValueAsString(hand.snapshot().toJson())
         val restored = objectMapper.readValue(text, HandStateJson::class.java)
-        assertEquals(mapOf(1 to 77L), restored.toSnapshot().departedUserIds)
+        assertEquals(mapOf(1 to UserId(77L)), restored.toSnapshot().departedUserIds)
 
         val old = objectMapper.readTree(text).let { (it as tools.jackson.databind.node.ObjectNode).apply { remove("departedUserIds") } }
         val oldRestored = objectMapper.readValue(objectMapper.writeValueAsString(old), HandStateJson::class.java)

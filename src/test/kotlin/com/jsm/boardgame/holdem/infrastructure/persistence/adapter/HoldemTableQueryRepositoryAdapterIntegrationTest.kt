@@ -5,6 +5,7 @@ import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.query.port.HoldemTableQueryRepository
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.query.view.TableSummaryView
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.user.domain.model.Nickname
@@ -37,14 +38,14 @@ class HoldemTableQueryRepositoryAdapterIntegrationTest {
     private lateinit var users: UserRepository
 
     // fk_holdem_seats_user 가 걸려 있어 합성 userId 로는 착석 행을 저장할 수 없다 — 실제 사용자 행을 만든다.
-    private fun uniqueUserId(): Long {
+    private fun uniqueUserId(): UserId {
         val suffix = UniqueNames.suffix()
         val user = User.register(
             username = Username.of("u$suffix"),
             passwordHash = PasswordHash("hashed-password-value"),
             nickname = Nickname.of("n" + suffix),
         )
-        return users.save(user).id!!.value
+        return UserId(users.save(user).id!!.value)
     }
 
     @Test
@@ -54,7 +55,7 @@ class HoldemTableQueryRepositoryAdapterIntegrationTest {
         table.sitDown(userId, buyIn)
         val saved = tables.save(table)
 
-        val found = tableQuery.findSeatOf(userId)
+        val found = tableQuery.findSeatOf(userId.value)
 
         assertEquals(saved.id!!.value, found?.tableId)
         assertEquals(1, found?.seatNo)
@@ -65,7 +66,7 @@ class HoldemTableQueryRepositoryAdapterIntegrationTest {
     fun `findSeatOf - 앉아 있지 않으면 null 이다`() {
         val userId = uniqueUserId()
 
-        assertNull(tableQuery.findSeatOf(userId))
+        assertNull(tableQuery.findSeatOf(userId.value))
     }
 
     @Test

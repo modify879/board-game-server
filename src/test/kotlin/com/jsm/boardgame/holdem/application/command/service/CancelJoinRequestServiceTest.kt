@@ -9,6 +9,7 @@ import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.infrastructure.queue.InMemoryJoinQueue
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -18,9 +19,9 @@ import kotlin.test.assertTrue
 private class CancelJoinRequestFakeJoinQueueNotifier : JoinQueueNotifier {
     val positionsCalls = mutableListOf<Pair<TableId, List<JoinQueueEntry>>>()
 
-    override fun notifySeated(tableId: TableId, userId: Long, seatNo: Int) {}
+    override fun notifySeated(tableId: TableId, userId: UserId, seatNo: Int) {}
 
-    override fun notifyDropped(tableId: TableId, userId: Long, errorCode: ErrorCode) {}
+    override fun notifyDropped(tableId: TableId, userId: UserId, errorCode: ErrorCode) {}
 
     override fun notifyPositions(tableId: TableId, entries: List<JoinQueueEntry>) {
         positionsCalls += tableId to entries
@@ -41,13 +42,13 @@ class CancelJoinRequestServiceTest {
         val notifier = CancelJoinRequestFakeJoinQueueNotifier()
         val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
         val tableId = TableId(1L)
-        queue.enqueue(tableId, userId = 1L, postBlindImmediately = false)
-        queue.enqueue(tableId, userId = 2L, postBlindImmediately = false)
+        queue.enqueue(tableId, userId = UserId(1L), postBlindImmediately = false)
+        queue.enqueue(tableId, userId = UserId(2L), postBlindImmediately = false)
 
         service.cancel(CancelJoinRequestCommand(tableId.value, userId = 1L))
 
-        assertTrue(!queue.isQueued(1L))
-        assertEquals(listOf(2L), notifier.positionsCalls.last().second.map { it.userId })
+        assertTrue(!queue.isQueued(UserId(1L)))
+        assertEquals(listOf(UserId(2L)), notifier.positionsCalls.last().second.map { it.userId })
     }
 
     @Test
@@ -68,13 +69,13 @@ class CancelJoinRequestServiceTest {
         val notifier = CancelJoinRequestFakeJoinQueueNotifier()
         val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
         val tableId = TableId(1L)
-        queue.enqueue(tableId, userId = 1L, postBlindImmediately = false)
-        queue.enqueue(tableId, userId = 2L, postBlindImmediately = false)
+        queue.enqueue(tableId, userId = UserId(1L), postBlindImmediately = false)
+        queue.enqueue(tableId, userId = UserId(2L), postBlindImmediately = false)
 
         service.cancel(CancelJoinRequestCommand(tableId.value, userId = 2L))
 
-        assertTrue(queue.isQueued(1L))
-        assertEquals(1L, queue.peekHead(tableId)?.userId)
+        assertTrue(queue.isQueued(UserId(1L)))
+        assertEquals(UserId(1L), queue.peekHead(tableId)?.userId)
     }
 
     @Test
@@ -83,8 +84,8 @@ class CancelJoinRequestServiceTest {
         val notifier = CancelJoinRequestFakeJoinQueueNotifier()
         val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
         val tableId = TableId(1L)
-        queue.enqueue(tableId, userId = 1L, postBlindImmediately = false)
-        queue.removeByUserId(1L)
+        queue.enqueue(tableId, userId = UserId(1L), postBlindImmediately = false)
+        queue.removeByUserId(UserId(1L))
 
         val e = assertFailsWith<JoinRequestNotFoundException> {
             service.cancel(CancelJoinRequestCommand(tableId.value, userId = 1L))

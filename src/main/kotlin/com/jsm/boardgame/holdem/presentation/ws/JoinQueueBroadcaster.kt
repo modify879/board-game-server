@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.common.error.ErrorCode
 import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
 import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
@@ -16,10 +17,10 @@ class JoinQueueBroadcaster(
     private val userRegistry: SimpUserRegistry,
 ) : JoinQueueNotifier {
 
-    override fun notifySeated(tableId: TableId, userId: Long, seatNo: Int) =
+    override fun notifySeated(tableId: TableId, userId: UserId, seatNo: Int) =
         send(userId, JoinQueueView.Seated(tableId.value, seatNo))
 
-    override fun notifyDropped(tableId: TableId, userId: Long, errorCode: ErrorCode) =
+    override fun notifyDropped(tableId: TableId, userId: UserId, errorCode: ErrorCode) =
         send(userId, JoinQueueView.Dropped(tableId.value, errorCode.code))
 
     override fun notifyPositions(tableId: TableId, entries: List<JoinQueueEntry>) {
@@ -29,11 +30,11 @@ class JoinQueueBroadcaster(
     /** convertAndSendToUser 는 대상 세션이 없으면 예외도 로그도 없이 조용히 버린다 — HandBroadcaster 와
      *  같은 이유로 WARN 을 남기되 전송은 그대로 한다(레지스트리 경합으로 오탐 낼 수 있어, 안 보내면
      *  오히려 진짜 유실이 생긴다). */
-    private fun send(userId: Long, view: JoinQueueView) {
-        if (userRegistry.getUser(userId.toString()) == null) {
+    private fun send(userId: UserId, view: JoinQueueView) {
+        if (userRegistry.getUser(userId.value.toString()) == null) {
             log.warn("join-queue view dropped: no active session for userId={}", userId)
         }
-        messagingTemplate.convertAndSendToUser(userId.toString(), HoldemDestinations.joinQueueSendTargetOf(), view)
+        messagingTemplate.convertAndSendToUser(userId.value.toString(), HoldemDestinations.joinQueueSendTargetOf(), view)
     }
 
     companion object {

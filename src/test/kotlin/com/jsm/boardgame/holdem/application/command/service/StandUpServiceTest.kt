@@ -16,6 +16,7 @@ import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.Seat
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
@@ -32,9 +33,9 @@ private class StandUpFakeHoldemTableRepository : HoldemTableRepository {
 
     override fun findById(id: TableId): HoldemTable? = stored[id.value]
 
-    override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
+    override fun findByUserId(userId: UserId): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
-    override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
+    override fun findAllSeatedUserIds(): List<UserId> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllTableIds(): List<TableId> = stored.values.mapNotNull { it.id }
 
@@ -72,12 +73,12 @@ private class StandUpFakeWalletTransfer : WalletTransfer {
 
     val fromGameCalls = mutableListOf<FromGameCall>()
 
-    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long {
+    override fun allToGame(userId: UserId, tableId: TableId, memo: String?): Long {
         error("StandUp 는 allToGame 을 부르지 않는다")
     }
 
-    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) {
-        fromGameCalls += FromGameCall(userId, amount, tableId, memo)
+    override fun fromGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) {
+        fromGameCalls += FromGameCall(userId.value, amount, tableId, memo)
     }
 }
 
@@ -102,7 +103,7 @@ class StandUpServiceTest {
     @Test
     fun `기립하면 좌석이 비고 스택이 지갑으로 돌아간다`() {
         val table = tables.save(HoldemTable.create("테스트 테이블"))
-        table.sitDown(1, Chips.of(8_000))
+        table.sitDown(UserId(1), Chips.of(8_000))
         val saved = tables.save(table)
 
         service.standUp(StandUpCommand(userId = 1))
@@ -126,7 +127,7 @@ class StandUpServiceTest {
     @Test
     fun `핸드가 진행 중이면 기립할 수 없다`() {
         val table = tables.save(HoldemTable.create("테스트 테이블"))
-        table.sitDown(1, Chips.of(8_000))
+        table.sitDown(UserId(1), Chips.of(8_000))
         val saved = tables.save(table)
         handStore.save(
             saved.id!!,
@@ -142,7 +143,7 @@ class StandUpServiceTest {
 
     @Test
     fun `스택이 0 이면 기립은 되지만 지갑 이체는 불리지 않는다`() {
-        val zeroStackSeat = Seat.reconstitute(seatNo = 1, userId = 1, stack = Chips.ZERO, presence = SeatPresence.SEATED)
+        val zeroStackSeat = Seat.reconstitute(seatNo = 1, userId = UserId(1), stack = Chips.ZERO, presence = SeatPresence.SEATED)
         val table = HoldemTable.reconstitute(
             id = TableId(1),
             name = "테스트 테이블",
@@ -162,8 +163,8 @@ class StandUpServiceTest {
     @Test
     fun `기립으로 후보가 2명 미만이 되면 다음 핸드 카운트다운이 취소된다`() {
         val table = tables.save(HoldemTable.create("테스트 테이블"))
-        table.sitDown(1, Chips.of(8_000))
-        table.sitDown(2, Chips.of(8_000))
+        table.sitDown(UserId(1), Chips.of(8_000))
+        table.sitDown(UserId(2), Chips.of(8_000))
         tables.save(table)
 
         service.standUp(StandUpCommand(userId = 1))
@@ -174,9 +175,9 @@ class StandUpServiceTest {
     @Test
     fun `기립 후에도 후보가 2명 이상이면 카운트다운을 건드리지 않는다`() {
         val table = tables.save(HoldemTable.create("테스트 테이블"))
-        table.sitDown(1, Chips.of(8_000))
-        table.sitDown(2, Chips.of(8_000))
-        table.sitDown(3, Chips.of(8_000))
+        table.sitDown(UserId(1), Chips.of(8_000))
+        table.sitDown(UserId(2), Chips.of(8_000))
+        table.sitDown(UserId(3), Chips.of(8_000))
         tables.save(table)
 
         service.standUp(StandUpCommand(userId = 1))

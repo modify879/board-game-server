@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
@@ -84,7 +85,7 @@ class HoldemSubscriptionSnapshotListener(
         }
         if (!registeredThisDestination) return
 
-        val userId = accessor.user?.name?.toLongOrNull() ?: return
+        val userId = accessor.user?.name?.toLongOrNull()?.let(::UserId) ?: return
         val tableId = TableId(rawTableId)
 
         // 상태를 읽기 전에 seq 를 먼저 읽는다(증가시키지 않는다) — 증가시키면, 지금 커밋
@@ -113,7 +114,7 @@ class HoldemSubscriptionSnapshotListener(
         val seat = table.seatOf(userId) ?: return
         if (hand != null && seat.seatNo in hand.seatNos) {
             messagingTemplate.convertAndSendToUser(
-                userId.toString(),
+                userId.value.toString(),
                 HoldemDestinations.privateQueueSendTargetOf(rawTableId),
                 privateViewOf(tableId, seat.seatNo, hand, seq),
             )

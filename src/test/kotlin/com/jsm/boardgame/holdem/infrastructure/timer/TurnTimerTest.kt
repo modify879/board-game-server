@@ -11,6 +11,7 @@ import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.scheduling.Trigger
@@ -111,7 +112,7 @@ class TurnTimerTest {
     private fun handWithToAct(vararg stacks: Pair<Int, Long>): Hand {
         val table = HoldemTable.create("test-table")
         for ((seatNo, buyIn) in stacks) {
-            table.sitDown(userId = seatNo * 1000L, buyIn = Chips.of(buyIn))
+            table.sitDown(userId = UserId(seatNo * 1000L), buyIn = Chips.of(buyIn))
         }
         table.moveButtonToNextOccupiedSeat()
         val handStacks = stacks.associate { (seatNo, buyIn) -> seatNo to Chips.of(buyIn) }

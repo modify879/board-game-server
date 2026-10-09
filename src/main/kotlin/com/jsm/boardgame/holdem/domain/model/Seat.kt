@@ -5,7 +5,7 @@ enum class SeatPresence { SEATED, SITTING_OUT, DISCONNECTED }
 
 class Seat private constructor(
     val seatNo: Int,
-    val userId: Long,
+    val userId: UserId,
     stack: Chips,
     presence: SeatPresence,
     awaitingBigBlind: Boolean,
@@ -53,7 +53,7 @@ class Seat private constructor(
         /** seatNo·buyIn 검증은 HoldemTable 이 한다(블라인드 등 테이블 컨텍스트가 필요해서).
          * postBlindImmediately=true 면 곧바로 참가하되(awaitingBigBlind=false) 다음 핸드에 추가 BB 포스팅을 빚진다(owesImmediatePost=true).
          * false(기본값 — 공짜 쪽이 안전한 기본값)면 BB 가 자기 자리에 올 때까지 대기한다. */
-        fun of(seatNo: Int, userId: Long, stack: Chips, postBlindImmediately: Boolean = false): Seat =
+        fun of(seatNo: Int, userId: UserId, stack: Chips, postBlindImmediately: Boolean = false): Seat =
             Seat(
                 seatNo, userId, stack, SeatPresence.SEATED,
                 awaitingBigBlind = !postBlindImmediately,
@@ -63,7 +63,7 @@ class Seat private constructor(
         /** 영속 복원 전용 — 검증하지 않는다. */
         fun reconstitute(
             seatNo: Int,
-            userId: Long,
+            userId: UserId,
             stack: Chips,
             presence: SeatPresence,
             awaitingBigBlind: Boolean = false,

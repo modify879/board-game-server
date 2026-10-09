@@ -5,6 +5,7 @@ import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -27,8 +28,8 @@ class LastHandResultStoreAdapterIntegrationTest {
 
     private fun result(amount: Long) = LastHandResult(
         board = listOf("As", "Kd", "7c", "2h", "9s"),
-        payouts = listOf(LastHandResult.Payout(2, 2000L, amount)),
-        shownHands = listOf(LastHandResult.ShownHand(2, 2000L, listOf("Ah", "Ad"), "THREE_OF_A_KIND")),
+        payouts = listOf(LastHandResult.Payout(2, UserId(2000L), amount)),
+        shownHands = listOf(LastHandResult.ShownHand(2, UserId(2000L), listOf("Ah", "Ad"), "THREE_OF_A_KIND")),
     )
 
     @Test

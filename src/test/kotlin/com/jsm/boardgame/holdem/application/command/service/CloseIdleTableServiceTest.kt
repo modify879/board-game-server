@@ -7,6 +7,7 @@ import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import com.jsm.boardgame.holdem.infrastructure.queue.InMemoryJoinQueue
@@ -28,9 +29,9 @@ private class CloseIdleFakeHoldemTableRepository : HoldemTableRepository {
     // 실제 어댑터처럼 닫힌 테이블은 없는 테이블로 돌려준다.
     override fun findById(id: TableId): HoldemTable? = stored[id.value]?.takeIf { it.closedAt == null }
 
-    override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
+    override fun findByUserId(userId: UserId): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
-    override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
+    override fun findAllSeatedUserIds(): List<UserId> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllTableIds(): List<TableId> = stored.values.filter { it.closedAt == null }.mapNotNull { it.id }
 
@@ -86,7 +87,7 @@ class CloseIdleTableServiceTest {
     @Test
     fun `앉은 사용자가 있으면 아무것도 하지 않는다`() {
         val id = emptyTable()
-        tables.save(tables.findById(id)!!.also { it.sitDown(1L, Chips.of(8_000)) })
+        tables.save(tables.findById(id)!!.also { it.sitDown(UserId(1L), Chips.of(8_000)) })
 
         assertFalse(service.close(CloseIdleTableCommand(id.value)))
 
@@ -111,7 +112,7 @@ class CloseIdleTableServiceTest {
     @Test
     fun `대기열이 비어 있지 않으면 아무것도 하지 않는다`() {
         val id = emptyTable()
-        joinQueue.enqueue(id, userId = 1L, postBlindImmediately = false)
+        joinQueue.enqueue(id, userId = UserId(1L), postBlindImmediately = false)
 
         assertFalse(service.close(CloseIdleTableCommand(id.value)))
 

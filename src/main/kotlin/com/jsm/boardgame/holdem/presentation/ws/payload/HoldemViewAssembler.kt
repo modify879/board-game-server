@@ -30,7 +30,7 @@ fun publicViewOf(
         if (hand != null && seat.seatNo in hand.seatNos) {
             SeatPublicView(
                 seatNo = seat.seatNo,
-                userId = seat.userId,
+                userId = seat.userId.value,
                 // 끝난 핸드는 좌석 값을 쓴다 — 정산이 applyStacks 후 지갑 입금분을 합치므로 핸드의 최종 스택은 합산 전 값이다.
                 stack = if (hand.isFinished) seat.stack.amount else hand.stackOf(seat.seatNo).amount,
                 totalContributed = hand.totalContributedBy(seat.seatNo).amount,
@@ -40,7 +40,7 @@ fun publicViewOf(
         } else {
             SeatPublicView(
                 seatNo = seat.seatNo,
-                userId = seat.userId,
+                userId = seat.userId.value,
                 stack = seat.stack.amount,
                 totalContributed = 0L,
                 status = "SITTING_OUT",
@@ -68,8 +68,8 @@ fun publicViewOf(
 
 private fun handResultPublicViewOf(result: LastHandResult): HandResultPublicView =
     HandResultPublicView(
-        result.payouts.map { PayoutPublicView(it.seatNo, it.userId, it.amount) },
-        result.shownHands.map { ShownHandView(it.seatNo, it.userId, it.holeCards, it.category) },
+        result.payouts.map { PayoutPublicView(it.seatNo, it.userId.value, it.amount) },
+        result.shownHands.map { ShownHandView(it.seatNo, it.userId.value, it.holeCards, it.category) },
     )
 
 /** [seatNo] 자신의 홀카드와 지금 할 수 있는 행동만 담는다. 다른 좌석의 카드는 이 함수의 인자로도 들어오지 않는다. */

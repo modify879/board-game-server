@@ -11,6 +11,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCo
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.infrastructure.timer.NextHandTimer
@@ -212,7 +213,7 @@ class HoldemStompIntegrationTest {
     private fun awaitSeated(userId: Long, timeoutMs: Long = 5_000) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            if (holdemTableRepository.findByUserId(userId) != null) return
+            if (holdemTableRepository.findByUserId(UserId(userId)) != null) return
             Thread.sleep(20)
         }
         error("착석이 시간 안에 끝나지 않았습니다: userId=$userId")

@@ -25,6 +25,7 @@ import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import com.jsm.boardgame.holdem.infrastructure.queue.InMemoryJoinQueue
@@ -106,7 +107,7 @@ private class HandRecoveryFakeTableRepository : HoldemTableRepository {
     private var nextId = 1L
 
     override fun findById(id: TableId): HoldemTable? = store[id.value]
-    override fun findByUserId(userId: Long): HoldemTable? = store.values.firstOrNull { it.seatOf(userId) != null }
+    override fun findByUserId(userId: UserId): HoldemTable? = store.values.firstOrNull { it.seatOf(userId) != null }
 
     override fun save(table: HoldemTable): HoldemTable {
         if (table.id != null) {
@@ -126,7 +127,7 @@ private class HandRecoveryFakeTableRepository : HoldemTableRepository {
         return saved
     }
 
-    override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
+    override fun findAllSeatedUserIds(): List<UserId> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllTableIds(): List<TableId> = store.values.mapNotNull { it.id }
 }
@@ -162,14 +163,14 @@ private class HandRecoveryFakeCancelHandUseCase : CancelHandUseCase {
 }
 
 private class HandRecoveryFakeJoinQueueNotifier : JoinQueueNotifier {
-    override fun notifySeated(tableId: TableId, userId: Long, seatNo: Int) {}
-    override fun notifyDropped(tableId: TableId, userId: Long, errorCode: ErrorCode) {}
+    override fun notifySeated(tableId: TableId, userId: UserId, seatNo: Int) {}
+    override fun notifyDropped(tableId: TableId, userId: UserId, errorCode: ErrorCode) {}
     override fun notifyPositions(tableId: TableId, entries: List<JoinQueueEntry>) {}
 }
 
 private class HandRecoveryFakeUserConnections : UserConnections {
-    override fun isConnected(userId: Long): Boolean = false
-    override fun hasOtherSession(userId: Long, excludingSessionId: String): Boolean = false
+    override fun isConnected(userId: UserId): Boolean = false
+    override fun hasOtherSession(userId: UserId, excludingSessionId: String): Boolean = false
 }
 
 private class HandRecoveryFakeStartScheduledHandUseCase : StartScheduledHandUseCase {
@@ -225,7 +226,7 @@ class HandRecoveryTest {
             seats = emptyMap(),
         )
         for (seatNo in seatNos) {
-            table.sitDown(userId = seatNo * 1000L, buyIn = Chips.of(10_000))
+            table.sitDown(userId = UserId(seatNo * 1000L), buyIn = Chips.of(10_000))
         }
         tables.save(table)
         table.moveButtonToNextOccupiedSeat()
@@ -440,8 +441,8 @@ class HandRecoveryTest {
             buttonSeatNo = null,
             seats = emptyMap(),
         )
-        table.sitDown(userId = 1000L, buyIn = Chips.of(10_000))
-        table.sitDown(userId = 2000L, buyIn = Chips.of(10_000))
+        table.sitDown(userId = UserId(1000L), buyIn = Chips.of(10_000))
+        table.sitDown(userId = UserId(2000L), buyIn = Chips.of(10_000))
         tables.save(table)
 
         val recovery = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase, newConnectionTimer(tables), nextHandTimer, HandRecoveryFakeTableExecutor())
@@ -473,7 +474,7 @@ class HandRecoveryTest {
             buttonSeatNo = null,
             seats = emptyMap(),
         )
-        table.sitDown(userId = 1000L, buyIn = Chips.of(10_000))
+        table.sitDown(userId = UserId(1000L), buyIn = Chips.of(10_000))
         tables.save(table)
 
         val recovery = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase, newConnectionTimer(tables), nextHandTimer, HandRecoveryFakeTableExecutor())

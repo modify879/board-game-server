@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.port
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.model.TableId
 
@@ -10,20 +11,20 @@ import com.jsm.boardgame.holdem.domain.model.TableId
 interface JoinQueue {
     /** userId 는 테이블 전역에서 한 번에 하나의 대기열에만 있을 수 있다 — 이미 대기 중이면
      *  [AlreadySeatedException] 을 던진다(구현이 원자적으로 검사+삽입한다). 1-based 대기 순번을 돌려준다. */
-    fun enqueue(tableId: TableId, userId: Long, postBlindImmediately: Boolean): Int
+    fun enqueue(tableId: TableId, userId: UserId, postBlindImmediately: Boolean): Int
 
     fun peekHead(tableId: TableId): JoinQueueEntry?
 
     /** 대기열에서 제거한다. 어느 테이블에 있었는지 돌려준다(없었으면 null). */
-    fun removeByUserId(userId: Long): TableId?
+    fun removeByUserId(userId: UserId): TableId?
 
     /** [tableId] 의 대기열을 순서대로. 1-based 순번은 호출자가 index+1 로 매긴다. */
     fun entriesOf(tableId: TableId): List<JoinQueueEntry>
 
-    fun isQueued(userId: Long): Boolean
+    fun isQueued(userId: UserId): Boolean
 
     /** userId 가 대기 중인 테이블. 대기 중이 아니면 null. */
-    fun tableOf(userId: Long): TableId?
+    fun tableOf(userId: UserId): TableId?
 }
 
-data class JoinQueueEntry(val userId: Long, val postBlindImmediately: Boolean)
+data class JoinQueueEntry(val userId: UserId, val postBlindImmediately: Boolean)

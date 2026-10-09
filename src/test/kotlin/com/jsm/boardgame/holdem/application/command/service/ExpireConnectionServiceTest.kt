@@ -8,6 +8,7 @@ import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import kotlin.test.Test
@@ -20,9 +21,9 @@ private class ExpireConnectionFakeHoldemTableRepository : HoldemTableRepository 
 
     override fun findById(id: TableId): HoldemTable? = stored[id.value]
 
-    override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
+    override fun findByUserId(userId: UserId): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
-    override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
+    override fun findAllSeatedUserIds(): List<UserId> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllTableIds(): List<TableId> = stored.values.mapNotNull { it.id }
 
@@ -74,7 +75,7 @@ class ExpireConnectionServiceTest {
     @Test
     fun `핸드가 없으면 즉시 기립시키고 null 을 돌려준다`() {
         val table = tables.save(HoldemTable.create("테스트 테이블"))
-        table.sitDown(1, Chips.of(8_000))
+        table.sitDown(UserId(1L), Chips.of(8_000))
         tables.save(table)
 
         val result = service.expire(ExpireConnectionCommand(userId = 1))
@@ -87,7 +88,7 @@ class ExpireConnectionServiceTest {
     @Test
     fun `핸드가 진행 중이면 즉시 기립시키지 않고 테이블 id 를 돌려준다`() {
         val table = tables.save(HoldemTable.create("테스트 테이블"))
-        table.sitDown(1, Chips.of(8_000))
+        table.sitDown(UserId(1L), Chips.of(8_000))
         val saved = tables.save(table)
         handStore.save(
             saved.id!!,

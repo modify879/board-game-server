@@ -4,6 +4,7 @@ import com.jsm.boardgame.UniqueNames
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
@@ -144,7 +145,7 @@ class HoldemDbTimeoutIntegrationTest {
     private fun awaitSeated(userId: Long) {
         val deadline = System.currentTimeMillis() + 5_000
         while (System.currentTimeMillis() < deadline) {
-            if (holdemTableRepository.findByUserId(userId) != null) return
+            if (holdemTableRepository.findByUserId(UserId(userId)) != null) return
             Thread.sleep(20)
         }
         error("착석이 시간 안에 끝나지 않았습니다: userId=$userId")

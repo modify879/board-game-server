@@ -16,6 +16,7 @@ import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
@@ -31,10 +32,10 @@ private class PlayActionFakeTableRepository : HoldemTableRepository {
 
     override fun findById(id: TableId): HoldemTable? = store[id.value]?.let { copyOf(it) }
 
-    override fun findByUserId(userId: Long): HoldemTable? =
+    override fun findByUserId(userId: UserId): HoldemTable? =
         store.values.firstOrNull { it.seatOf(userId) != null }?.let { copyOf(it) }
 
-    override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
+    override fun findAllSeatedUserIds(): List<UserId> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllTableIds(): List<TableId> = store.values.mapNotNull { it.id }
 
@@ -72,8 +73,8 @@ private class PlayActionFakeNextHandCountdown : NextHandCountdown {
 }
 
 private class PlayActionFakeWalletTransfer : WalletTransfer {
-    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long = 0
-    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) {}
+    override fun allToGame(userId: UserId, tableId: TableId, memo: String?): Long = 0
+    override fun fromGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) {}
 }
 
 class PlayActionServiceTest {
@@ -90,7 +91,7 @@ class PlayActionServiceTest {
         var table = HoldemTable.create("test-table")
         table = tables.save(table)
         for ((seatNo, buyIn) in stacks) {
-            table.sitDown(userId = seatNo * 1000L, buyIn = Chips.of(buyIn))
+            table.sitDown(userId = UserId(seatNo * 1000L), buyIn = Chips.of(buyIn))
         }
         table.moveButtonToNextOccupiedSeat()
         table = tables.save(table)
@@ -134,7 +135,7 @@ class PlayActionServiceTest {
     fun `진행 중인 핸드가 없으면 거부한다`() {
         var table = HoldemTable.create("no-hand")
         table = tables.save(table)
-        table.sitDown(userId = 1000L, buyIn = Chips.of(10_000))
+        table.sitDown(userId = UserId(1000L), buyIn = Chips.of(10_000))
         tables.save(table)
 
         val e = assertFailsWith<HandNotFoundException> {
@@ -206,7 +207,7 @@ class PlayActionServiceTest {
         val toAct = handStore.find(tableId)!!.toActSeatNo!!
 
         val table = tables.findById(tableId)!!
-        table.sitDown(userId = 3000L, buyIn = Chips.of(10_000))
+        table.sitDown(userId = UserId(3000L), buyIn = Chips.of(10_000))
         tables.save(table)
 
         service.play(PlayActionCommand(tableId.value, userId = toAct * 1000L, action = "FOLD", raiseToAmount = null))

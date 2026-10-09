@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.common.error.BusinessException
 import com.jsm.boardgame.common.error.CommonErrorCode
 import com.jsm.boardgame.common.error.ErrorCode
@@ -39,7 +40,7 @@ class ProcessJoinRequestsService(
             try {
                 when (
                     val result = admitJoinRequestUseCase.admit(
-                        AdmitJoinRequestCommand(tableId.value, head.userId, head.postBlindImmediately),
+                        AdmitJoinRequestCommand(tableId.value, head.userId.value, head.postBlindImmediately),
                     )
                 ) {
                     is AdmitJoinRequestResult.Blocked -> return
@@ -63,7 +64,7 @@ class ProcessJoinRequestsService(
         }
     }
 
-    private fun drop(tableId: TableId, userId: Long, errorCode: ErrorCode) {
+    private fun drop(tableId: TableId, userId: UserId, errorCode: ErrorCode) {
         joinQueue.removeByUserId(userId)
         notifier.notifyDropped(tableId, userId, errorCode)
         notifier.notifyPositions(tableId, joinQueue.entriesOf(tableId))

@@ -10,6 +10,7 @@ import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
@@ -28,10 +29,10 @@ private class HandStarterFakeTableRepository : HoldemTableRepository {
 
     override fun findById(id: TableId): HoldemTable? = store[id.value]?.let { copyOf(it) }
 
-    override fun findByUserId(userId: Long): HoldemTable? =
+    override fun findByUserId(userId: UserId): HoldemTable? =
         store.values.firstOrNull { it.seatOf(userId) != null }?.let { copyOf(it) }
 
-    override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
+    override fun findAllSeatedUserIds(): List<UserId> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllTableIds(): List<TableId> = store.values.mapNotNull { it.id }
 
@@ -76,9 +77,9 @@ private class HandStarterFakeWalletTransfer : WalletTransfer {
     /** 지갑 잔액. allToGame 은 잔액 전부를 돌려주고 0 으로 만든다. */
     val balances = mutableMapOf<Long, Long>()
 
-    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long = balances.remove(userId) ?: 0
+    override fun allToGame(userId: UserId, tableId: TableId, memo: String?): Long = balances.remove(userId.value) ?: 0
 
-    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) {
+    override fun fromGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) {
         error("HandStarter 는 fromGame 을 부르지 않는다")
     }
 }
@@ -103,7 +104,7 @@ class HandStarterTest {
         var table = HoldemTable.create("test-table")
         table = tables.save(table)
         for ((seatNo, buyIn) in buyIns) {
-            table.sitDown(userId = seatNo.toLong(), buyIn = Chips.of(buyIn))
+            table.sitDown(userId = UserId(seatNo.toLong()), buyIn = Chips.of(buyIn))
         }
         table = tables.save(table)
         return table.id!!
@@ -112,7 +113,7 @@ class HandStarterTest {
     /** BB 즉시 포스팅을 특정 좌석에만 골라 앉힐 때 쓴다. */
     private fun sitDownChoosing(tableId: TableId, seatNo: Int, buyIn: Long, postBlindImmediately: Boolean) {
         val table = tables.findById(tableId)!!
-        table.sitDown(userId = seatNo.toLong(), buyIn = Chips.of(buyIn), postBlindImmediately = postBlindImmediately)
+        table.sitDown(userId = UserId(seatNo.toLong()), buyIn = Chips.of(buyIn), postBlindImmediately = postBlindImmediately)
         tables.save(table)
     }
 
@@ -372,9 +373,9 @@ class HandStarterTest {
         handStore.remove(tableId)
 
         var table = tables.findById(tableId)!!
-        table.standUp(5)
-        table.standUp(6)
-        table.standUp(7)
+        table.standUp(UserId(5))
+        table.standUp(UserId(6))
+        table.standUp(UserId(7))
         tables.save(table)
 
         sitDownChoosing(tableId, seatNo = 1, buyIn = 10_000L, postBlindImmediately = false)
@@ -449,7 +450,7 @@ class HandStarterTest {
     fun `헤즈업 뒤 대기 중인 세 번째 좌석 때문에 버튼이 BB 와 겹치지 않는다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
         val table = tables.findById(tableId)!!
-        table.standUp(2L) // 2는 나중에 대기로 합류시키려고 헤즈업(1·3)만 남긴다
+        table.standUp(UserId(2L)) // 2는 나중에 대기로 합류시키려고 헤즈업(1·3)만 남긴다
         tables.save(table)
         start(tableId) // 1핸드: 헤즈업 1·3
         handStore.remove(tableId)
@@ -479,7 +480,7 @@ class HandStarterTest {
     fun `헤즈업 뒤 즉시 포스팅을 고른 좌석이 버튼 자리에 걸리면 이번 핸드는 대기한다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
         val table = tables.findById(tableId)!!
-        table.standUp(2L) // 2는 나중에 즉시 포스팅으로 합류시키려고 헤즈업(1·3)만 남긴다
+        table.standUp(UserId(2L)) // 2는 나중에 즉시 포스팅으로 합류시키려고 헤즈업(1·3)만 남긴다
         tables.save(table)
         start(tableId) // 1핸드: 헤즈업 1·3
         handStore.remove(tableId)
@@ -527,7 +528,7 @@ class HandStarterTest {
         handStore.remove(tableId)
 
         var table = tables.findById(tableId)!!
-        table.standUp(2L)
+        table.standUp(UserId(2L))
         tables.save(table)
         sitDownChoosing(tableId, seatNo = 2, buyIn = 10_000L, postBlindImmediately = true)
 

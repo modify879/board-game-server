@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
@@ -32,7 +33,7 @@ class ExpireConnectionService(
 ) : ExpireConnectionUseCase {
 
     override fun expire(command: ExpireConnectionCommand): TableId? {
-        val table = tables.findByUserId(command.userId) ?: return null
+        val table = tables.findByUserId(UserId(command.userId)) ?: return null
         val tableId = table.id!!
 
         if (handStore.find(tableId) != null) {

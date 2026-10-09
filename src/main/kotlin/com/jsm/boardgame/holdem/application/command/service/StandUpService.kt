@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpUseCase
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
@@ -33,7 +34,7 @@ class StandUpService(
 ) : StandUpUseCase {
 
     override fun standUp(command: StandUpCommand) {
-        val table = tables.findByUserId(command.userId)
+        val table = tables.findByUserId(UserId(command.userId))
             ?: throw NotSeatedException("어느 테이블에도 앉아 있지 않은 사용자입니다: userId=${command.userId}")
         val tableId = table.id!!
 
@@ -41,11 +42,11 @@ class StandUpService(
             throw HandInProgressException("핸드가 진행 중인 테이블에서는 기립할 수 없습니다: userId=${command.userId}")
         }
 
-        val returned = table.standUp(command.userId)
+        val returned = table.standUp(UserId(command.userId))
         if (returned.isPositive()) {
             // memo 가 유일하게 "어느 게임인가" 를 나른다 — LedgerEntryType 이 이미 방향을 말하고
             // LedgerReferenceType.GAME_TABLE 엔 게임 이름이 없다. 표시 문구를 넣지 않는다(규칙 8, 문구는 클라이언트가 만든다).
-            walletTransfer.fromGame(command.userId, returned.amount, tableId, memo = "holdem")
+            walletTransfer.fromGame(UserId(command.userId), returned.amount, tableId, memo = "holdem")
         }
         handStarter.rescheduleOnExit(tableId, table)
         eventPublisher.publishEvent(JoinRequestsDue(tableId))

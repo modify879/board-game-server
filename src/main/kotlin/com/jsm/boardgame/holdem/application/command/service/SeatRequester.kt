@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
 import com.jsm.boardgame.holdem.application.exception.NotConnectedException
@@ -33,7 +34,7 @@ class SeatRequester(
 ) {
 
     /** [table] 은 저장돼 id 가 있어야 한다. 1-based 대기열 순번을 돌려준다. */
-    fun request(table: HoldemTable, userId: Long, postBlindImmediately: Boolean): Int {
+    fun request(table: HoldemTable, userId: UserId, postBlindImmediately: Boolean): Int {
         val tableId = table.id!!
         val seatedTable = tables.findByUserId(userId)
         if (seatedTable != null) {

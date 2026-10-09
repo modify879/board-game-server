@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.recovery
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandCommand
@@ -81,8 +82,8 @@ class HandRecovery(
     private val tableExecutor: TableExecutor,
 ) {
     private class PendingRecovery(
-        val allUserIds: Set<Long>,
-        val awaitingUserIds: MutableSet<Long>,
+        val allUserIds: Set<UserId>,
+        val awaitingUserIds: MutableSet<UserId>,
         val future: ScheduledFuture<*>,
     )
 
@@ -145,7 +146,7 @@ class HandRecovery(
         )
         pending[tableId] = PendingRecovery(
             allUserIds = allUserIds,
-            awaitingUserIds = ConcurrentHashMap.newKeySet<Long>().apply { addAll(allUserIds) },
+            awaitingUserIds = ConcurrentHashMap.newKeySet<UserId>().apply { addAll(allUserIds) },
             future = future,
         )
         log.info("테이블 {} 복구 유예(3분)를 시작합니다: 대기 사용자={}", tableId.value, allUserIds)
@@ -160,7 +161,7 @@ class HandRecovery(
 
     @EventListener
     fun onSessionConnected(event: SessionConnectedEvent) {
-        val userId = event.user?.name?.toLongOrNull() ?: return
+        val userId = event.user?.name?.toLongOrNull()?.let(::UserId) ?: return
         for ((tableId, recovery) in pending) {
             if (recovery.awaitingUserIds.remove(userId) && recovery.awaitingUserIds.isEmpty()) {
                 completeRecovery(tableId, resume = true)
