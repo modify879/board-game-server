@@ -29,8 +29,10 @@ Docker 가 떠 있어야 한다. 접속 정보는 `application.yaml` 에 적지 
   이름을 쓰면 `Redeclaration` 이다
 - 예외는 메시지가 아니라 `errorCode` 로 검증한다
 - 테스트 이름은 백틱을 쓴 한국어 문장
-- 지갑을 여는 통합 테스트(wallet, 바이인하는 holdem)는 `UserRepository` 로 **실제 `users` 행을 먼저 만든다**.
-  `fk_wallets_user` 때문에 합성 userId 로 지갑을 열면 FK 위반이다
+- 지갑을 열거나 착석하는 통합 테스트(wallet, holdem)는 `UserRepository` 로 **실제 `users` 행을 먼저 만든다**.
+  `fk_wallets_user`·`fk_holdem_seats_user` 때문에 합성 userId 로 열면 FK 위반이다
+- Postgres·Redis 컨테이너는 JVM 당 한 벌로 모든 통합 테스트가 공유한다 — 다른 테스트가 남긴 데이터에 기대지 않는다.
+  이름은 `UniqueNames.suffix()`, Redis 등에 쓰는 합성 userId 는 실제 IDENTITY 와 겹치지 않는 대역(예: 1조부터)을 쓴다
 - 규칙을 테스트로 못 박을 때는 성격이 다른 경로를 여럿 잡는다 — 사전 체크 경로만 타면
   DB 제약 번역이 한 번도 돌지 않은 채 테스트가 통과한다
 
@@ -43,7 +45,7 @@ com.jsm.boardgame
 └── <context>/       ← 모든 바운디드 컨텍스트가 이 형태
     ├── domain/      model/ repository/ service/ exception/
     │                repository·service = 출력 포트. service 는 도메인 규칙이 필요로 하는 것(해싱, 셔플)
-    ├── application/ command/{usecase,service}  port/  exception/  query/{service,port,view}
+    ├── application/ command/{usecase,service}  port/  event/  exception/  query/{service,port,view}
     │                port = 유스케이스가 필요로 하는 출력 포트(세션, 토큰, 타 컨텍스트)
     ├── infrastructure/ persistence/{entity,adapter}  security/{adapter,config}  acl/
     │                acl = 타 컨텍스트를 부르는 어댑터. DB 를 안 건드리므로 persistence 가 아니다
@@ -119,8 +121,8 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
      로 붙어 있는 accessor 를 쓴다. 읽기만 할 때는 `wrap` 도 무방하다
    - **`convertAndSendToUser` 는 대상 세션이 없으면 예외도 로그도 없이 버린다.** `SimpUserRegistry` 로 확인해
      WARN 을 남기되 **전송은 그대로 한다**(레지스트리가 경합할 수 있어 안 보내면 오히려 진짜 유실이 생긴다)
-   - **브로드캐스트는 트랜잭션 커밋 후에 한다.** 서비스는 이벤트만 올리고 `@TransactionalEventListener` 가
-     보낸다. 커밋 전에 내보내면 뒤이어 롤백됐을 때 클라이언트만 서버보다 앞선 상태를 보게 된다
+   - **브로드캐스트는 커밋 전에 내보내지 않는다.** 순번은 `BEFORE_COMMIT` 에서 따고 전송은 `afterCommit` 에서 한다(세부는 holdem rules).
+     커밋 전에 내보내면 뒤이어 롤백됐을 때 클라이언트만 서버보다 앞선 상태를 보게 된다
 7. 재화는 원시 타입으로 다루지 않는다. 각 게임이 자기 VO 로 갖고, 게임 간에 공유하지 않는다
 8. 오류는 코드로 계약하고, 문구는 클라이언트가 만든다
    - 예외는 그 실패를 소유한 계층에 둔다. 기준은 "애그리거트가 그 단어를 아는가" —
@@ -134,7 +136,6 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
    - **시큐리티 필터 단계의 401·403 도 같은 계약을 따른다.** `@RestControllerAdvice` 를 안 거치므로
      `AuthenticationEntryPoint`/`AccessDeniedHandler` 를 `exceptionHandling` 과 `oauth2ResourceServer`
      **양쪽에** 등록해야 한다. 한쪽만 하면 토큰이 있고 검증에 실패한 경우가 빠진다
-   - 로그에 비밀번호를 남기지 않는다
 
 ## 표준 형태
 
@@ -163,6 +164,13 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 - **같은 트랜잭션에 참여한 `@Transactional` 프록시를 예외가 한 번이라도 넘으면 바깥에서 잡아도 트랜잭션은 rollback-only 다.**
   커밋 시점에 `UnexpectedRollbackException` 으로 터진다. 실패를 기록하고 커밋해야 하면 `noRollbackFor`
   (`LoginService`), 실패를 격리해야 하면 호출 단위로 `REQUIRES_NEW` 를 쓴다(`AdmitJoinRequestService`)
+- DB 타임아웃은 hikari `options`(`application.yaml`)로 커넥션마다: `lock_timeout=3s`·`statement_timeout=10s`·`idle_in_transaction_session_timeout=30s`.
+  `TransientDataAccessException`(락·문장 타임아웃)은 503 `TEMPORARILY_UNAVAILABLE` — 롤백이 보장돼 재시도 안전. `TableExecutor.call` 에 호출자 타임아웃을 안 두는 이유는 `docs/architecture-decisions.md`
+- **커밋 후 콜백(`afterCommit`, AFTER_COMMIT 리스너)은 예외를 던지지 않는다** — 뒤 콜백이 건너뛰어지고 커밋된 요청이 실패로
+  보인다. 잡아서 로그. 다른 실행기를 기다리지도 않는다(`TableExecutor.call` 금지, `post`) — 그 스레드는 아직 JDBC 커넥션을 쥐고 있다
+- 각 컨텍스트가 자기 ID value class 를 둔다(`TableId`, 컨텍스트별 `UserId` — 남의 domain 타입 금지, 규칙 1). 원시 타입은
+  경계(Command·DTO·JPA·조회 경로·다른 컨텍스트가 받는 이벤트/API)에서만. ID value class 는 `toString()` 을 값으로 재정의한다 —
+  기본값 `UserId(value=1)` 이 JWT subject·`convertAndSendToUser` 같은 문자열 경계로 새면 조용히 틀어진다
 - 남의 리소스는 403 이 아니라 404 다. 서비스가 조회 단계에서 소유자까지 확인한다.
   도메인의 소유자 검사는 불변식으로 남긴다 — "안 쓰이는 코드" 로 보고 지우지 않는다
 - 문자열 컬럼은 `text`. 길이 제약이 DB 에 없으므로 VO 가 유일한 방어선이다
@@ -170,8 +178,6 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 - 페이지 응답은 `PagedModel`(`spring.data.web.pageable.serialization-mode: via_dto`)
 - **KDoc 안에 `/api/admin` 와일드카드를 그대로 쓰지 않는다.** 별표-슬래시가 주석을 닫아
   `Unclosed comment` 가 엉뚱한 줄을 가리킨다
-- top-level `private` 함수는 이름이 패키지에서 충돌하지 않는 대신 **다른 파일에서 보이지 않는다.**
-  파일 간에 헬퍼를 공유할 수 없어 `requireUserId()` 가 컨트롤러마다 복사되어 있다
 
 ## git flow
 
@@ -190,4 +196,4 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
   **`data.sql` 의 문장 구분자는 `;` 가 아니라 `@@@`** — 기본 분할기가 `do $$ ... $$` 안의 `;` 에서 자른다
 - ArchUnit 의존성 테스트 — 게임이 둘 이상 생기면 도입. 목표는 BuckPal 과 같은 3줄:
   `application.doesNotDependOn(adapters)` / `domainDoesNotDependOnAdapters()` / `adapters.dontDependOnEachOther()`
-- 관리자 화면, Micrometer Tracing
+- Micrometer Tracing
