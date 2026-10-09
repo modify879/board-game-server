@@ -47,7 +47,8 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * 재시작하면 예약이 사라지지만, 부팅 시 앉아 있는 사용자 전원에게 감시를 다시 건다.
  * 재시작 후 접속하지 않은 사람에게는 [SessionDisconnectEvent] 가 영영 오지 않으므로, 그 사람을
- * 치우는 경로가 이 부팅 스윕뿐이다.
+ * 치우는 경로가 이 부팅 스윕뿐이다. Tomcat 은 Ready 전에 접속을 받으므로, 그 사이 먼저 재접속한
+ * 사용자를 다시 감시하면 연결된 채 기립되어 이미 연결된 사용자는 뺀다.
  *
  * 복구 유예 중인 테이블([HandRecovery] 가 진행 중 핸드를 복구하는 3분 동안)의 참가자는 이 부팅
  * 시딩에서 빠져야 한다 - 서버가 죽어있던 시간은 플레이어 책임이 아니다. pull 방식
@@ -100,7 +101,7 @@ class ConnectionTimer(
     @EventListener(ApplicationReadyEvent::class)
     @Order(1)
     fun onApplicationReady() {
-        val toWatch = tables.findAllSeatedUserIds().filterNot { it in suspended }
+        val toWatch = tables.findAllSeatedUserIds().filterNot { it in suspended || userConnections.isConnected(it) }
         toWatch.forEach { beginWatch(it) }
         log.info("부팅 시 착석 중이던 사용자 {}명에게 연결 감시를 다시 걸었습니다.", toWatch.size)
     }
