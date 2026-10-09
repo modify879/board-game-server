@@ -127,6 +127,36 @@ class AdminWalletApiIntegrationTest {
     }
 
     @Test
+    fun `관리자는 특정 사용자의 잔액을 조회하고 지갑이 없으면 0 이다`() {
+        val (_, adminToken) = signUpAdminAndLogin()
+        val (targetId, _) = signUpAndLogin()
+
+        authGet("/api/admin/wallets/$targetId", adminToken)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.userId").value(targetId))
+            .andExpect(jsonPath("$.balance").value(0))
+
+        authPost(
+            "/api/admin/wallets/$targetId/adjustments",
+            adminToken,
+            """{"amount":1500,"reason":"조회 검증"}""",
+            mapOf("Idempotency-Key" to UUID.randomUUID().toString()),
+        ).andExpect(status().isNoContent)
+
+        authGet("/api/admin/wallets/$targetId", adminToken)
+            .andExpect(jsonPath("$.balance").value(1500))
+    }
+
+    @Test
+    fun `일반 사용자는 관리자 잔액 조회에서 403 ACCESS_DENIED 다`() {
+        val (userId, accessToken) = signUpAndLogin()
+
+        authGet("/api/admin/wallets/$userId", accessToken)
+            .andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"))
+    }
+
+    @Test
     fun `일반 사용자로 관리자 API 를 호출하면 403과 ACCESS_DENIED 를 응답한다`() {
         val (_, accessToken) = signUpAndLogin()
 
