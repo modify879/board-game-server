@@ -4,6 +4,7 @@ import com.jsm.boardgame.wallet.application.command.usecase.RejectDepositRequest
 import com.jsm.boardgame.wallet.application.command.usecase.RejectDepositRequestCommand
 import com.jsm.boardgame.wallet.domain.exception.DepositRequestNotFoundException
 import com.jsm.boardgame.wallet.domain.model.DepositRequestId
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -22,7 +23,7 @@ class RejectDepositRequestService(
         val request = depositRequests.findById(DepositRequestId(command.requestId))
             ?: throw DepositRequestNotFoundException("반려하려는 충전 요청을 찾을 수 없음: requestId=${command.requestId}")
 
-        request.reject(command.adminUserId, command.reason, Instant.now(clock))
+        request.reject(UserId(command.adminUserId), command.reason, Instant.now(clock))
         depositRequests.save(request)
     }
 }

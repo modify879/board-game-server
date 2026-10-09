@@ -10,6 +10,7 @@ import com.jsm.boardgame.wallet.application.command.usecase.ApproveDepositReques
 import com.jsm.boardgame.wallet.application.command.usecase.RequestDepositCommand
 import com.jsm.boardgame.wallet.application.command.usecase.RequestDepositUseCase
 import com.jsm.boardgame.wallet.domain.model.Money
+import com.jsm.boardgame.wallet.domain.model.UserId as WalletUserId
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -72,6 +73,6 @@ class TopUpSeatFromWalletIntegrationTest {
         approveDeposit.approve(ApproveDepositRequestCommand(requestId.value, adminUserId = userId, creditedAmount = null))
 
         assertThat(tables.findById(table.id!!)!!.seatOf(userId)!!.stack).isEqualTo(Chips.of(20_000))
-        assertThat(wallets.findByUserId(userId)!!.balance).isEqualTo(Money.ZERO)
+        assertThat(wallets.findByUserId(WalletUserId(userId))!!.balance).isEqualTo(Money.ZERO)
     }
 }

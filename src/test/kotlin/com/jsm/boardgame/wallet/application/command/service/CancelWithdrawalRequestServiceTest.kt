@@ -12,6 +12,7 @@ import com.jsm.boardgame.wallet.domain.model.WalletId
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequest
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestId
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestStatus
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import com.jsm.boardgame.wallet.domain.repository.WithdrawalRequestRepository
@@ -42,14 +43,14 @@ private class CancelFakeWithdrawalRequestRepository : WithdrawalRequestRepositor
 private class CancelFakeWalletRepository : WalletRepository {
     val stored = mutableMapOf<Long, Wallet>()
 
-    override fun findByUserId(userId: Long): Wallet? = stored[userId]
+    override fun findByUserId(userId: UserId): Wallet? = stored[userId.value]
 
     override fun save(wallet: Wallet): Wallet {
-        stored[wallet.userId] = wallet
+        stored[wallet.userId.value] = wallet
         return wallet
     }
 
-    override fun findOrOpen(userId: Long): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
+    override fun findOrOpen(userId: UserId): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
 }
 
 private class CancelFakeLedgerEntryRepository : LedgerEntryRepository {
@@ -89,10 +90,10 @@ class CancelWithdrawalRequestServiceTest {
     private val bankAccount = BankAccount.of("국민은행", "123456789012", "홍길동")
 
     private fun heldRequest(id: Long = 1, userId: Long = 1, amount: Long = 10_000): WithdrawalRequest {
-        wallets.stored[userId] = Wallet.reconstitute(id = WalletId(userId), userId = userId, balance = Money.ZERO)
+        wallets.stored[userId] = Wallet.reconstitute(id = WalletId(userId), userId = UserId(userId), balance = Money.ZERO)
         return WithdrawalRequest.reconstitute(
             id = WithdrawalRequestId(id),
-            userId = userId,
+            userId = UserId(userId),
             amount = Money.of(amount),
             bankAccount = bankAccount,
             requestedAt = Instant.parse("2026-01-01T00:00:00Z"),
@@ -118,7 +119,7 @@ class CancelWithdrawalRequestServiceTest {
 
         service.cancel(CancelWithdrawalRequestCommand(requestId = request.id!!.value, requesterUserId = 1))
 
-        assertEquals(Money.of(10_000), wallets.findByUserId(1)!!.balance)
+        assertEquals(Money.of(10_000), wallets.findByUserId(UserId(1))!!.balance)
     }
 
     @Test
@@ -131,6 +132,6 @@ class CancelWithdrawalRequestServiceTest {
         }
 
         assertEquals(WalletErrorCode.WITHDRAWAL_REQUEST_NOT_FOUND, e.errorCode)
-        assertEquals(Money.ZERO, wallets.findByUserId(1)!!.balance)
+        assertEquals(Money.ZERO, wallets.findByUserId(UserId(1))!!.balance)
     }
 }

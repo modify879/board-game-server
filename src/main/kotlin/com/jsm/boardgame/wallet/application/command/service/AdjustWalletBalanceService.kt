@@ -9,6 +9,7 @@ import com.jsm.boardgame.wallet.domain.exception.WalletOwnerNotFoundException
 import com.jsm.boardgame.wallet.domain.model.Adjustment
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import com.jsm.boardgame.wallet.application.event.WalletCredited
@@ -40,7 +41,7 @@ class AdjustWalletBalanceService(
         // 그대로 뚫린다. 실제 보장은 wallets.user_id 외래키(fk_wallets_user, data.sql)다 —
         // "유일성은 DB 가 보장한다" 와 같은 두 겹 구조이고, 사전 체크와 FK 위반 둘 다
         // WALLET_OWNER_NOT_FOUND 로 떨어진다.
-        if (!userExistence.exists(command.targetUserId)) {
+        if (!userExistence.exists(UserId(command.targetUserId))) {
             throw WalletOwnerNotFoundException(
                 "조정 대상 사용자가 없음: targetUserId=${command.targetUserId}",
             )
@@ -52,9 +53,9 @@ class AdjustWalletBalanceService(
         // (1) 중복 요청은 돈이 움직이기 전에 막히고, (2) 이 아래에서 무엇이 실패해도 claim 이
         // 함께 롤백돼 재시도가 다시 열리고, (3) 두 요청이 동시에 같은 키로 들어오면
         // 이 INSERT 의 PK 로 직렬화돼 늦게 커밋하는 쪽만 409 를 받는다.
-        adjustmentKeys.claim(idempotencyKey, command.adminUserId, command.targetUserId, now)
+        adjustmentKeys.claim(idempotencyKey, UserId(command.adminUserId), UserId(command.targetUserId), now)
 
-        val wallet = wallets.findOrOpen(command.targetUserId)
+        val wallet = wallets.findOrOpen(UserId(command.targetUserId))
         val entry = wallet.record(
             type = adjustment.type,
             amount = adjustment.amount,

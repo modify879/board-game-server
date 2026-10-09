@@ -13,6 +13,7 @@ import com.jsm.boardgame.wallet.domain.model.WalletId
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequest
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestId
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestStatus
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import com.jsm.boardgame.wallet.domain.repository.WithdrawalRequestRepository
@@ -44,14 +45,14 @@ private class RejectFakeWithdrawalRequestRepository : WithdrawalRequestRepositor
 private class RejectFakeWalletRepository : WalletRepository {
     val stored = mutableMapOf<Long, Wallet>()
 
-    override fun findByUserId(userId: Long): Wallet? = stored[userId]
+    override fun findByUserId(userId: UserId): Wallet? = stored[userId.value]
 
     override fun save(wallet: Wallet): Wallet {
-        stored[wallet.userId] = wallet
+        stored[wallet.userId.value] = wallet
         return wallet
     }
 
-    override fun findOrOpen(userId: Long): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
+    override fun findOrOpen(userId: UserId): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
 }
 
 private class RejectFakeLedgerEntryRepository : LedgerEntryRepository {
@@ -97,10 +98,10 @@ class RejectWithdrawalRequestServiceTest {
         amount: Long = 10_000,
         status: WithdrawalRequestStatus = WithdrawalRequestStatus.PENDING,
     ): WithdrawalRequest {
-        wallets.stored[userId] = Wallet.reconstitute(id = WalletId(userId), userId = userId, balance = Money.ZERO)
+        wallets.stored[userId] = Wallet.reconstitute(id = WalletId(userId), userId = UserId(userId), balance = Money.ZERO)
         return WithdrawalRequest.reconstitute(
             id = WithdrawalRequestId(id),
-            userId = userId,
+            userId = UserId(userId),
             amount = Money.of(amount),
             bankAccount = bankAccount,
             requestedAt = Instant.parse("2026-01-01T00:00:00Z"),
@@ -126,7 +127,7 @@ class RejectWithdrawalRequestServiceTest {
 
         service.reject(RejectWithdrawalRequestCommand(requestId = request.id!!.value, adminUserId = 99, reason = "서류 미비"))
 
-        assertEquals(Money.of(10_000), wallets.findByUserId(1)!!.balance)
+        assertEquals(Money.of(10_000), wallets.findByUserId(UserId(1))!!.balance)
         assertEquals(LedgerEntryType.WITHDRAWAL_REFUND, ledger.stored.single().type)
     }
 
@@ -139,7 +140,7 @@ class RejectWithdrawalRequestServiceTest {
         }
 
         assertEquals(WalletErrorCode.WITHDRAWAL_REQUEST_ALREADY_PROCESSED, e.errorCode)
-        assertEquals(Money.ZERO, wallets.findByUserId(1)!!.balance)
+        assertEquals(Money.ZERO, wallets.findByUserId(UserId(1))!!.balance)
         assertTrue(ledger.stored.isEmpty())
     }
 }

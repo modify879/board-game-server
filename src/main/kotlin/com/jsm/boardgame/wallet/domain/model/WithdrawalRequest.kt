@@ -13,20 +13,20 @@ enum class WithdrawalRequestStatus { PENDING, APPROVED, REJECTED, CANCELED }
 
 class WithdrawalRequest private constructor(
     val id: WithdrawalRequestId?,
-    val userId: Long,
+    val userId: UserId,
     val amount: Money,
     // 요청 시점의 스냅샷이 정산 근거다 — 이후 사용자가 계좌를 바꿔도 이 요청의 송금 대상은 변하지 않는다.
     val bankAccount: BankAccount,
     val requestedAt: Instant,
     status: WithdrawalRequestStatus,
-    processedBy: Long?,
+    processedBy: UserId?,
     processedAt: Instant?,
     rejectionReason: String?,
 ) {
     var status: WithdrawalRequestStatus = status
         private set
 
-    var processedBy: Long? = processedBy
+    var processedBy: UserId? = processedBy
         private set
 
     var processedAt: Instant? = processedAt
@@ -36,7 +36,7 @@ class WithdrawalRequest private constructor(
         private set
 
     /** 금액 인자를 받지 않는다 — 돈은 요청 시점에 이미 나갔다. */
-    fun approve(adminUserId: Long, at: Instant) {
+    fun approve(adminUserId: UserId, at: Instant) {
         requirePending()
 
         status = WithdrawalRequestStatus.APPROVED
@@ -44,7 +44,7 @@ class WithdrawalRequest private constructor(
         processedAt = at
     }
 
-    fun reject(adminUserId: Long, reason: String, at: Instant) {
+    fun reject(adminUserId: UserId, reason: String, at: Instant) {
         requirePending()
         if (reason.isBlank()) {
             throw InvalidRejectionReasonException("반려 사유가 비어 있음: requestId=$id")
@@ -56,11 +56,11 @@ class WithdrawalRequest private constructor(
         processedAt = at
     }
 
-    fun cancel(requesterUserId: Long, at: Instant) {
+    fun cancel(requesterUserId: UserId, at: Instant) {
         // 소유자 검사를 상태 검사보다 먼저 한다 — 반대로 하면 남의 요청 처리 상태가
         // NOT_REQUEST_OWNER 대신 ALREADY_PROCESSED 로 새어 나간다.
         if (requesterUserId != userId) {
-            throw NotRequestOwnerException("본인 요청이 아님: requestId=$id, owner=$userId, requester=$requesterUserId")
+            throw NotRequestOwnerException("본인 요청이 아님: requestId=$id, owner=${userId.value}, requester=${requesterUserId.value}")
         }
         requirePending()
 
@@ -77,7 +77,7 @@ class WithdrawalRequest private constructor(
     companion object {
         private const val MIN_AMOUNT = 1_000L
 
-        fun request(userId: Long, amount: Long, bankAccount: BankAccount, at: Instant): WithdrawalRequest {
+        fun request(userId: UserId, amount: Long, bankAccount: BankAccount, at: Instant): WithdrawalRequest {
             if (amount < MIN_AMOUNT || amount % MONEY_UNIT != 0L) {
                 throw InvalidWithdrawalAmountException("환전 요청 금액이 유효하지 않음: amount=$amount")
             }
@@ -97,12 +97,12 @@ class WithdrawalRequest private constructor(
         /** 영속 복원 전용 — 검증하지 않는다. */
         fun reconstitute(
             id: WithdrawalRequestId,
-            userId: Long,
+            userId: UserId,
             amount: Money,
             bankAccount: BankAccount,
             requestedAt: Instant,
             status: WithdrawalRequestStatus,
-            processedBy: Long?,
+            processedBy: UserId?,
             processedAt: Instant?,
             rejectionReason: String?,
         ): WithdrawalRequest = WithdrawalRequest(

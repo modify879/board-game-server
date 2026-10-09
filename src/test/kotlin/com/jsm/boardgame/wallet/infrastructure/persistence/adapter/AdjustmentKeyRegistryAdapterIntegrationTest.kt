@@ -4,6 +4,7 @@ import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.wallet.application.exception.AdjustmentAlreadyAppliedException
 import com.jsm.boardgame.wallet.application.port.AdjustmentKeyRegistry
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
+import com.jsm.boardgame.wallet.domain.model.UserId
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
@@ -32,10 +33,10 @@ class AdjustmentKeyRegistryAdapterIntegrationTest {
     fun `같은 키를 두 트랜잭션에서 두 번 claim 하면 두 번째는 AdjustmentAlreadyAppliedException`() {
         val key = UUID.randomUUID().toString()
 
-        registry.claim(key, adminUserId = 1, targetUserId = 2, at = now)
+        registry.claim(key, adminUserId = UserId(1), targetUserId = UserId(2), at = now)
 
         val e = assertFailsWith<AdjustmentAlreadyAppliedException> {
-            registry.claim(key, adminUserId = 1, targetUserId = 2, at = now)
+            registry.claim(key, adminUserId = UserId(1), targetUserId = UserId(2), at = now)
         }
         assertEquals(WalletErrorCode.ADJUSTMENT_ALREADY_APPLIED, e.errorCode)
     }

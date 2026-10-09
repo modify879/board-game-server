@@ -14,6 +14,7 @@ import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.Wallet
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.springframework.beans.factory.annotation.Autowired
@@ -53,7 +54,7 @@ class LedgerEntryRepositoryAdapterIntegrationTest {
 
     @Test
     fun `저장한 엔트리를 다시 읽으면 type amount balanceAfter reference memo 가 보존된다`() {
-        val wallet = wallets.save(Wallet.open(userId = uniqueUserId()))
+        val wallet = wallets.save(Wallet.open(userId = UserId(uniqueUserId())))
         val reference = LedgerReference(LedgerReferenceType.DEPOSIT_REQUEST, 7)
         val entry = wallet.record(
             type = LedgerEntryType.DEPOSIT,

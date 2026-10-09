@@ -16,6 +16,7 @@ import com.jsm.boardgame.wallet.application.command.usecase.RequestDepositUseCas
 import com.jsm.boardgame.wallet.domain.exception.DepositRequestAlreadyProcessedException
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
 import com.jsm.boardgame.wallet.domain.model.Money
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -58,7 +59,7 @@ class WalletPessimisticLockIntegrationTest {
         // 지갑을 미리 열어 둔다 — 둘 다 지갑이 없는 채로 동시에 들어오면 findOrOpen 이 각자
         // Wallet.open 을 시도해 uk_wallets_user 위반으로 떨어진다(WalletRepository 문서 참조).
         // 이 테스트가 보려는 건 그 경합이 아니라 이미 있는 지갑 행의 PESSIMISTIC_WRITE 잠금이다.
-        wallets.findOrOpen(userId)
+        wallets.findOrOpen(UserId(userId))
         val keyBase = UUID.randomUUID().toString()
         val executor = Executors.newFixedThreadPool(2)
         val readyLatch = CountDownLatch(2)
@@ -88,7 +89,7 @@ class WalletPessimisticLockIntegrationTest {
             executor.shutdown()
         }
 
-        assertEquals(Money.of(2000L), wallets.findByUserId(userId)!!.balance)
+        assertEquals(Money.of(2000L), wallets.findByUserId(UserId(userId))!!.balance)
     }
 
     @Test
@@ -126,7 +127,7 @@ class WalletPessimisticLockIntegrationTest {
         val failure = assertIs<DepositRequestAlreadyProcessedException>(failures.single().exceptionOrNull())
         assertEquals(WalletErrorCode.DEPOSIT_REQUEST_ALREADY_PROCESSED, failure.errorCode)
 
-        assertEquals(Money.of(10_000L), wallets.findByUserId(userId)!!.balance)
+        assertEquals(Money.of(10_000L), wallets.findByUserId(UserId(userId))!!.balance)
     }
 }
 

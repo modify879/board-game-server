@@ -20,6 +20,7 @@ import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
+import com.jsm.boardgame.wallet.domain.model.UserId as WalletUserId
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -152,7 +153,7 @@ class HoldemShowdownIntegrationTest {
         mockMvc.perform(delete(url).header("Authorization", "Bearer $accessToken"))
 
     private fun fundWallet(userId: Long, amount: Long) {
-        val wallet = walletRepository.findOrOpen(userId)
+        val wallet = walletRepository.findOrOpen(WalletUserId(userId))
         val entry = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT,
             amount = Money.of(amount),
@@ -163,7 +164,7 @@ class HoldemShowdownIntegrationTest {
         ledgerEntryRepository.save(entry)
     }
 
-    private fun balanceOf(userId: Long): Long = walletRepository.findByUserId(userId)?.balance?.amount ?: 0L
+    private fun balanceOf(userId: Long): Long = walletRepository.findByUserId(WalletUserId(userId))?.balance?.amount ?: 0L
 
     // REST 생성은 만든 사람을 대기열에 넣는다(CreateTableService) — 이 헬퍼는 대기열이 비어 있는 테이블이 필요해
     // 저장소로 직접 만든다. accessToken 은 호출부 시그니처를 유지하려고 남겼다.

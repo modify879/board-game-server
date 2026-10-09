@@ -14,6 +14,7 @@ import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.model.WalletId
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
@@ -47,7 +48,7 @@ private class ApproveFakeWalletRepository : WalletRepository {
     val stored = mutableMapOf<Long, Wallet>()
     private var sequence = 0L
 
-    override fun findByUserId(userId: Long): Wallet? = stored[userId]
+    override fun findByUserId(userId: UserId): Wallet? = stored[userId.value]
 
     override fun save(wallet: Wallet): Wallet {
         val saved = if (wallet.id == null) {
@@ -56,11 +57,11 @@ private class ApproveFakeWalletRepository : WalletRepository {
         } else {
             wallet
         }
-        stored[wallet.userId] = saved
+        stored[wallet.userId.value] = saved
         return saved
     }
 
-    override fun findOrOpen(userId: Long): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
+    override fun findOrOpen(userId: UserId): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
 }
 
 private class ApproveFakeLedgerEntryRepository : LedgerEntryRepository {
@@ -101,7 +102,7 @@ class ApproveDepositRequestServiceTest {
     private fun pendingRequest(id: Long = 1, userId: Long = 1, amount: Long = 10_000): DepositRequest =
         DepositRequest.reconstitute(
             id = DepositRequestId(id),
-            userId = userId,
+            userId = UserId(userId),
             requestedAmount = Money.of(amount),
             requestedAt = Instant.parse("2026-01-01T00:00:00Z"),
             status = DepositRequestStatus.PENDING,
@@ -126,7 +127,7 @@ class ApproveDepositRequestServiceTest {
 
         service.approve(ApproveDepositRequestCommand(requestId = request.id!!.value, adminUserId = 99, creditedAmount = null))
 
-        val wallet = wallets.findByUserId(1)!!
+        val wallet = wallets.findByUserId(UserId(1))!!
         assertEquals(Money.of(10_000), wallet.balance)
         assertEquals(1, ledger.stored.size)
         assertEquals(LedgerEntryType.DEPOSIT, ledger.stored.single().type)
@@ -150,7 +151,7 @@ class ApproveDepositRequestServiceTest {
 
         service.approve(ApproveDepositRequestCommand(requestId = request.id!!.value, adminUserId = 99, creditedAmount = null))
 
-        assertTrue(wallets.findByUserId(42) != null)
+        assertTrue(wallets.findByUserId(UserId(42)) != null)
     }
 
     @Test
@@ -159,7 +160,7 @@ class ApproveDepositRequestServiceTest {
 
         service.approve(ApproveDepositRequestCommand(requestId = request.id!!.value, adminUserId = 99, creditedAmount = 9_000))
 
-        assertEquals(Money.of(9_000), wallets.findByUserId(1)!!.balance)
+        assertEquals(Money.of(9_000), wallets.findByUserId(UserId(1))!!.balance)
         assertEquals(Money.of(9_000), depositRequests.findById(request.id)!!.creditedAmount)
     }
 
@@ -169,13 +170,13 @@ class ApproveDepositRequestServiceTest {
 
         service.approve(ApproveDepositRequestCommand(requestId = request.id!!.value, adminUserId = 99, creditedAmount = null))
 
-        assertEquals(Money.of(10_000), wallets.findByUserId(1)!!.balance)
+        assertEquals(Money.of(10_000), wallets.findByUserId(UserId(1))!!.balance)
     }
 
     @Test
     fun `이미 처리된 요청을 승인하면 DEPOSIT_REQUEST_ALREADY_PROCESSED 이고 지갑 잔액이 변하지 않는다`() {
         val request = pendingRequest()
-        request.approve(1, 10_000, Instant.now())
+        request.approve(UserId(1), 10_000, Instant.now())
         depositRequests.save(request)
 
         val e = assertFailsWith<DepositRequestAlreadyProcessedException> {
@@ -185,7 +186,7 @@ class ApproveDepositRequestServiceTest {
         assertEquals(WalletErrorCode.DEPOSIT_REQUEST_ALREADY_PROCESSED, e.errorCode)
         // 두 번째 승인 시도가 request.approve() 에서 막혀 지갑 코드에 도달하지 않았으므로
         // 지갑 자체가 만들어지지 않았다.
-        assertNull(wallets.findByUserId(1))
+        assertNull(wallets.findByUserId(UserId(1)))
     }
 
     @Test

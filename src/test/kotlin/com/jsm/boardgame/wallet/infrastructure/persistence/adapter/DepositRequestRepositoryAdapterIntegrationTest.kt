@@ -3,6 +3,7 @@ package com.jsm.boardgame.wallet.infrastructure.persistence.adapter
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.wallet.domain.model.DepositRequest
 import com.jsm.boardgame.wallet.domain.model.DepositRequestStatus
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -25,17 +26,17 @@ class DepositRequestRepositoryAdapterIntegrationTest {
 
     @Test
     fun `저장 후 findById 가 상태 금액 처리자 사유를 그대로 돌려준다`() {
-        val request = DepositRequest.request(userId = System.nanoTime(), amount = 10_000, at = now)
+        val request = DepositRequest.request(userId = UserId(System.nanoTime()), amount = 10_000, at = now)
         val saved = depositRequests.save(request)
 
         val reloaded = requireNotNull(depositRequests.findById(saved.id!!))
-        reloaded.reject(adminUserId = 7, reason = "증빙 불충분", at = now)
+        reloaded.reject(adminUserId = UserId(7), reason = "증빙 불충분", at = now)
         depositRequests.save(reloaded)
 
         val final = requireNotNull(depositRequests.findById(saved.id))
         assertEquals(DepositRequestStatus.REJECTED, final.status)
         assertEquals(10_000L, final.requestedAmount.amount)
-        assertEquals(7L, final.processedBy)
+        assertEquals(UserId(7), final.processedBy)
         assertEquals("증빙 불충분", final.rejectionReason)
     }
 }

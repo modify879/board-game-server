@@ -7,6 +7,7 @@ import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestId
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import com.jsm.boardgame.wallet.domain.repository.WithdrawalRequestRepository
@@ -39,7 +40,7 @@ class RejectWithdrawalRequestService(
             ?: throw WithdrawalRequestNotFoundException("반려하려는 환전 요청을 찾을 수 없음: requestId=${command.requestId}")
 
         // PENDING 아니면 여기서 떨어진다 = 이중 환급 방어
-        request.reject(command.adminUserId, command.reason, now)
+        request.reject(UserId(command.adminUserId), command.reason, now)
         withdrawalRequests.save(request)
 
         val wallet = wallets.findOrOpen(request.userId)
@@ -51,6 +52,6 @@ class RejectWithdrawalRequestService(
         )
         wallets.save(wallet)
         ledger.save(entry)
-        eventPublisher.publishEvent(WalletCredited(request.userId))
+        eventPublisher.publishEvent(WalletCredited(request.userId.value))
     }
 }

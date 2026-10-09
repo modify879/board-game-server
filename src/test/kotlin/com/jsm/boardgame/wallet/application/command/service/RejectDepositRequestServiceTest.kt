@@ -5,6 +5,7 @@ import com.jsm.boardgame.wallet.domain.model.DepositRequest
 import com.jsm.boardgame.wallet.domain.model.DepositRequestId
 import com.jsm.boardgame.wallet.domain.model.DepositRequestStatus
 import com.jsm.boardgame.wallet.domain.model.Money
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import java.time.Clock
 import java.time.Instant
@@ -39,7 +40,7 @@ class RejectDepositRequestServiceTest {
     fun `반려하면 상태와 사유만 바뀐다`() {
         val request = DepositRequest.reconstitute(
             id = DepositRequestId(1),
-            userId = 1,
+            userId = UserId(1),
             requestedAmount = Money.of(10_000),
             requestedAt = Instant.parse("2026-01-01T00:00:00Z"),
             status = DepositRequestStatus.PENDING,
@@ -55,6 +56,6 @@ class RejectDepositRequestServiceTest {
         val reloaded = depositRequests.findById(DepositRequestId(1))!!
         assertEquals(DepositRequestStatus.REJECTED, reloaded.status)
         assertEquals("증빙 불충분", reloaded.rejectionReason)
-        assertEquals(99L, reloaded.processedBy)
+        assertEquals(UserId(99), reloaded.processedBy)
     }
 }

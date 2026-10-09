@@ -1,6 +1,7 @@
 package com.jsm.boardgame.wallet.infrastructure.persistence.entity
 
 import com.jsm.boardgame.wallet.domain.model.Money
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.model.WalletId
 import com.linecorp.kotlinjdsl.support.spring.data.jpa.repository.KotlinJdslJpqlExecutor
@@ -64,13 +65,13 @@ interface WalletJpaRepository :
 fun WalletJpaEntity.toDomain(): Wallet =
     Wallet.reconstitute(
         id = WalletId(id),
-        userId = userId,
+        userId = UserId(userId),
         balance = Money.reconstitute(balance),
     )
 
 fun Wallet.toJpaEntity(): WalletJpaEntity =
     WalletJpaEntity(
         id = id?.value ?: 0,
-        userId = userId,
+        userId = userId.value,
         balance = balance.amount,
     )

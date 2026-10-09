@@ -4,6 +4,7 @@ import com.jsm.boardgame.wallet.domain.model.DepositRequest
 import com.jsm.boardgame.wallet.domain.model.DepositRequestId
 import com.jsm.boardgame.wallet.domain.model.DepositRequestStatus
 import com.jsm.boardgame.wallet.domain.model.Money
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.linecorp.kotlinjdsl.support.spring.data.jpa.repository.KotlinJdslJpqlExecutor
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -74,12 +75,12 @@ interface DepositRequestJpaRepository :
 fun DepositRequestJpaEntity.toDomain(): DepositRequest =
     DepositRequest.reconstitute(
         id = DepositRequestId(id),
-        userId = userId,
+        userId = UserId(userId),
         requestedAmount = Money.reconstitute(requestedAmount),
         requestedAt = requestedAt,
         status = DepositRequestStatus.valueOf(status),
         creditedAmount = creditedAmount?.let(Money::reconstitute),
-        processedBy = processedBy,
+        processedBy = processedBy?.let(::UserId),
         processedAt = processedAt,
         rejectionReason = rejectionReason,
     )
@@ -87,12 +88,12 @@ fun DepositRequestJpaEntity.toDomain(): DepositRequest =
 fun DepositRequest.toJpaEntity(): DepositRequestJpaEntity =
     DepositRequestJpaEntity(
         id = id?.value ?: 0,
-        userId = userId,
+        userId = userId.value,
         requestedAmount = requestedAmount.amount,
         requestedAt = requestedAt,
         status = status.name,
         creditedAmount = creditedAmount?.amount,
-        processedBy = processedBy,
+        processedBy = processedBy?.value,
         processedAt = processedAt,
         rejectionReason = rejectionReason,
     )

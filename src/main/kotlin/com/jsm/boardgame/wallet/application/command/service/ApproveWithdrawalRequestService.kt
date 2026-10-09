@@ -4,6 +4,7 @@ import com.jsm.boardgame.wallet.application.command.usecase.ApproveWithdrawalReq
 import com.jsm.boardgame.wallet.application.command.usecase.ApproveWithdrawalRequestCommand
 import com.jsm.boardgame.wallet.domain.exception.WithdrawalRequestNotFoundException
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestId
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.WithdrawalRequestRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -25,7 +26,7 @@ class ApproveWithdrawalRequestService(
         val request = withdrawalRequests.findById(WithdrawalRequestId(command.requestId))
             ?: throw WithdrawalRequestNotFoundException("승인하려는 환전 요청을 찾을 수 없음: requestId=${command.requestId}")
 
-        request.approve(command.adminUserId, Instant.now(clock))
+        request.approve(UserId(command.adminUserId), Instant.now(clock))
         withdrawalRequests.save(request)
     }
 }

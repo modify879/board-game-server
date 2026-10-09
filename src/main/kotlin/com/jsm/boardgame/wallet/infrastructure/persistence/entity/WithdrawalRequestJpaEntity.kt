@@ -2,6 +2,7 @@ package com.jsm.boardgame.wallet.infrastructure.persistence.entity
 
 import com.jsm.boardgame.wallet.domain.model.BankAccount
 import com.jsm.boardgame.wallet.domain.model.Money
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequest
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestId
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestStatus
@@ -82,12 +83,12 @@ interface WithdrawalRequestJpaRepository :
 fun WithdrawalRequestJpaEntity.toDomain(): WithdrawalRequest =
     WithdrawalRequest.reconstitute(
         id = WithdrawalRequestId(id),
-        userId = userId,
+        userId = UserId(userId),
         amount = Money.reconstitute(amount),
         bankAccount = BankAccount.reconstitute(bankName, accountNumber, accountHolder),
         requestedAt = requestedAt,
         status = WithdrawalRequestStatus.valueOf(status),
-        processedBy = processedBy,
+        processedBy = processedBy?.let(::UserId),
         processedAt = processedAt,
         rejectionReason = rejectionReason,
     )
@@ -95,14 +96,14 @@ fun WithdrawalRequestJpaEntity.toDomain(): WithdrawalRequest =
 fun WithdrawalRequest.toJpaEntity(): WithdrawalRequestJpaEntity =
     WithdrawalRequestJpaEntity(
         id = id?.value ?: 0,
-        userId = userId,
+        userId = userId.value,
         amount = amount.amount,
         bankName = bankAccount.bankName,
         accountNumber = bankAccount.accountNumber,
         accountHolder = bankAccount.accountHolder,
         requestedAt = requestedAt,
         status = status.name,
-        processedBy = processedBy,
+        processedBy = processedBy?.value,
         processedAt = processedAt,
         rejectionReason = rejectionReason,
     )
