@@ -71,7 +71,6 @@ class StompAuthenticationInterceptor(
         }
 
         val authentication = jwtAuthenticationConverter.convert(jwt)
-            ?: throw AuthenticationRequiredException("STOMP CONNECT 토큰에서 인증 정보를 만들 수 없다")
         accessor.user = authentication
 
         val sessionId = accessor.sessionId
