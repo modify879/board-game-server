@@ -89,7 +89,7 @@ class ExpireTurnServiceTest {
     private val walletTransfer = ExpireTurnFakeWalletTransfer()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
-    private val handSettler = HandSettler(tables, handStore, ExpireTurnServiceFakeLastHandResultStore(), eventPublisher, ExpireTurnFakeNextHandCountdown(), walletTransfer)
+    private val handSettler = HandSettler(tables, handStore, ExpireTurnServiceFakeLastHandResultStore(), eventPublisher, ExpireTurnFakeNextHandCountdown())
     private val service = ExpireTurnService(tables, handStore, handSettler, walletTransfer, eventPublisher)
 
     /** userId = seatNo * 1000 으로 대응시킨다. */
