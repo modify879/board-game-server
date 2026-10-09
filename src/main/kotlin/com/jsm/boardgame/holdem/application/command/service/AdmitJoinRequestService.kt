@@ -16,12 +16,13 @@ import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * 대기열 맨 앞 항목 하나를 자기만의 트랜잭션으로 착석시킨다. REQUIRES_NEW 가 필요한 이유는
- * 이 메서드를 부르는 ProcessJoinRequestsService 는
- * JoinRequestsProcessor(@TransactionalEventListener, 기본 phase=AFTER_COMMIT)에서 실행되어,
- * 실행 시점에 방금 커밋된 바깥 트랜잭션의 리소스가 아직 스레드에 바인딩된 채로 남아 있다
- * (모든 afterCommit 동기화가 끝나야 해제된다). 기본 REQUIRED 를 쓰면 이미 커밋된 그 트랜잭션에
- * "참가"하려다 "No active transaction" 으로 터진다.
+ * 대기열 맨 앞 항목 하나를 자기만의 트랜잭션으로 착석시킨다. REQUIRES_NEW 가 필요한 이유는 둘이다.
+ * 첫째, 호출자 ProcessJoinRequestsService 는 항목마다 이 메서드를 부르는 루프라서, 항목 하나의
+ * 지갑 이체가 실패해도 먼저 착석한 항목의 커밋을 되돌리면 안 된다 — 항목마다 트랜잭션이 따로여야 한다.
+ * 둘째, 그 루프는 JoinRequestsProcessor(@TransactionalEventListener, 기본 phase=AFTER_COMMIT)가
+ * TableExecutor 스레드에 올려 실행하므로 커밋이 끝난 뒤에 돈다. 이 시점에는 이미 커밋된 바깥
+ * 트랜잭션의 리소스가 스레드에 남아 있을 수 있어, 기본 REQUIRED 는 그 트랜잭션에 "참가"하려다
+ * "No active transaction" 으로 터진다. 새 트랜잭션을 여는 REQUIRES_NEW 는 둘 다 피한다.
  *
  * 핸드가 진행 중이거나 빈 좌석이 없으면 예외 없이 [AdmitJoinRequestResult.Blocked] 를 돌려준다 —
  * 둘 다 "이 항목은 지금 처리할 수 없으니 대기열에 그대로 둔다" 는 뜻이라 호출자(ProcessJoinRequestsService)

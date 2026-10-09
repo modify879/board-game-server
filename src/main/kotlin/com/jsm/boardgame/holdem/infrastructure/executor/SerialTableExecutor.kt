@@ -60,7 +60,7 @@ class SerialTableExecutor(
         submit(tableId, Callable { onTableThread(tableId, run) }) ?: run()
     }
 
-    private inline fun <T> onTableThread(tableId: TableId, body: () -> T): T {
+    private fun <T> onTableThread(tableId: TableId, body: () -> T): T {
         currentTableId.set(tableId)
         try {
             return body()

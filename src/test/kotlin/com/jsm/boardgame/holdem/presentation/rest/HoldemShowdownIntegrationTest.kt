@@ -181,7 +181,7 @@ class HoldemShowdownIntegrationTest {
         val handler = object : StompSessionHandlerAdapter() {}
         val future = stompClient.connectAsync("ws://localhost:$port/ws", null, connectHeaders, handler)
         future.get(5, TimeUnit.SECONDS)
-        // session left open, cleaned up when the test JVM/context shuts down.
+        // ponytail: session left open, cleaned up when the test JVM/context shuts down.
     }
 
     /** 좌석은 고를 수 없다(항상 대기열, FIFO) — POST 전에 STOMP 로 먼저 연결한다. */

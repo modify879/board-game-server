@@ -28,7 +28,7 @@ private const val CONSTRAINT_HAND_PK = "holdem_hand_in_progress_pkey"
  *
  * 쓰기 순서 — 핸드 시작 → INSERT([save]), 액션마다 → UPDATE state([save]), 핸드 종료 → 정산 커밋 + DELETE.
  * [HandSettler.settle] 이 `tables.save(table)` 다음에 `handStore.remove(tableId)` 를 부르고,
- * 그 둘을 부르는 `StartScheduledHandService`/`PlayActionService` 등 유스케이스가 이미 `@Transactional` 이라
+ * 그 둘을 부르는 `PlayActionService`/`ExpireTurnService`/`AdvanceRunoutService` 등 핸드를 끝내는 유스케이스가 이미 `@Transactional` 이라
  * 정산과 삭제는 이미 한 트랜잭션 안에 있다 — 여기서 새로 트랜잭션을 열 필요가 없다.
  *
  * 상태 저장이 브로드캐스트보다 먼저 커밋된다 — `HandBroadcaster` 는
