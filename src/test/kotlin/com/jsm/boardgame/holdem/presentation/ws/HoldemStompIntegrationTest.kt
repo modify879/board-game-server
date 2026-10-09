@@ -825,4 +825,35 @@ class HoldemStompIntegrationTest {
             .andExpect(status().isNotFound)
             .andExpect(jsonPath("$.errorCode").value("TABLE_NOT_FOUND"))
     }
+
+    @Test
+    fun `닫힌 테이블을 새로 구독하면 닫힘 알림을 다시 받는다`() {
+        val (userId, accessToken) = signUpAndLogin()
+        fundWallet(userId, 10_000)
+        val tableId = createTable(accessToken)
+        tableExecutor.call(TableId(tableId)) { closeIdleTableUseCase.close(CloseIdleTableCommand(tableId)) }
+        val (session, _) = tryConnect(accessToken)
+        checkNotNull(session)
+        val (publicHandler, publicQueue) = capturingFrameHandler()
+
+        session.subscribe(HoldemDestinations.publicTopicOf(tableId), publicHandler)
+
+        val notice = publicQueue.poll(5, TimeUnit.SECONDS) ?: error("닫힘 알림을 받지 못했다")
+        assertThat(JsonPath.read<String>(notice, "$.type")).isEqualTo("TABLE_CLOSED")
+        session.disconnect()
+    }
+
+    @Test
+    fun `존재한 적 없는 테이블을 구독해도 닫힘 알림을 받는다`() {
+        val (_, accessToken) = signUpAndLogin()
+        val (session, _) = tryConnect(accessToken)
+        checkNotNull(session)
+        val (publicHandler, publicQueue) = capturingFrameHandler()
+
+        session.subscribe(HoldemDestinations.publicTopicOf(999_999_999L), publicHandler)
+
+        val notice = publicQueue.poll(5, TimeUnit.SECONDS) ?: error("닫힘 알림을 받지 못했다")
+        assertThat(JsonPath.read<String>(notice, "$.type")).isEqualTo("TABLE_CLOSED")
+        session.disconnect()
+    }
 }
