@@ -7,6 +7,9 @@ import com.jsm.boardgame.holdem.domain.model.UserId
 interface HoldemTableRepository {
     fun findById(id: TableId): HoldemTable?
 
+    /** 열려 있는(닫히지 않은) 테이블이 있는지. 좌석까지 읽을 필요가 없는 곳을 위해 구현이 더 싸게 덮어쓸 수 있다. */
+    fun existsOpen(id: TableId): Boolean = findById(id) != null
+
     fun findByUserId(userId: UserId): HoldemTable?
 
     /**

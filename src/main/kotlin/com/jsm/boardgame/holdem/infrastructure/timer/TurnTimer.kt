@@ -11,6 +11,7 @@ import com.jsm.boardgame.holdem.application.port.TurnCountdown
 import com.jsm.boardgame.holdem.domain.model.TableId
 import org.slf4j.LoggerFactory
 import org.springframework.core.Ordered
+import org.springframework.core.task.TaskRejectedException
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
 import org.springframework.transaction.event.TransactionPhase
@@ -60,7 +61,16 @@ class TurnTimer(
         TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
             override fun getOrder(): Int = Ordered.HIGHEST_PRECEDENCE
             override fun afterCommit() {
-                reschedule(event)
+                // afterCommit 은 예외를 잡아주지 않는다 — 던지면 뒤따르는 HandBroadcaster 의 전송이 건너뛰어지고
+                // 이미 커밋된 액션이 호출자에게 실패로 보인다. 예약 실패는 여기서 삼킨다.
+                try {
+                    reschedule(event)
+                } catch (e: TaskRejectedException) {
+                    // 컨텍스트 종료 중에는 차례 타이머를 걸 이유가 없고, 이를 ERROR로 두면 진짜 ERROR가 묻힌다
+                    log.debug("컨텍스트 종료 중이라 차례 만료 예약을 걸지 못했습니다: tableId={}", event.tableId.value)
+                } catch (e: Exception) {
+                    log.error("차례 만료 예약에 실패했습니다: tableId={}", event.tableId.value, e)
+                }
             }
         })
     }

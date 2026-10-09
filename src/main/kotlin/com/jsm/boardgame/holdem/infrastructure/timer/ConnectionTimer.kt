@@ -203,6 +203,8 @@ class ConnectionTimer(
     fun onHandBroadcastRequested(event: HandBroadcastRequested) {
         if (event.hand != null && !event.hand.isFinished) return
         val userIds = pendingStandUps.remove(event.tableId) ?: return
+        // 퇴장을 시도하기 전의 토큰을 잡아둔다 — 시도 중에 감시가 바뀌었는지 rearmWatch 가 비교할 기준이다.
+        val tokensBefore = userIds.associateWith { tokens[it]?.get() }
         tableExecutor.call(event.tableId) {
             for (userId in userIds) {
                 try {
@@ -211,7 +213,7 @@ class ConnectionTimer(
                 } catch (e: Exception) {
                     // 한 명의 실패가 나머지 퇴장을 버리면 안 된다 — 일반 3분 감시로 되돌려 자가 치유한다.
                     log.error("예약된 퇴장에 실패했습니다: userId={}, tableId={}", userId, event.tableId.value, e)
-                    rearmWatch(userId, tokens[userId]?.get())
+                    rearmWatch(userId, tokensBefore[userId])
                 }
             }
         }

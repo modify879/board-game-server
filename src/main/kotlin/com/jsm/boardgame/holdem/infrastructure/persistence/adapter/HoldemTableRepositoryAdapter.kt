@@ -31,6 +31,8 @@ class HoldemTableRepositoryAdapter(
         return tableEntity.toDomain(seatJpa.findAllByTableId(tableEntity.id))
     }
 
+    override fun existsOpen(id: TableId): Boolean = tableJpa.existsByIdAndClosedAtIsNull(id.value)
+
     override fun findByUserId(userId: UserId): HoldemTable? {
         val seatEntity = seatJpa.findByUserId(userId.value) ?: return null
         return findById(TableId(seatEntity.tableId))
