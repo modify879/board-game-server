@@ -1,5 +1,6 @@
 package com.jsm.boardgame.user.application.port
 
+import com.jsm.boardgame.user.domain.model.UserId
 import java.time.Instant
 
 /**
@@ -11,13 +12,13 @@ import java.time.Instant
  */
 interface AuthSessionStore {
     /** 새 세션을 연다. 같은 사용자의 기존 세션은 덮어써진다. 직전 토큰 유예 칸은 비어서 시작한다. */
-    fun start(userId: Long, session: AuthSession)
+    fun start(userId: UserId, session: AuthSession)
 
     /** 현재 세션의 액세스 토큰 jti. 세션이 없으면 null. */
-    fun currentAccessTokenId(userId: Long): String?
+    fun currentAccessTokenId(userId: UserId): String?
 
     /** 세션을 폐기한다. 리프레시 토큰이 더 이상 통하지 않는다. */
-    fun clear(userId: Long)
+    fun clear(userId: UserId)
 
     /** 액세스 토큰을 만료 시각까지 무효화한다. */
     fun blacklistAccessToken(accessTokenId: String, expiresAt: Instant)
@@ -40,10 +41,10 @@ interface AuthSessionStore {
      * 토큰을 반복 제시할 때마다 유예가 무한정 갱신되고, 정작 밀려난 현재 토큰은 두 칸
      * 어디에도 남지 않아 그 토큰을 들고 있던 정상 클라이언트가 재사용 탐지로 쫓겨난다).
      */
-    fun rotate(userId: Long, presentedRefreshToken: String, next: AuthSession): RotationResult
+    fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession): RotationResult
 
     /** 적중해도 유효하다는 뜻이 아니다 — 재사용 판정은 [rotate] 가 한다. */
-    fun userIdForRefreshToken(refreshToken: String): Long?
+    fun userIdForRefreshToken(refreshToken: String): UserId?
 }
 
 data class AuthSession(

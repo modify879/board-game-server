@@ -25,18 +25,18 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 private class ChangeRoleFakeAuthSessionStore : AuthSessionStore {
-    private val sessions = mutableMapOf<Long, AuthSession>()
+    private val sessions = mutableMapOf<UserId, AuthSession>()
     private val blacklisted = mutableSetOf<String>()
     var clearCalled = false
         private set
 
-    override fun start(userId: Long, session: AuthSession) {
+    override fun start(userId: UserId, session: AuthSession) {
         sessions[userId] = session
     }
 
-    override fun currentAccessTokenId(userId: Long): String? = sessions[userId]?.accessTokenId
+    override fun currentAccessTokenId(userId: UserId): String? = sessions[userId]?.accessTokenId
 
-    override fun clear(userId: Long) {
+    override fun clear(userId: UserId) {
         clearCalled = true
         sessions.remove(userId)
     }
@@ -47,16 +47,16 @@ private class ChangeRoleFakeAuthSessionStore : AuthSessionStore {
 
     override fun isAccessTokenBlacklisted(accessTokenId: String): Boolean = accessTokenId in blacklisted
 
-    override fun rotate(userId: Long, presentedRefreshToken: String, next: AuthSession): RotationResult =
+    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession): RotationResult =
         RotationResult.Mismatch
 
-    override fun userIdForRefreshToken(refreshToken: String): Long? = null
+    override fun userIdForRefreshToken(refreshToken: String): UserId? = null
 }
 
 private class ChangeRoleFakeRealtimeConnections : RealtimeConnections {
-    val closeAllOfCalls = mutableListOf<Long>()
+    val closeAllOfCalls = mutableListOf<UserId>()
     val closeAfterGraceCalls = mutableListOf<String>()
-    override fun closeAllOf(userId: Long) { closeAllOfCalls += userId }
+    override fun closeAllOf(userId: UserId) { closeAllOfCalls += userId }
     override fun closeAfterGrace(accessTokenId: String) { closeAfterGraceCalls += accessTokenId }
 }
 
@@ -103,12 +103,12 @@ class ChangeUserRoleServiceTest {
     @Test
     fun `대상의 현재 액세스 토큰이 블랙리스트에 들어간다`() {
         users.put(1L, UserRole.ADMIN)
-        sessions.start(1L, AuthSession("jti-1", "refresh-1", Instant.now().plusSeconds(1_000)))
+        sessions.start(UserId(1L), AuthSession("jti-1", "refresh-1", Instant.now().plusSeconds(1_000)))
 
         service.changeRole(ChangeUserRoleCommand(1L, "USER"))
 
         assertTrue(sessions.isAccessTokenBlacklisted("jti-1"))
-        assertTrue(realtimeConnections.closeAllOfCalls.contains(1L))
+        assertTrue(realtimeConnections.closeAllOfCalls.contains(UserId(1L)))
     }
 
     @Test
@@ -132,7 +132,7 @@ class ChangeUserRoleServiceTest {
     @Test
     fun `리프레시 토큰 세션은 폐기되지 않는다`() {
         users.put(1L, UserRole.ADMIN)
-        sessions.start(1L, AuthSession("jti-1", "refresh-1", Instant.now().plusSeconds(1_000)))
+        sessions.start(UserId(1L), AuthSession("jti-1", "refresh-1", Instant.now().plusSeconds(1_000)))
 
         service.changeRole(ChangeUserRoleCommand(1L, "USER"))
 

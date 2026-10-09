@@ -3,6 +3,7 @@ package com.jsm.boardgame.user.application.command.service
 import com.jsm.boardgame.user.application.command.usecase.LogoutUseCase
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.RealtimeConnections
+import com.jsm.boardgame.user.domain.model.UserId
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.time.Clock
@@ -19,11 +20,12 @@ class LogoutService(
 ) : LogoutUseCase {
 
     override fun logout(userId: Long) {
+        val id = UserId(userId)
         // 세션이 없어도(이미 로그아웃됐어도) 조용히 성공해야 한다.
-        sessions.currentAccessTokenId(userId)?.let { accessTokenId ->
+        sessions.currentAccessTokenId(id)?.let { accessTokenId ->
             sessions.blacklistAccessToken(accessTokenId, Instant.now(clock).plus(accessTokenTtl))
-            realtimeConnections.closeAllOf(userId)
+            realtimeConnections.closeAllOf(id)
         }
-        sessions.clear(userId)
+        sessions.clear(id)
     }
 }

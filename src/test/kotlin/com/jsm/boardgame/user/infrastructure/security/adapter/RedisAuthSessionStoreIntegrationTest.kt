@@ -1,5 +1,6 @@
 package com.jsm.boardgame.user.infrastructure.security.adapter
 
+import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.infrastructure.security.config.JwtProperties
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.application.port.AuthSession
@@ -166,7 +167,7 @@ class RedisAuthSessionStoreIntegrationTest {
 
         authSessionStore.start(userId, session)
 
-        val storedValue = redisTemplate.opsForValue().get("auth:session:$userId")
+        val storedValue = redisTemplate.opsForValue().get("auth:session:${userId.value}")
 
         assertThat(storedValue).isNotNull()
         assertThat(storedValue).doesNotContain(session.refreshToken)
@@ -179,7 +180,7 @@ class RedisAuthSessionStoreIntegrationTest {
 
         authSessionStore.start(userId, session)
 
-        val ttl = redisTemplate.getExpire("auth:session:$userId")
+        val ttl = redisTemplate.getExpire("auth:session:${userId.value}")
 
         assertThat(ttl).isPositive()
     }
@@ -399,7 +400,7 @@ class RedisAuthSessionStoreIntegrationTest {
         val next = newSession()
         authSessionStore.rotate(userId, first.refreshToken, next)
 
-        val ttl = redisTemplate.getExpire("auth:session:$userId")
+        val ttl = redisTemplate.getExpire("auth:session:${userId.value}")
 
         assertThat(ttl).isPositive()
     }
@@ -457,7 +458,7 @@ class RedisAuthSessionStoreIntegrationTest {
         refreshTokenExpiresAt: Instant = Instant.now().plusSeconds(60 * 60 * 24 * 7),
     ) = AuthSession(accessTokenId, refreshToken, refreshTokenExpiresAt)
 
-    private fun newUserId(): Long = userIdSequence.getAndIncrement()
+    private fun newUserId(): UserId = UserId(userIdSequence.getAndIncrement())
 
     companion object {
         private val userIdSequence = AtomicLong(1)

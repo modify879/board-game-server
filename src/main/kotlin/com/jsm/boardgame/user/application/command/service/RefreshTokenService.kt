@@ -10,7 +10,6 @@ import com.jsm.boardgame.user.application.port.RealtimeConnections
 import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.application.exception.AccountLockedException
 import com.jsm.boardgame.user.application.exception.InvalidRefreshTokenException
-import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
@@ -42,11 +41,11 @@ class RefreshTokenService(
         // 세션에도, 블랙리스트에도 아직 아무것도 쓰지 않았으므로 상태를 남기지 않아 안전하다.
         // "검사 후 발급"으로 순서를 바꾸면 검사와 발급 사이에 경합 창이 다시 생겨, 이번에 고치려는
         // "확인 후 실행"의 비원자성 문제가 그대로 재현된다.
-        val user = users.findById(UserId(userId))
-            ?: throw InvalidRefreshTokenException("리프레시 토큰의 사용자가 존재하지 않음: userId=$userId")
+        val user = users.findById(userId)
+            ?: throw InvalidRefreshTokenException("리프레시 토큰의 사용자가 존재하지 않음: userId=${userId.value}")
         // 이 검사가 없으면 잠긴 계정이 기존 리프레시 토큰으로 14일간 계속 인증된다.
         if (user.isLocked) {
-            throw AccountLockedException("잠긴 계정의 리프레시 시도: userId=$userId")
+            throw AccountLockedException("잠긴 계정의 리프레시 시도: userId=${userId.value}")
         }
         val tokens = tokenIssuer.issue(userId, user.role)
 
@@ -94,9 +93,9 @@ class RefreshTokenService(
                     // 소켓을 닫는 것은 상태 방송이 아니다 — 커밋 전에 불러도 규칙 6을 어기지 않는다.
                     realtimeConnections.closeAllOf(userId)
                     sessions.clear(userId)
-                    throw InvalidRefreshTokenException("리프레시 토큰 재사용 탐지: userId=$userId — 세션 전체 폐기")
+                    throw InvalidRefreshTokenException("리프레시 토큰 재사용 탐지: userId=${userId.value} — 세션 전체 폐기")
                 } else {
-                    throw InvalidRefreshTokenException("리프레시 토큰에 해당하는 세션 없음: userId=$userId")
+                    throw InvalidRefreshTokenException("리프레시 토큰에 해당하는 세션 없음: userId=${userId.value}")
                 }
             }
         }

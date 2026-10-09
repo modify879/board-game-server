@@ -1,6 +1,7 @@
 package com.jsm.boardgame.user.infrastructure.security.adapter
 
 import com.jsm.boardgame.user.infrastructure.security.config.JwtProperties
+import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.RotationResult
@@ -107,18 +108,18 @@ class RedisAuthSessionStore(
 
     private val refreshReuseGrace: Duration = properties.refreshReuseGrace
 
-    override fun start(userId: Long, session: AuthSession) {
+    override fun start(userId: UserId, session: AuthSession) {
         val ttl = Duration.between(Instant.now(clock), session.refreshTokenExpiresAt)
         if (ttl.isNegative || ttl.isZero) return
 
         redisTemplate.opsForValue().set(sessionKey(userId), serialize(session), ttl)
-        redisTemplate.opsForValue().set(refreshIndexKey(hash(session.refreshToken)), userId.toString(), ttl)
+        redisTemplate.opsForValue().set(refreshIndexKey(hash(session.refreshToken)), userId.value.toString(), ttl)
     }
 
-    override fun currentAccessTokenId(userId: Long): String? =
+    override fun currentAccessTokenId(userId: UserId): String? =
         parseSession(userId)?.accessTokenId
 
-    override fun clear(userId: Long) {
+    override fun clear(userId: UserId) {
         redisTemplate.delete(sessionKey(userId))
     }
 
@@ -132,7 +133,7 @@ class RedisAuthSessionStore(
     override fun isAccessTokenBlacklisted(accessTokenId: String): Boolean =
         redisTemplate.hasKey(blacklistKey(accessTokenId))
 
-    override fun rotate(userId: Long, presentedRefreshToken: String, next: AuthSession): RotationResult {
+    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession): RotationResult {
         val now = Instant.now(clock)
         val ttl = Duration.between(now, next.refreshTokenExpiresAt)
         // tokenIssuer 는 항상 미래 만료 시각의 토큰을 발급하므로 실제로는 항상 양수다 — SET 의 EX 에
@@ -156,7 +157,7 @@ class RedisAuthSessionStore(
         return if (previousAccessTokenId != null) {
             redisTemplate.opsForValue().set(
                 refreshIndexKey(nextRefreshTokenHash),
-                userId.toString(),
+                userId.value.toString(),
                 Duration.ofSeconds(ttlSeconds),
             )
             RotationResult.Rotated(previousAccessTokenId)
@@ -165,8 +166,8 @@ class RedisAuthSessionStore(
         }
     }
 
-    override fun userIdForRefreshToken(refreshToken: String): Long? =
-        redisTemplate.opsForValue().get(refreshIndexKey(hash(refreshToken)))?.toLongOrNull()
+    override fun userIdForRefreshToken(refreshToken: String): UserId? =
+        redisTemplate.opsForValue().get(refreshIndexKey(hash(refreshToken)))?.toLongOrNull()?.let(::UserId)
 
     /**
      * 세션을 저장 문자열 포맷(`accessTokenId:hash:prevHash:graceMillis`)으로 직렬화한다.
@@ -183,7 +184,7 @@ class RedisAuthSessionStore(
         ).joinToString(FIELD_DELIMITER)
     }
 
-    private fun parseSession(userId: Long): ParsedSession? {
+    private fun parseSession(userId: UserId): ParsedSession? {
         val value = redisTemplate.opsForValue().get(sessionKey(userId)) ?: return null
         val parts = value.split(FIELD_DELIMITER, limit = 4)
         if (parts.size != 4) return null
@@ -205,7 +206,7 @@ class RedisAuthSessionStore(
         val graceExpiresAt: Instant,
     )
 
-    private fun sessionKey(userId: Long): String = "$SESSION_KEY_PREFIX$userId"
+    private fun sessionKey(userId: UserId): String = "$SESSION_KEY_PREFIX${userId.value}"
 
     private fun blacklistKey(accessTokenId: String): String = "$BLACKLIST_KEY_PREFIX$accessTokenId"
 

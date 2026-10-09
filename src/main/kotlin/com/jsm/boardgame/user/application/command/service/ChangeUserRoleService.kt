@@ -27,7 +27,8 @@ class ChangeUserRoleService(
 
     override fun changeRole(command: ChangeUserRoleCommand) {
         val role = UserRole.of(command.role)
-        val user = users.findById(UserId(command.targetUserId))
+        val targetUserId = UserId(command.targetUserId)
+        val user = users.findById(targetUserId)
             ?: throw UserNotFoundException("역할을 변경하려는 사용자를 찾을 수 없음: userId=${command.targetUserId}")
         user.changeRole(role)
         users.save(user)
@@ -41,11 +42,11 @@ class ChangeUserRoleService(
         // 강등이 최대 accessTokenTtl 만큼 늦어진다. 두 문장의 순서를 어떻게 바꿔도 닫히지 않는다 —
         // jti 하나가 아니라 "이 시각 이전에 발급된 토큰 전부 무효" 라는 기준이 있어야 닫힌다.
         // 지금 규모에서 그 비용을 지불하지 않는다.
-        sessions.currentAccessTokenId(command.targetUserId)?.let {
+        sessions.currentAccessTokenId(targetUserId)?.let {
             sessions.blacklistAccessToken(it, Instant.now(clock).plus(accessTokenTtl))
             // 소켓을 닫는 것은 상태 방송이 아니다 — 커밋 전에 불러도 규칙 6(BEFORE_COMMIT 방송 금지)을
             // 어기지 않는다. 위 블랙리스트도 이미 커밋 여부와 무관한 즉시 Redis 쓰기라 같은 성격이다.
-            realtimeConnections.closeAllOf(command.targetUserId)
+            realtimeConnections.closeAllOf(targetUserId)
         }
 
         // 리프레시 토큰 세션은 여기서 끊지 않는다(sessions.clear() 호출 안 함). 클라이언트가

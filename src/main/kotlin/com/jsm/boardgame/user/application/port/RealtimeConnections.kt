@@ -1,5 +1,7 @@
 package com.jsm.boardgame.user.application.port
 
+import com.jsm.boardgame.user.domain.model.UserId
+
 /**
  * 로그아웃·역할변경·리프레시 재사용 탐지처럼 액세스 토큰을 블랙리스트에 올릴 때, 이미 열려 있는
  * 실시간(STOMP) 세션도 함께 정리하기 위한 출력 포트. STOMP 는 common/web 인프라라 user 의
@@ -12,7 +14,7 @@ interface RealtimeConnections {
      * 연결 전부"다 — jti 로 찾으면 인밴드 갱신과 경합해 놓친다(세션이 이미 새 토큰으로
      * 옮겨간 뒤라 옛 jti 로는 못 찾는다).
      */
-    fun closeAllOf(userId: Long)
+    fun closeAllOf(userId: UserId)
 
     /**
      * 그 액세스 토큰으로 연결된 세션을 유예를 두고 닫는다 — 리프레시 성공 직후처럼 클라이언트가

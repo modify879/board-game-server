@@ -1,6 +1,7 @@
 package com.jsm.boardgame.user.infrastructure.security.adapter
 
 import com.jsm.boardgame.common.web.StompSessionRegistry
+import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.application.port.RealtimeConnections
 import org.springframework.stereotype.Component
 import java.time.Duration
@@ -18,8 +19,8 @@ class StompRealtimeConnections(
     private val stompSessionRegistry: StompSessionRegistry,
 ) : RealtimeConnections {
 
-    override fun closeAllOf(userId: Long) {
-        stompSessionRegistry.closeAllOf(userId)
+    override fun closeAllOf(userId: UserId) {
+        stompSessionRegistry.closeAllOf(userId.value)
     }
 
     override fun closeAfterGrace(accessTokenId: String) {

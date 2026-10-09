@@ -87,16 +87,16 @@ private class LoginFakePasswordHasher : PasswordHasher {
 }
 
 private class LoginFakeRealtimeConnections : RealtimeConnections {
-    val closeAllOfCalls = mutableListOf<Long>()
+    val closeAllOfCalls = mutableListOf<UserId>()
     val closeAfterGraceCalls = mutableListOf<String>()
-    override fun closeAllOf(userId: Long) { closeAllOfCalls += userId }
+    override fun closeAllOf(userId: UserId) { closeAllOfCalls += userId }
     override fun closeAfterGrace(accessTokenId: String) { closeAfterGraceCalls += accessTokenId }
 }
 
 private class LoginFakeAuthTokenIssuer : AuthTokenIssuer {
     private var counter = 0
 
-    override fun issue(userId: Long, role: UserRole): IssuedTokens {
+    override fun issue(userId: UserId, role: UserRole): IssuedTokens {
         counter += 1
         val refreshToken = "rt-$counter"
         val accessToken = "at-$counter"
@@ -111,24 +111,24 @@ private class LoginFakeAuthTokenIssuer : AuthTokenIssuer {
 }
 
 private class LoginInMemoryAuthSessionStore : AuthSessionStore {
-    private val sessions = mutableMapOf<Long, AuthSession>()
+    private val sessions = mutableMapOf<UserId, AuthSession>()
     private val blacklist = mutableMapOf<String, Instant>()
-    private val refreshTokenIndex = mutableMapOf<String, Long>()
+    private val refreshTokenIndex = mutableMapOf<String, UserId>()
 
-    override fun start(userId: Long, session: AuthSession) {
+    override fun start(userId: UserId, session: AuthSession) {
         sessions[userId] = session
         refreshTokenIndex[session.refreshToken] = userId
     }
 
-    override fun userIdForRefreshToken(refreshToken: String): Long? = refreshTokenIndex[refreshToken]
+    override fun userIdForRefreshToken(refreshToken: String): UserId? = refreshTokenIndex[refreshToken]
 
     // AuthSessionStore 포트 계약이 아니다 — 세션이 실제로 시작됐는지 들여다보는 페이크 전용 검사용 헬퍼다.
     fun matchesRefreshToken(userId: Long, refreshToken: String): Boolean =
-        sessions[userId]?.refreshToken == refreshToken
+        sessions[UserId(userId)]?.refreshToken == refreshToken
 
-    override fun currentAccessTokenId(userId: Long): String? = sessions[userId]?.accessTokenId
+    override fun currentAccessTokenId(userId: UserId): String? = sessions[userId]?.accessTokenId
 
-    override fun clear(userId: Long) {
+    override fun clear(userId: UserId) {
         sessions.remove(userId)
     }
 
@@ -140,7 +140,7 @@ private class LoginInMemoryAuthSessionStore : AuthSessionStore {
 
     // 이 픽스처는 그레이스 개념 없이 정확히 일치할 때만 통과한다 — LoginService 는 rotate() 를
     // 쓰지 않고 항상 start() 로 세션을 여므로, 여기서는 인터페이스 구현을 위한 최소 구현이다.
-    override fun rotate(userId: Long, presentedRefreshToken: String, next: AuthSession): RotationResult {
+    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession): RotationResult {
         val session = sessions[userId] ?: return RotationResult.Mismatch
         if (session.refreshToken != presentedRefreshToken) return RotationResult.Mismatch
 
@@ -191,12 +191,12 @@ class LoginServiceTest {
         users.seed(id = 1, username = "user_01", rawPassword = "password1", nickname = "길동이")
 
         service.login(LoginCommand(username = "user_01", password = "password1"))
-        val firstAccessTokenId = sessions.currentAccessTokenId(1)!!
+        val firstAccessTokenId = sessions.currentAccessTokenId(UserId(1))!!
         assertTrue(!sessions.isAccessTokenBlacklisted(firstAccessTokenId))
 
         service.login(LoginCommand(username = "user_01", password = "password1"))
         assertTrue(sessions.isAccessTokenBlacklisted(firstAccessTokenId))
-        assertTrue(realtimeConnections.closeAllOfCalls.contains(1L))
+        assertTrue(realtimeConnections.closeAllOfCalls.contains(UserId(1L)))
     }
 
     @Test
@@ -241,7 +241,7 @@ class LoginServiceTest {
             service.login(LoginCommand(username = "user_01", password = "password1"))
         }
         assertEquals(UserErrorCode.ACCOUNT_LOCKED, e.errorCode)
-        assertTrue(sessions.currentAccessTokenId(userId) == null)
+        assertTrue(sessions.currentAccessTokenId(UserId(userId)) == null)
     }
 
     @Test
