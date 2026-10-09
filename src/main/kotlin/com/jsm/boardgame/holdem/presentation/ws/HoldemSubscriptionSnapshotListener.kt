@@ -6,6 +6,7 @@ import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.TurnCountdown
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
+import com.jsm.boardgame.holdem.presentation.ws.payload.TableClosedView
 import com.jsm.boardgame.holdem.presentation.ws.payload.privateViewOf
 import com.jsm.boardgame.holdem.presentation.ws.payload.publicViewOf
 import org.springframework.context.annotation.Lazy
@@ -90,7 +91,15 @@ class HoldemSubscriptionSnapshotListener(
         // 직전인 트랜잭션이 곧 내보낼 더 새로운 상태가 여기서 먼저 딴 더 낮은 seq 로 나가버려
         // 클라이언트가 그 갱신을 old 로 오판해 버린다.
         val seq = sequence.current(tableId)
-        val table = tables.findById(tableId) ?: return
+        val table = tables.findById(tableId) ?: run {
+            // 닫혔거나 없는 테이블이다. 닫힘 알림을 놓친 클라이언트가 재구독하면 빈 화면에 영원히
+            // 머무르므로 알림을 다시 보낸다. 구독을 ERROR 프레임으로 거부하면 STOMP 세션 전체가
+            // 끊겨 좌석·연결 타이머가 흔들리니 거부하지 않는다. 개인 큐는 인터셉터가 이미 막았다.
+            if (!HoldemDestinations.isPrivateQueue(destination)) {
+                messagingTemplate.convertAndSend(HoldemDestinations.publicTopicOf(rawTableId), TableClosedView(rawTableId))
+            }
+            return
+        }
         val hand = handStore.find(tableId)
         // 조회 포트(JDSL 프로젝션)가 아니라 저장소 포트로 읽는다 — handStore 를 이미 이렇게 읽으므로 의도적으로 받아들인 편차다.
         val lastResult = if (hand == null) lastHandResults.find(tableId) else null

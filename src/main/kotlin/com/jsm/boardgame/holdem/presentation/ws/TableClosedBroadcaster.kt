@@ -14,7 +14,7 @@ class TableClosedBroadcaster(
 ) {
     @TransactionalEventListener
     fun onTableClosed(event: TableClosed) {
-        // 이미 커밋된 뒤라 예외를 올리지 않는다 — 유실돼도 구독자는 다음 재구독 때 구독 실패로 안다.
+        // 이미 커밋된 뒤라 예외를 올리지 않는다 — 유실돼도 클라이언트가 재구독하면 스냅샷 리스너가 다시 보낸다.
         try {
             messagingTemplate.convertAndSend(HoldemDestinations.publicTopicOf(event.tableId.value), TableClosedView(event.tableId.value))
         } catch (e: Exception) {
