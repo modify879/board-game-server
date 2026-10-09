@@ -616,4 +616,19 @@ class ConnectionTimerTest {
         assertEquals(1, scheduler.scheduledCalls.size)
         assertEquals(fixedInstant.plus(Duration.ofMinutes(3)), scheduler.scheduledCalls[0].time)
     }
+
+    @Test
+    fun `forget 한 테이블의 퇴장 예약은 핸드가 끝나도 실행되지 않는다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        val tableId = TableId(7L)
+        val standUpUseCase = ConnectionTimerFakeStandUpUseCase()
+        val timer = ConnectionTimer(scheduler, clock, ConnectionTimerFakeUpdateSeatPresenceUseCase(), ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = tableId), standUpUseCase, tables, InMemoryJoinQueue(), ConnectionTimerFakeJoinQueueNotifier(), ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
+        timer.onSessionDisconnect(disconnectEvent(42L))
+        scheduler.scheduledCalls[0].task.run()
+
+        timer.forget(tableId)
+        timer.onHandBroadcastRequested(HandBroadcastRequested(tableId, HoldemTable.create("t"), finishedHand()))
+
+        assertEquals(0, standUpUseCase.calls.size)
+    }
 }

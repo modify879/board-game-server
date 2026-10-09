@@ -64,6 +64,12 @@ class NextHandTimer(
         scheduled.remove(tableId)?.future?.cancel(false)
     }
 
+    /** 테이블이 닫히면 예약과 토큰을 치운다. 토큰이 사라지면 이미 깨어난 낡은 실행도 걸러진다. */
+    fun forget(tableId: TableId) {
+        cancel(tableId)
+        tokens.remove(tableId)
+    }
+
     override fun remaining(tableId: TableId): Duration? {
         val future = scheduled[tableId]?.future ?: return null
         return Duration.ofMillis(maxOf(0, future.getDelay(TimeUnit.MILLISECONDS)))

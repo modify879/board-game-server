@@ -560,4 +560,21 @@ class HandRecoveryTest {
         assertEquals(0, cancel.calls.size)
         assertEquals(0, scheduler.scheduledCalls.size)
     }
+
+    @Test
+    fun `forget 은 복구 유예를 취소하고 낡은 타임아웃을 무시하게 만든다`() {
+        val handStore = HandRecoveryFakeHandStore()
+        val tables = HandRecoveryFakeTableRepository()
+        val scheduler = HandRecoveryFakeTaskScheduler()
+        val cancelUseCase = HandRecoveryFakeCancelHandUseCase()
+        val recovery = HandRecovery(handStore, tables, scheduler, clock, HandRecoveryFakeResumeHandUseCase(), cancelUseCase, newConnectionTimer(tables), NextHandTimer(HandRecoveryFakeTaskScheduler(), HandRecoveryFakeStartScheduledHandUseCase(), HandRecoveryFakeTableExecutor(), clock, nextHandDelay), HandRecoveryFakeTableExecutor())
+        handStore.put(TableId(1L), seatTableWithHand(tables, 1L, 1, 2))
+        recovery.onApplicationReady()
+
+        recovery.forget(TableId(1L))
+
+        assertTrue(scheduler.scheduledCalls[0].future.cancelled)
+        scheduler.scheduledCalls[0].task.run()
+        assertEquals(0, cancelUseCase.calls.size)
+    }
 }
