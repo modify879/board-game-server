@@ -1,5 +1,6 @@
 package com.jsm.boardgame.wallet.presentation.rest
 
+import com.jsm.boardgame.UniqueNames
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
@@ -23,7 +24,6 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.time.Instant
-import java.util.UUID
 
 /**
  * `wallet` 컨텍스트의 일반 사용자 REST API 통합 테스트.
@@ -44,10 +44,10 @@ class WalletApiIntegrationTest {
     private lateinit var ledgerEntryRepository: LedgerEntryRepository
 
     private fun uniqueUsername(): String =
-        "u" + UUID.randomUUID().toString().replace("-", "").take(9).lowercase()
+        "u" + UniqueNames.suffix()
 
     private fun uniqueNickname(): String =
-        "n" + UUID.randomUUID().toString().replace("-", "").take(5).lowercase()
+        "n" + UniqueNames.suffix()
 
     private fun signUp(username: String, password: String): ResultActions =
         mockMvc.perform(

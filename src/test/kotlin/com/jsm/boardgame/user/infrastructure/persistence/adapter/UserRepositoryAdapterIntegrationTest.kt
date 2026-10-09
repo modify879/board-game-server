@@ -1,5 +1,6 @@
 package com.jsm.boardgame.user.infrastructure.persistence.adapter
 
+import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.user.infrastructure.persistence.entity.UserJpaEntity
 import com.jsm.boardgame.user.infrastructure.persistence.entity.UserJpaRepository
 import com.jsm.boardgame.TestcontainersConfiguration
@@ -15,7 +16,6 @@ import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
-import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -42,10 +42,10 @@ class UserRepositoryAdapterIntegrationTest {
     private lateinit var jpaUsers: UserJpaRepository
 
     private fun uniqueUsername(): String =
-        "u" + UUID.randomUUID().toString().replace("-", "").take(9).lowercase()
+        "u" + UniqueNames.suffix()
 
     private fun uniqueNickname(): String =
-        "n" + UUID.randomUUID().toString().replace("-", "").take(5).lowercase()
+        "n" + UniqueNames.suffix()
 
     private fun newUser(username: String, nickname: String): User =
         User.register(

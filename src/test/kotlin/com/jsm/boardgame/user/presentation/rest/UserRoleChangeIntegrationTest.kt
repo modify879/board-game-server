@@ -1,5 +1,6 @@
 package com.jsm.boardgame.user.presentation.rest
 
+import com.jsm.boardgame.UniqueNames
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.domain.model.UserId
@@ -20,7 +21,6 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.util.Base64
-import java.util.UUID
 
 /**
  * 관리자가 다른 사용자의 역할을 바꾸는 흐름 전체를 하나로 잇는다(CLAUDE.md 가 경고하는
@@ -42,10 +42,10 @@ class UserRoleChangeIntegrationTest {
     private lateinit var userRepository: UserRepository
 
     private fun uniqueUsername(): String =
-        "u" + UUID.randomUUID().toString().replace("-", "").take(9).lowercase()
+        "u" + UniqueNames.suffix()
 
     private fun uniqueNickname(): String =
-        "n" + UUID.randomUUID().toString().replace("-", "").take(5).lowercase()
+        "n" + UniqueNames.suffix()
 
     private fun signUp(username: String, password: String): ResultActions =
         mockMvc.perform(

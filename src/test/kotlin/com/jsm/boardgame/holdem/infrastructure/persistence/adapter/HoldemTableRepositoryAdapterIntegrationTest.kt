@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.persistence.adapter
 
+import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
@@ -15,7 +16,6 @@ import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
-import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -40,11 +40,11 @@ class HoldemTableRepositoryAdapterIntegrationTest {
 
     // fk_holdem_seats_user 가 걸려 있어 합성 userId 로는 착석 행을 저장할 수 없다 — 실제 사용자 행을 만든다.
     private fun uniqueUserId(): Long {
-        val suffix = UUID.randomUUID().toString().replace("-", "").take(9).lowercase()
+        val suffix = UniqueNames.suffix()
         val user = User.register(
             username = Username.of("u$suffix"),
             passwordHash = PasswordHash("hashed-password-value"),
-            nickname = Nickname.of("n" + suffix.take(5)),
+            nickname = Nickname.of("n" + suffix),
         )
         return users.save(user).id!!.value
     }

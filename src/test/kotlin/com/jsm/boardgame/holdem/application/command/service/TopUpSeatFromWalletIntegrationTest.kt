@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -48,13 +49,13 @@ class TopUpSeatFromWalletIntegrationTest {
 
     /** fk_wallets_user 때문에 실제 users 행을 먼저 만든다. */
     private fun signUp(): Long {
-        val suffix = UUID.randomUUID().toString().replace("-", "")
-        val username = "u" + suffix.take(9).lowercase()
+        val suffix = UniqueNames.suffix()
+        val username = "u" + suffix
         val result = mockMvc.perform(
             post("/api/users")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
-                    """{"username":"$username","password":"password123","passwordConfirm":"password123","nickname":"n${suffix.takeLast(5).lowercase()}"}""",
+                    """{"username":"$username","password":"password123","passwordConfirm":"password123","nickname":"n${suffix}"}""",
                 ),
         ).andExpect(status().isCreated).andReturn()
         return result.response.getHeader("Location")!!.substringAfterLast("/").toLong()
