@@ -461,6 +461,7 @@ class RedisAuthSessionStoreIntegrationTest {
     private fun newUserId(): UserId = UserId(userIdSequence.getAndIncrement())
 
     companion object {
-        private val userIdSequence = AtomicLong(1)
+        // 다른 통합 테스트가 같은 Redis 에 실제 사용자(IDENTITY 1, 2, 3…)의 세션을 남기므로 겹치지 않는 대역에서 시작한다.
+        private val userIdSequence = AtomicLong(1_000_000_000_000L)
     }
 }
