@@ -67,9 +67,8 @@ private class ExpireTurnFakeWalletTransfer : WalletTransfer {
 
     val fromGameCalls = mutableListOf<FromGameCall>()
 
-    override fun allToGame(userId: Long, tableId: Long, memo: String?): Long {
-        error("ExpireTurnService 는 allToGame 을 부르지 않는다")
-    }
+    // ExpireTurnService 자체는 allToGame 을 부르지 않는다 — 정산(HandSettler)이 잔액 0 으로 부른다.
+    override fun allToGame(userId: Long, tableId: Long, memo: String?): Long = 0
 
     override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {
         fromGameCalls += FromGameCall(userId, amount, tableId, memo)
@@ -89,7 +88,7 @@ class ExpireTurnServiceTest {
     private val walletTransfer = ExpireTurnFakeWalletTransfer()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
-    private val handSettler = HandSettler(tables, handStore, ExpireTurnServiceFakeLastHandResultStore(), eventPublisher, ExpireTurnFakeNextHandCountdown())
+    private val handSettler = HandSettler(tables, handStore, ExpireTurnServiceFakeLastHandResultStore(), eventPublisher, ExpireTurnFakeNextHandCountdown(), walletTransfer)
     private val service = ExpireTurnService(tables, handStore, handSettler, walletTransfer, eventPublisher)
 
     /** userId = seatNo * 1000 으로 대응시킨다. */

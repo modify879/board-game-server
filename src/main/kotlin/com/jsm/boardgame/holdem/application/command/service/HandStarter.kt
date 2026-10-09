@@ -5,7 +5,6 @@ import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
-import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
@@ -45,10 +44,7 @@ class HandStarter(
 
         // 착석 중 지갑에 들어온 돈(충전 승인·출금 환불)은 핸드 시작 때만 스택에 합친다 — 핸드 도중 스택 불변(table stakes).
         // 락 순서는 테이블 → 지갑이다.
-        table.occupiedSeats().forEach { seat ->
-            val added = walletTransfer.allToGame(seat.userId, tableId.value, memo = "holdem")
-            if (added > 0) table.topUp(seat.seatNo, Chips.of(added))
-        }
+        walletTransfer.topUpOccupiedSeats(tableId, table)
 
         val positions = table.advanceBlinds(candidateSeatNos)
         table.clearAwaitingBigBlind(positions.bigBlindSeatNo)

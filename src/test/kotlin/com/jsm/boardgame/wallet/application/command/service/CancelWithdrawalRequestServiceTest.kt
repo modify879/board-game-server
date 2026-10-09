@@ -15,6 +15,8 @@ import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestStatus
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import com.jsm.boardgame.wallet.domain.repository.WithdrawalRequestRepository
+import com.jsm.boardgame.wallet.application.event.WalletCredited
+import org.springframework.context.ApplicationEventPublisher
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -71,13 +73,19 @@ private class CancelFakeLedgerEntryRepository : LedgerEntryRepository {
     }
 }
 
+private class CancelFakeEventPublisher : ApplicationEventPublisher {
+    val events = mutableListOf<Any>()
+    override fun publishEvent(event: Any) { events += event }
+}
+
 class CancelWithdrawalRequestServiceTest {
 
     private val withdrawalRequests = CancelFakeWithdrawalRequestRepository()
     private val wallets = CancelFakeWalletRepository()
     private val ledger = CancelFakeLedgerEntryRepository()
     private val clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
-    private val service = CancelWithdrawalRequestService(withdrawalRequests, wallets, ledger, clock)
+    private val eventPublisher = CancelFakeEventPublisher()
+    private val service = CancelWithdrawalRequestService(withdrawalRequests, wallets, ledger, clock, eventPublisher)
     private val bankAccount = BankAccount.of("국민은행", "123456789012", "홍길동")
 
     private fun heldRequest(id: Long = 1, userId: Long = 1, amount: Long = 10_000): WithdrawalRequest {
@@ -93,6 +101,15 @@ class CancelWithdrawalRequestServiceTest {
             processedAt = null,
             rejectionReason = null,
         ).also { withdrawalRequests.put(it) }
+    }
+
+    @Test
+    fun `취소하면 WalletCredited 를 발행한다`() {
+        val request = heldRequest(userId = 7)
+
+        service.cancel(CancelWithdrawalRequestCommand(requestId = request.id!!.value, requesterUserId = 7))
+
+        assertEquals(listOf<Any>(WalletCredited(7)), eventPublisher.events)
     }
 
     @Test

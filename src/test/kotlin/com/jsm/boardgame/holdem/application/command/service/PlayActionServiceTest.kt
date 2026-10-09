@@ -8,6 +8,7 @@ import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
+import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.exception.IllegalBettingActionException
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
@@ -70,13 +71,18 @@ private class PlayActionFakeNextHandCountdown : NextHandCountdown {
     override fun remaining(tableId: TableId): Duration? = null
 }
 
+private class PlayActionFakeWalletTransfer : WalletTransfer {
+    override fun allToGame(userId: Long, tableId: Long, memo: String?): Long = 0
+    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {}
+}
+
 class PlayActionServiceTest {
 
     private val tables = PlayActionFakeTableRepository()
     private val handStore = PlayActionFakeHandStore()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
-    private val handSettler = HandSettler(tables, handStore, PlayActionServiceFakeLastHandResultStore(), eventPublisher, PlayActionFakeNextHandCountdown())
+    private val handSettler = HandSettler(tables, handStore, PlayActionServiceFakeLastHandResultStore(), eventPublisher, PlayActionFakeNextHandCountdown(), PlayActionFakeWalletTransfer())
     private val service = PlayActionService(tables, handStore, handSettler, eventPublisher)
 
     /** userId = seatNo * 1000 으로 대응시킨다. */

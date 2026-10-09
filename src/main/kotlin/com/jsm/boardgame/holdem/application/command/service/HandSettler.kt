@@ -6,6 +6,7 @@ import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
+import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.SeatStatus
@@ -30,8 +31,9 @@ import org.springframework.stereotype.Component
  * 스택 반영 직후, 스택이 0이 된 참가 좌석은 자동으로 기립시킨다(0칩 자동 기립) — 9자리가 칩
  * 없는 사람에게 묶이지 않게 한다. 핸드가 이미 끝난 뒤라 going south(핸드 도중 칩을 빼는 것) 제약과
  * 충돌하지 않는다. 돌려줄 칩이 없으므로 지갑 이체는 부르지 않는다(StandUpService 가 스택 0일 때
- * 이체를 건너뛰는 것과 같은 이유). 이 클래스는 WalletTransfer 를 전혀 부르지 않는다 — 핸드 도중 남은
- * 참가 요청의 바이인 이체는 커밋 후 별도 트랜잭션(JoinRequestsProcessor)에서 처리한다.
+ * 이체를 건너뛰는 것과 같은 이유). 그 뒤 남은 점유 좌석에는 핸드 도중 지갑에 들어온 돈을 합친다
+ * (topUpOccupiedSeats). 핸드 도중 남은 참가 요청의 바이인 이체는 여기서 하지 않고 커밋 후 별도
+ * 트랜잭션(JoinRequestsProcessor)에서 처리한다.
  *
  * 정산 뒤 후보(스택이 있는 점유 좌석)가 2명 이상이면 다음 핸드 카운트다운을 새로 건다 — 핸드가
  * 도는 동안은 카운트다운이 없었으므로 항상 처음부터 시작하는 셈이다. `NextHandCountdown` 이 상대
@@ -44,6 +46,7 @@ class HandSettler(
     private val lastHandResults: LastHandResultStore,
     private val eventPublisher: ApplicationEventPublisher,
     private val countdown: NextHandCountdown,
+    private val walletTransfer: WalletTransfer,
 ) {
     fun settle(tableId: TableId, table: HoldemTable, hand: Hand) {
         val stacks = hand.seatNos.associateWith { seatNo -> hand.stackOf(seatNo) }
@@ -66,6 +69,10 @@ class HandSettler(
             table.standUp(userId)
             log.info("auto stand-up after 0-stack settle: tableId={}, seatNo={}, userId={}", tableId.value, seatNo, userId)
         }
+
+        // 핸드 도중 지갑에 들어온 돈은 정산 직후 합친다 — 정산 브로드캐스트가 늘어난 스택을 싣는다.
+        // 0칩 기립 뒤라 남은 점유 좌석만 대상이다. 락 순서는 이미 테이블 → 지갑이다.
+        walletTransfer.topUpOccupiedSeats(tableId, table)
 
         handStore.remove(tableId)
         lastHandResults.save(tableId, lastResult)

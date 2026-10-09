@@ -31,7 +31,8 @@ fun publicViewOf(
             SeatPublicView(
                 seatNo = seat.seatNo,
                 userId = seat.userId,
-                stack = hand.stackOf(seat.seatNo).amount,
+                // 끝난 핸드는 좌석 값을 쓴다 — 정산이 applyStacks 후 지갑 입금분을 합치므로 핸드의 최종 스택은 합산 전 값이다.
+                stack = if (hand.isFinished) seat.stack.amount else hand.stackOf(seat.seatNo).amount,
                 totalContributed = hand.totalContributedBy(seat.seatNo).amount,
                 status = hand.statusOf(seat.seatNo).name,
                 presence = seat.presence.name,

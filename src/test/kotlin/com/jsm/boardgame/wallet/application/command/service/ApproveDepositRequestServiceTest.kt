@@ -17,6 +17,8 @@ import com.jsm.boardgame.wallet.domain.model.WalletId
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
+import com.jsm.boardgame.wallet.application.event.WalletCredited
+import org.springframework.context.ApplicationEventPublisher
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -82,13 +84,19 @@ private class ApproveFakeLedgerEntryRepository : LedgerEntryRepository {
     }
 }
 
+private class ApproveFakeEventPublisher : ApplicationEventPublisher {
+    val events = mutableListOf<Any>()
+    override fun publishEvent(event: Any) { events += event }
+}
+
 class ApproveDepositRequestServiceTest {
 
     private val depositRequests = ApproveFakeDepositRequestRepository()
     private val wallets = ApproveFakeWalletRepository()
     private val ledger = ApproveFakeLedgerEntryRepository()
     private val clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
-    private val service = ApproveDepositRequestService(depositRequests, wallets, ledger, clock)
+    private val eventPublisher = ApproveFakeEventPublisher()
+    private val service = ApproveDepositRequestService(depositRequests, wallets, ledger, clock, eventPublisher)
 
     private fun pendingRequest(id: Long = 1, userId: Long = 1, amount: Long = 10_000): DepositRequest =
         DepositRequest.reconstitute(
@@ -102,6 +110,15 @@ class ApproveDepositRequestServiceTest {
             processedAt = null,
             rejectionReason = null,
         ).also { depositRequests.put(it) }
+
+    @Test
+    fun `승인하면 WalletCredited 를 발행한다`() {
+        val request = pendingRequest(userId = 7)
+
+        service.approve(ApproveDepositRequestCommand(requestId = request.id!!.value, adminUserId = 99, creditedAmount = null))
+
+        assertEquals(listOf<Any>(WalletCredited(7)), eventPublisher.events)
+    }
 
     @Test
     fun `승인하면 지갑 잔액이 늘고 DEPOSIT 원장 엔트리가 하나 생긴다`() {
