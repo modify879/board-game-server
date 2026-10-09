@@ -10,6 +10,8 @@ import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
+import com.jsm.boardgame.wallet.application.event.WalletCredited
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
@@ -22,6 +24,7 @@ class ApproveDepositRequestService(
     private val wallets: WalletRepository,
     private val ledger: LedgerEntryRepository,
     private val clock: Clock,
+    private val eventPublisher: ApplicationEventPublisher,
 ) : ApproveDepositRequestUseCase {
 
     override fun approve(command: ApproveDepositRequestCommand) {
@@ -49,5 +52,6 @@ class ApproveDepositRequestService(
         )
         wallets.save(wallet)
         ledger.save(entry)
+        eventPublisher.publishEvent(WalletCredited(request.userId))
     }
 }

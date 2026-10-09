@@ -6,6 +6,7 @@ import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
+import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
@@ -59,13 +60,18 @@ private class AdvanceRunoutFakeNextHandCountdown : NextHandCountdown {
     override fun remaining(tableId: TableId): Duration? = null
 }
 
+private class AdvanceRunoutFakeWalletTransfer : WalletTransfer {
+    override fun allToGame(userId: Long, tableId: Long, memo: String?): Long = 0
+    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {}
+}
+
 class AdvanceRunoutServiceTest {
 
     private val tables = AdvanceRunoutFakeTableRepository()
     private val handStore = AdvanceRunoutFakeHandStore()
     private val lastHandResults = AdvanceRunoutFakeLastHandResultStore()
     private val eventPublisher = AdvanceRunoutFakeEventPublisher()
-    private val handSettler = HandSettler(tables, handStore, lastHandResults, eventPublisher, AdvanceRunoutFakeNextHandCountdown())
+    private val handSettler = HandSettler(tables, handStore, lastHandResults, eventPublisher, AdvanceRunoutFakeNextHandCountdown(), AdvanceRunoutFakeWalletTransfer())
     private val service = AdvanceRunoutService(tables, handStore, handSettler, eventPublisher)
 
     private fun tableWithHand(allIn: Boolean): TableId {

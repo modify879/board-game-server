@@ -16,6 +16,8 @@ import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestStatus
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import com.jsm.boardgame.wallet.domain.repository.WithdrawalRequestRepository
+import com.jsm.boardgame.wallet.application.event.WalletCredited
+import org.springframework.context.ApplicationEventPublisher
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -73,13 +75,19 @@ private class RejectFakeLedgerEntryRepository : LedgerEntryRepository {
     }
 }
 
+private class RejectFakeEventPublisher : ApplicationEventPublisher {
+    val events = mutableListOf<Any>()
+    override fun publishEvent(event: Any) { events += event }
+}
+
 class RejectWithdrawalRequestServiceTest {
 
     private val withdrawalRequests = RejectFakeWithdrawalRequestRepository()
     private val wallets = RejectFakeWalletRepository()
     private val ledger = RejectFakeLedgerEntryRepository()
     private val clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
-    private val service = RejectWithdrawalRequestService(withdrawalRequests, wallets, ledger, clock)
+    private val eventPublisher = RejectFakeEventPublisher()
+    private val service = RejectWithdrawalRequestService(withdrawalRequests, wallets, ledger, clock, eventPublisher)
     private val bankAccount = BankAccount.of("국민은행", "123456789012", "홍길동")
 
     // 요청 시점에 이미 차감되어 잔액이 0인 지갑을 흉내낸다.
@@ -101,6 +109,15 @@ class RejectWithdrawalRequestServiceTest {
             processedAt = null,
             rejectionReason = null,
         ).also { withdrawalRequests.put(it) }
+    }
+
+    @Test
+    fun `반려하면 WalletCredited 를 발행한다`() {
+        val request = heldRequest(userId = 7)
+
+        service.reject(RejectWithdrawalRequestCommand(requestId = request.id!!.value, adminUserId = 99, reason = "서류 미비"))
+
+        assertEquals(listOf<Any>(WalletCredited(7)), eventPublisher.events)
     }
 
     @Test

@@ -18,6 +18,8 @@ import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.model.WalletId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
+import com.jsm.boardgame.wallet.application.event.WalletCredited
+import org.springframework.context.ApplicationEventPublisher
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -85,6 +87,11 @@ private class AdjustFakeLedgerEntryRepository : LedgerEntryRepository {
     }
 }
 
+private class AdjustFakeEventPublisher : ApplicationEventPublisher {
+    val events = mutableListOf<Any>()
+    override fun publishEvent(event: Any) { events += event }
+}
+
 class AdjustWalletBalanceServiceTest {
 
     private val wallets = AdjustFakeWalletRepository()
@@ -92,7 +99,8 @@ class AdjustWalletBalanceServiceTest {
     private val userExistence = AdjustFakeUserExistence()
     private val adjustmentKeys = AdjustFakeAdjustmentKeyRegistry()
     private val clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
-    private val service = AdjustWalletBalanceService(wallets, ledger, userExistence, adjustmentKeys, clock)
+    private val eventPublisher = AdjustFakeEventPublisher()
+    private val service = AdjustWalletBalanceService(wallets, ledger, userExistence, adjustmentKeys, clock, eventPublisher)
 
     @Test
     fun `양수 조정이면 ADMIN_ADJUSTMENT_CREDIT 엔트리가 생기고 memo 와 reference 가 채워진다`() {
@@ -108,6 +116,18 @@ class AdjustWalletBalanceServiceTest {
         assertEquals(LedgerReferenceType.ADMIN_ADJUSTMENT, entry.reference.type)
         assertEquals(99L, entry.reference.id)
         assertEquals(Money.of(5_000), wallets.findByUserId(1)!!.balance)
+    }
+
+    @Test
+    fun `증액이면 WalletCredited 를 발행하고 감액이면 발행하지 않는다`() {
+        userExistence.register(1)
+        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(10_000))
+
+        service.adjust(AdjustWalletBalanceCommand(targetUserId = 1, amount = -3_000, reason = "오류 회수", adminUserId = 99, idempotencyKey = "key-d"))
+        assertEquals(emptyList<Any>(), eventPublisher.events)
+
+        service.adjust(AdjustWalletBalanceCommand(targetUserId = 1, amount = 3_000, reason = "이벤트 보상", adminUserId = 99, idempotencyKey = "key-c"))
+        assertEquals(listOf<Any>(WalletCredited(1)), eventPublisher.events)
     }
 
     @Test

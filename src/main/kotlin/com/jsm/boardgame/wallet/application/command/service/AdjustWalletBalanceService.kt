@@ -11,6 +11,8 @@ import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
+import com.jsm.boardgame.wallet.application.event.WalletCredited
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
@@ -27,6 +29,7 @@ class AdjustWalletBalanceService(
     private val userExistence: UserExistence,
     private val adjustmentKeys: AdjustmentKeyRegistry,
     private val clock: Clock,
+    private val eventPublisher: ApplicationEventPublisher,
 ) : AdjustWalletBalanceUseCase {
 
     override fun adjust(command: AdjustWalletBalanceCommand) {
@@ -61,6 +64,8 @@ class AdjustWalletBalanceService(
         )
         wallets.save(wallet)
         ledger.save(entry)
+        // 증액만 알린다 — 감액은 게임이 합칠 돈이 아니다.
+        if (command.amount > 0) eventPublisher.publishEvent(WalletCredited(command.targetUserId))
     }
 
     private fun requireValidIdempotencyKey(key: String?): String {

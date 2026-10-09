@@ -10,6 +10,8 @@ import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import com.jsm.boardgame.wallet.domain.repository.WithdrawalRequestRepository
+import com.jsm.boardgame.wallet.application.event.WalletCredited
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
@@ -28,6 +30,7 @@ class RejectWithdrawalRequestService(
     private val wallets: WalletRepository,
     private val ledger: LedgerEntryRepository,
     private val clock: Clock,
+    private val eventPublisher: ApplicationEventPublisher,
 ) : RejectWithdrawalRequestUseCase {
 
     override fun reject(command: RejectWithdrawalRequestCommand) {
@@ -48,5 +51,6 @@ class RejectWithdrawalRequestService(
         )
         wallets.save(wallet)
         ledger.save(entry)
+        eventPublisher.publishEvent(WalletCredited(request.userId))
     }
 }

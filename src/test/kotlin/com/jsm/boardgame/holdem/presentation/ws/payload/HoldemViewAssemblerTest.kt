@@ -633,4 +633,27 @@ class HoldemViewAssemblerTest {
 
         assertEquals(listOf(PayoutPublicView(2, 777L, 300)), view.result!!.payouts)
     }
+
+    @Test
+    fun `끝난 핸드의 공개 뷰 스택은 합산이 반영된 좌석 값이고 진행 중 핸드는 핸드의 스택이다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        table.moveButtonToNextOccupiedSeat()
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
+            table.buttonSeatNo!!,
+            smallBlindSeatNo = 1,
+            bigBlindSeatNo = 2,
+            table.smallBlind,
+            table.bigBlind,
+            identityShuffler,
+        )
+        table.topUp(2, Chips.of(5_000)) // 지갑 입금분이 좌석에 합쳐진 상태
+        val running = publicViewOf(TableId(1), table, hand, null, 1L, null, null)
+        assertEquals(10_000L - 200L, running.seats.single { it.seatNo == 2 }.stack)
+
+        hand.act(1, BettingAction.Fold)
+        val finished = publicViewOf(TableId(1), table, hand, lastOf(hand), 1L, null, null)
+
+        assertEquals(15_000L, finished.seats.single { it.seatNo == 2 }.stack)
+    }
 }
