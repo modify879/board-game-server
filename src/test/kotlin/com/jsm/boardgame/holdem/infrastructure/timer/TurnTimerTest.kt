@@ -299,4 +299,19 @@ class TurnTimerTest {
         scheduler.scheduledCalls[5].task.run()
         assertEquals(2, cancelAttempts)
     }
+
+    @Test
+    fun `forget 은 걸린 예약을 취소하고 낡은 실행을 무시하게 만든다`() {
+        val scheduler = TurnTimerFakeTaskScheduler()
+        val useCase = TurnTimerFakeExpireTurnUseCase()
+        val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase())
+        timer.commit(event(handWithToAct(1 to 10_000L, 2 to 10_000L)))
+
+        timer.forget(TableId(1L))
+
+        assertTrue(scheduler.scheduledCalls[0].future.cancelled)
+        assertNull(timer.remaining(TableId(1L)))
+        scheduler.scheduledCalls[0].task.run()
+        assertEquals(0, useCase.calls.size)
+    }
 }

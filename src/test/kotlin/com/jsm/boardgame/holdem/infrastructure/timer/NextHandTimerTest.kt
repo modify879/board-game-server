@@ -232,4 +232,16 @@ class NextHandTimerTest {
         // restart 한 번(경합) 외에 실패 복구가 더 걸지 않는다
         assertEquals(2, scheduler.scheduledCalls.size)
     }
+
+    @Test
+    fun `forget 은 걸린 예약을 취소하고 낡은 실행을 무시하게 만든다`() {
+        timer.restart(tableId)
+
+        timer.forget(tableId)
+
+        assertTrue(scheduler.scheduledCalls[0].future.cancelled)
+        assertNull(timer.remaining(tableId))
+        scheduler.scheduledCalls[0].task.run()
+        assertEquals(0, useCase.calls.size)
+    }
 }

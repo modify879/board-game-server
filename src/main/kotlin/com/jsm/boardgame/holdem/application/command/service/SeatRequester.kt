@@ -14,6 +14,8 @@ import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 
 /**
  * 착석 요청의 사전 조건 검사와 대기열 삽입. 착석(SitDownService)과 테이블 생성(CreateTableService)이
@@ -54,6 +56,16 @@ class SeatRequester(
         }
 
         val position = joinQueue.enqueue(tableId, userId, postBlindImmediately)
+        // 인메모리 대기열은 트랜잭션을 모른다 — 호출자가 롤백하면 항목만 남아 사용자가 어디에도 못 앉게 된다.
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+                override fun afterCompletion(status: Int) {
+                    if (status == TransactionSynchronization.STATUS_ROLLED_BACK && joinQueue.tableOf(userId) == tableId) {
+                        joinQueue.removeByUserId(userId)
+                    }
+                }
+            })
+        }
         eventPublisher.publishEvent(JoinRequestsDue(tableId))
         return position
     }

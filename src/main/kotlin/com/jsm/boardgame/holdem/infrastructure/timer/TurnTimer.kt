@@ -77,6 +77,12 @@ class TurnTimer(
         scheduled[event.tableId] = ScheduledExpiry(future, token)
     }
 
+    /** 테이블이 닫히면 예약과 토큰을 치운다. 토큰이 사라지면 이미 깨어난 낡은 실행도 걸러진다. */
+    fun forget(tableId: TableId) {
+        scheduled.remove(tableId)?.future?.cancel(false)
+        tokens.remove(tableId)
+    }
+
     override fun remaining(tableId: TableId): Duration? {
         val future = scheduled[tableId]?.future ?: return null
         return Duration.ofMillis(maxOf(0L, future.getDelay(TimeUnit.MILLISECONDS)))

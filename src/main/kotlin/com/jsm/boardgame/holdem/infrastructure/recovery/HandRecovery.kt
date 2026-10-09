@@ -149,6 +149,12 @@ class HandRecovery(
         log.info("테이블 {} 복구 유예(3분)를 시작합니다: 대기 사용자={}", tableId.value, allUserIds)
     }
 
+    /** 테이블이 닫히면 복구 유예와 토큰을 치운다. 토큰이 사라지면 이미 깨어난 타임아웃도 걸러진다. */
+    fun forget(tableId: TableId) {
+        pending.remove(tableId)?.future?.cancel(false)
+        tokens.remove(tableId)
+    }
+
     @EventListener
     fun onSessionConnected(event: SessionConnectedEvent) {
         val userId = event.user?.name?.toLongOrNull() ?: return

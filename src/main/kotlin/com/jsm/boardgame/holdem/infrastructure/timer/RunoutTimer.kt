@@ -54,6 +54,12 @@ class RunoutTimer(
         schedule(event.tableId, token, stepDelay)
     }
 
+    /** 테이블이 닫히면 예약과 토큰을 치운다. 토큰이 사라지면 이미 깨어난 낡은 걸음도 걸러진다. */
+    fun forget(tableId: TableId) {
+        scheduled.remove(tableId)?.future?.cancel(false)
+        tokens.remove(tableId)
+    }
+
     // AFTER_COMMIT 리스너라 호출자에게 던지면 안 된다.
     private fun schedule(tableId: TableId, token: Long, delay: Duration) {
         try {

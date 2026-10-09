@@ -191,6 +191,11 @@ class ConnectionTimer(
         }
     }
 
+    /** 테이블이 닫히면 그 테이블의 퇴장 예약을 버린다 — 앉을 자리가 없다. userId 기준 맵은 사람 단위라 그대로 둔다. */
+    fun forget(tableId: TableId) {
+        pendingStandUps.remove(tableId)
+    }
+
     @TransactionalEventListener
     fun onHandBroadcastRequested(event: HandBroadcastRequested) {
         if (event.hand != null && !event.hand.isFinished) return

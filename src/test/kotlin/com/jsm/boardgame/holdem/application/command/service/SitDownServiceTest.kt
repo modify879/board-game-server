@@ -18,6 +18,9 @@ import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import com.jsm.boardgame.holdem.infrastructure.queue.InMemoryJoinQueue
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
+import org.springframework.transaction.support.TransactionSynchronizationUtils
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -201,5 +204,43 @@ class SitDownServiceTest {
         service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1))
 
         assertFalse(joinQueue.entriesOf(tableId).single().postBlindImmediately)
+    }
+
+    @Test
+    fun `호출자의 트랜잭션이 롤백되면 대기열 항목도 사라지고 다시 앉을 수 있다`() {
+        val tableId = createTable()
+        userConnections.connect(1)
+
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, postBlindImmediately = true))
+            assertTrue(joinQueue.isQueued(1))
+            TransactionSynchronizationUtils.invokeAfterCompletion(
+                TransactionSynchronizationManager.getSynchronizations(), TransactionSynchronization.STATUS_ROLLED_BACK,
+            )
+        } finally {
+            TransactionSynchronizationManager.clear()
+        }
+
+        assertFalse(joinQueue.isQueued(1))
+        assertEquals(1, service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, postBlindImmediately = true)))
+    }
+
+    @Test
+    fun `호출자의 트랜잭션이 커밋되면 대기열 항목이 남는다`() {
+        val tableId = createTable()
+        userConnections.connect(1)
+
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, postBlindImmediately = true))
+            TransactionSynchronizationUtils.invokeAfterCompletion(
+                TransactionSynchronizationManager.getSynchronizations(), TransactionSynchronization.STATUS_COMMITTED,
+            )
+        } finally {
+            TransactionSynchronizationManager.clear()
+        }
+
+        assertTrue(joinQueue.isQueued(1))
     }
 }
