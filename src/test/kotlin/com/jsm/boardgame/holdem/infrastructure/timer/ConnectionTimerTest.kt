@@ -9,7 +9,6 @@ import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceCo
 import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceUseCase
 import com.jsm.boardgame.common.error.ErrorCode
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
-import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
 import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
 import com.jsm.boardgame.holdem.application.port.TableExecutor

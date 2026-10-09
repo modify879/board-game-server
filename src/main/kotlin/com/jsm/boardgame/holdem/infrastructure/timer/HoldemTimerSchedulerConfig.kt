@@ -13,7 +13,7 @@ import org.springframework.scheduling.concurrent.SimpleAsyncTaskScheduler
  * `spring.threads.virtual.enabled` 는 Tomcat 등 다른 실행기까지 바꾸므로 쓰지 않는다.
  */
 @Configuration
-class TurnTimerSchedulerConfig {
+class HoldemTimerSchedulerConfig {
 
     @Bean
     fun taskScheduler(): TaskScheduler = SimpleAsyncTaskScheduler().apply {

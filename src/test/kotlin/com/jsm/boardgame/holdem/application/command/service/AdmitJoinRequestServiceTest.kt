@@ -108,7 +108,7 @@ class AdmitJoinRequestServiceTest {
     private val handStarter = HandStarter(tables, handStore, AdmitJoinRequestServiceFakeLastHandResultStore(), identityShuffler, eventPublisher, countdown)
     private val service = AdmitJoinRequestService(tables, handStore, walletTransfer, handStarter)
 
-    /** 특정 좌석 번호에 특정 버이인으로 미리 앉혀 둔다 — sitDown 이 더 이상 좌석을 고르지 않으므로
+    /** 특정 좌석 번호에 특정 버이인으로 미리 앉혀 둔다 — sitDown 은 좌석을 고르지 않으므로
      *  reconstitute 로 원하는 좌석 배치를 직접 만든다. */
     private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): TableId {
         var table = HoldemTable.create("test-table")

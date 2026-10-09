@@ -17,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional
 
 /**
  * 대기열 맨 앞 항목 하나를 자기만의 트랜잭션으로 착석시킨다. REQUIRES_NEW 가 필요한 이유는
- * DropJoinRequestService(옛) 와 같다 — 이 메서드를 부르는 ProcessJoinRequestsService 는
+ * 이 메서드를 부르는 ProcessJoinRequestsService 는
  * JoinRequestsProcessor(@TransactionalEventListener, 기본 phase=AFTER_COMMIT)에서 실행되어,
  * 실행 시점에 방금 커밋된 바깥 트랜잭션의 리소스가 아직 스레드에 바인딩된 채로 남아 있다
  * (모든 afterCommit 동기화가 끝나야 해제된다). 기본 REQUIRED 를 쓰면 이미 커밋된 그 트랜잭션에

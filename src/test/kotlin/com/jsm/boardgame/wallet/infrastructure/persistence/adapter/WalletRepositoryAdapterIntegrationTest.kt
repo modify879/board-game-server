@@ -24,7 +24,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 /**
- * `WalletRepositoryAdapter.save()` 가 DB CHECK/unique 제약, 낙관적 락 충돌을
+ * `WalletRepositoryAdapter.save()` 가 DB CHECK/unique/FK 제약 위반을
  * 도메인 예외로 번역하는 경로를 검증한다.
  *
  * 여기서 검증하는 것은 도메인 검사(`Wallet.record` 의 잔액 부족 검사)가 아니라

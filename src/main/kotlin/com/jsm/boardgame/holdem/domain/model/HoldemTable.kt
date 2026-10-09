@@ -88,12 +88,12 @@ class HoldemTable private constructor(
         seat.applyPresence(presence)
     }
 
-    /** BB 가 이 좌석에 자연스럽게 도달했을 때 StartHandService 가 부른다. 대기 중이 아니었으면 아무 일도 없다. */
+    /** BB 가 이 좌석에 자연스럽게 도달했을 때 HandStarter 가 부른다. 대기 중이 아니었으면 아무 일도 없다. */
     internal fun clearAwaitingBigBlind(seatNo: Int) {
         seats[seatNo]?.clearAwaitingBigBlind()
     }
 
-    /** 즉시 포스팅을 빚진 좌석이 처음 핸드에 참가할 때 StartHandService 가 부른다. */
+    /** 즉시 포스팅을 빚진 좌석이 처음 핸드에 참가할 때 HandStarter 가 부른다. */
     internal fun consumeImmediatePost(seatNo: Int) {
         seats[seatNo]?.consumeImmediatePost()
     }

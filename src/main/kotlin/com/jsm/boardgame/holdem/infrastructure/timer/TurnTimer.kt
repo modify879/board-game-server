@@ -100,9 +100,9 @@ class TurnTimer(
         return Duration.ofMillis(maxOf(0L, future.getDelay(TimeUnit.MILLISECONDS)))
     }
 
-    // TableExecutor 가 이 만료를 그 테이블의 실제 플레이어 액션과 같은 스레드에 직렬화하므로,
-    // 이 사이에 다른 액션이 먼저 커밋돼 차례가 넘어갔더라도 ExpireTurnService 의 stale 가드
-    // (toActSeatNo != seatNo 면 no-op)만으로 안전하다 - 더 이상 경합 자체가 나지 않는다.
+    // TableExecutor 가 이 만료를 그 테이블의 플레이어 액션과 같은 스레드에 직렬화한다.
+    // 그 전에 다른 액션이 먼저 커밋돼 차례가 넘어갔어도 ExpireTurnService 의 stale 가드
+    // (toActSeatNo != seatNo 면 no-op)로 안전하다.
     private fun onExpire(tableId: TableId, seatNo: Int, token: Long) {
         if (tokens[tableId]?.get() != token) return
         // 실패하면 이 만료를 대신할 이벤트가 없어 차례가 영영 안 넘어간다 — 다시 걸고, 안 되면 환불한다(그것도 다시 건다).

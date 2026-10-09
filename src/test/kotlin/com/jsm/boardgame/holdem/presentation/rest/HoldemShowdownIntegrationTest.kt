@@ -181,7 +181,7 @@ class HoldemShowdownIntegrationTest {
         val handler = object : StompSessionHandlerAdapter() {}
         val future = stompClient.connectAsync("ws://localhost:$port/ws", null, connectHeaders, handler)
         future.get(5, TimeUnit.SECONDS)
-        // ponytail: session left open, cleaned up when the test JVM/context shuts down.
+        // session left open, cleaned up when the test JVM/context shuts down.
     }
 
     /** 좌석은 고를 수 없다(항상 대기열, FIFO) — POST 전에 STOMP 로 먼저 연결한다. */
@@ -202,7 +202,7 @@ class HoldemShowdownIntegrationTest {
         error("착석이 시간 안에 끝나지 않았습니다: userId=$userId")
     }
 
-    /** 수동 시작 엔드포인트가 없으므로 시스템 진입점을 직접 불러 결정적으로 시작시킨다. */
+    /** 시작은 시스템 트리거뿐이라 진입점을 직접 불러 결정적으로 시작시킨다. */
     private fun startHand(tableId: Long) {
         startScheduledHandUseCase.start(StartScheduledHandCommand(tableId))
     }
