@@ -65,7 +65,7 @@ class CancelHandService(
         for ((seatNo, userId) in departed) {
             val contributed = departedRefunds.getValue(seatNo)
             if (contributed.isPositive()) {
-                walletTransfer.fromGame(userId, contributed.amount, tableId.value, memo = "holdem")
+                walletTransfer.fromGame(userId, contributed.amount, tableId, memo = "holdem")
             }
         }
 

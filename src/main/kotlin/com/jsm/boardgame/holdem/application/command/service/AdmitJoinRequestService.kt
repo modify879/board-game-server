@@ -49,7 +49,7 @@ class AdmitJoinRequestService(
         }
 
         // 잔액이 BB 미만이면 sitDown 이 BuyInOutOfRange 로 던지고 REQUIRES_NEW 가 이체까지 롤백한다.
-        val amount = walletTransfer.allToGame(command.userId, tableId.value, memo = "holdem")
+        val amount = walletTransfer.allToGame(command.userId, tableId, memo = "holdem")
         table.sitDown(command.userId, Chips.of(amount), command.postBlindImmediately)
         val seatNo = table.seatOf(command.userId)!!.seatNo
         handStarter.rescheduleOnEntry(tableId, table)

@@ -10,7 +10,7 @@ import com.jsm.boardgame.holdem.domain.model.TableId
  * 락 순서는 테이블 → 지갑이다 — 호출자가 이미 테이블을 잠갔다. 합쳤으면 true.
  */
 internal fun WalletTransfer.topUpSeat(tableId: TableId, table: HoldemTable, seatNo: Int, userId: Long): Boolean {
-    val added = allToGame(userId, tableId.value, memo = "holdem")
+    val added = allToGame(userId, tableId, memo = "holdem")
     if (added <= 0) return false
     table.topUp(seatNo, Chips.of(added))
     return true

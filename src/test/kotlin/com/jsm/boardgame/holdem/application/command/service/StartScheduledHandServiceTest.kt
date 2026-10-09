@@ -66,9 +66,9 @@ private class StartScheduledHandFakeWalletTransfer : WalletTransfer {
     /** 지갑 잔액. allToGame 은 잔액 전부를 돌려주고 0 으로 만든다. */
     val balances = mutableMapOf<Long, Long>()
 
-    override fun allToGame(userId: Long, tableId: Long, memo: String?): Long = balances.remove(userId) ?: 0
+    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long = balances.remove(userId) ?: 0
 
-    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {
+    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) {
         error("HandStarter 는 fromGame 을 부르지 않는다")
     }
 }

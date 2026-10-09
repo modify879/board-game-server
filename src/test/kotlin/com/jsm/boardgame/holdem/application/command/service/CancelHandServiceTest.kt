@@ -60,15 +60,15 @@ private class CancelHandFakeHandStore : HandStore {
 }
 
 private class CancelHandFakeWalletTransfer : WalletTransfer {
-    data class FromGameCall(val userId: Long, val amount: Long, val tableId: Long, val memo: String?)
+    data class FromGameCall(val userId: Long, val amount: Long, val tableId: TableId, val memo: String?)
 
     val fromGameCalls = mutableListOf<FromGameCall>()
 
-    override fun allToGame(userId: Long, tableId: Long, memo: String?): Long {
+    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long {
         error("CancelHandService 는 allToGame 을 부르지 않는다")
     }
 
-    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {
+    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) {
         fromGameCalls += FromGameCall(userId, amount, tableId, memo)
     }
 }
@@ -207,7 +207,7 @@ class CancelHandServiceTest {
         val refund = walletTransfer.fromGameCalls.single()
         assertEquals(2L, refund.userId)
         assertEquals(100L, refund.amount)
-        assertEquals(tableId.value, refund.tableId)
+        assertEquals(tableId, refund.tableId)
         // 기립 때 받은 잔여 스택 + 취소 환불 = 시작 스택
         assertEquals(10_000L, standUpReturn.amount + refund.amount)
         assertEquals(30_000L - 10_000L, saved.occupiedSeats().sumOf { it.stack.amount })

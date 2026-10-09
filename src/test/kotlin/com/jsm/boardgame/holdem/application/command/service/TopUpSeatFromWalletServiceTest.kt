@@ -48,12 +48,12 @@ private class TopUpFakeWalletTransfer : WalletTransfer {
     val balances = mutableMapOf<Long, Long>()
     val allToGameCalls = mutableListOf<Long>()
 
-    override fun allToGame(userId: Long, tableId: Long, memo: String?): Long {
+    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long {
         allToGameCalls += userId
         return balances.remove(userId) ?: 0
     }
 
-    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) = error("충전 합산은 fromGame 을 부르지 않는다")
+    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) = error("충전 합산은 fromGame 을 부르지 않는다")
 }
 
 private class TopUpFakeTableExecutor : TableExecutor {
