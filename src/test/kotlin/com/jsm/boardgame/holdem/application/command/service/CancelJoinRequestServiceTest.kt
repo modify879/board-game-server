@@ -41,8 +41,8 @@ class CancelJoinRequestServiceTest {
         val notifier = CancelJoinRequestFakeJoinQueueNotifier()
         val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
         val tableId = TableId(1L)
-        queue.enqueue(tableId, userId = 1L, buyIn = Chips.of(10_000), postBlindImmediately = false)
-        queue.enqueue(tableId, userId = 2L, buyIn = Chips.of(10_000), postBlindImmediately = false)
+        queue.enqueue(tableId, userId = 1L, postBlindImmediately = false)
+        queue.enqueue(tableId, userId = 2L, postBlindImmediately = false)
 
         service.cancel(CancelJoinRequestCommand(tableId.value, userId = 1L))
 
@@ -68,8 +68,8 @@ class CancelJoinRequestServiceTest {
         val notifier = CancelJoinRequestFakeJoinQueueNotifier()
         val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
         val tableId = TableId(1L)
-        queue.enqueue(tableId, userId = 1L, buyIn = Chips.of(10_000), postBlindImmediately = false)
-        queue.enqueue(tableId, userId = 2L, buyIn = Chips.of(10_000), postBlindImmediately = false)
+        queue.enqueue(tableId, userId = 1L, postBlindImmediately = false)
+        queue.enqueue(tableId, userId = 2L, postBlindImmediately = false)
 
         service.cancel(CancelJoinRequestCommand(tableId.value, userId = 2L))
 
@@ -83,7 +83,7 @@ class CancelJoinRequestServiceTest {
         val notifier = CancelJoinRequestFakeJoinQueueNotifier()
         val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
         val tableId = TableId(1L)
-        queue.enqueue(tableId, userId = 1L, buyIn = Chips.of(10_000), postBlindImmediately = false)
+        queue.enqueue(tableId, userId = 1L, postBlindImmediately = false)
         queue.removeByUserId(1L)
 
         val e = assertFailsWith<JoinRequestNotFoundException> {

@@ -160,9 +160,9 @@ class NextHandTimerIntegrationTest {
             .get(5, TimeUnit.SECONDS)
     }
 
-    private fun sitDown(accessToken: String, tableId: Long, buyIn: Long = 10_000L): ResultActions {
+    private fun sitDown(accessToken: String, tableId: Long): ResultActions {
         tryConnect(accessToken)
-        return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{"buyIn":$buyIn}""")
+        return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{}""")
     }
 
     private fun awaitSeated(userId: Long, timeoutMs: Long = 5_000) {
@@ -185,10 +185,10 @@ class NextHandTimerIntegrationTest {
 
     private data class SeatedUser(val userId: Long, val accessToken: String)
 
-    private fun seatNewUserAt(tableId: Long, buyIn: Long = 10_000L, fundAmount: Long = 15_000L): SeatedUser {
+    private fun seatNewUserAt(tableId: Long, fundAmount: Long = 10_000L): SeatedUser {
         val (userId, accessToken) = signUpAndLogin()
         fundWallet(userId, fundAmount)
-        sitDown(accessToken, tableId, buyIn).andExpect(status().isAccepted)
+        sitDown(accessToken, tableId).andExpect(status().isAccepted)
         awaitSeated(userId)
         return SeatedUser(userId, accessToken)
     }

@@ -37,7 +37,7 @@ class ProcessJoinRequestsService(
             try {
                 when (
                     val result = admitJoinRequestUseCase.admit(
-                        AdmitJoinRequestCommand(tableId.value, head.userId, head.buyIn.amount, head.postBlindImmediately),
+                        AdmitJoinRequestCommand(tableId.value, head.userId, head.postBlindImmediately),
                     )
                 ) {
                     is AdmitJoinRequestResult.Blocked -> return

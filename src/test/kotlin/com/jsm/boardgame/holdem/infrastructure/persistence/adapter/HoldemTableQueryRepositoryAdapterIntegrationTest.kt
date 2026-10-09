@@ -58,6 +58,7 @@ class HoldemTableQueryRepositoryAdapterIntegrationTest {
 
         assertEquals(saved.id!!.value, found?.tableId)
         assertEquals(1, found?.seatNo)
+        assertEquals(buyIn.amount, found?.stack)
     }
 
     @Test

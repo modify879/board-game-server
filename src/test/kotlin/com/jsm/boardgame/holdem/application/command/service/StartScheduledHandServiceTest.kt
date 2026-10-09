@@ -5,6 +5,7 @@ import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
+import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -61,14 +62,26 @@ private class StartScheduledHandFakeNextHandCountdown : NextHandCountdown {
     override fun remaining(tableId: TableId): Duration? = null
 }
 
+private class StartScheduledHandFakeWalletTransfer : WalletTransfer {
+    /** 지갑 잔액. allToGame 은 잔액 전부를 돌려주고 0 으로 만든다. */
+    val balances = mutableMapOf<Long, Long>()
+
+    override fun allToGame(userId: Long, tableId: Long, memo: String?): Long = balances.remove(userId) ?: 0
+
+    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {
+        error("HandStarter 는 fromGame 을 부르지 않는다")
+    }
+}
+
 class StartScheduledHandServiceTest {
 
     private val tables = StartScheduledHandFakeTableRepository()
     private val handStore = StartScheduledHandFakeHandStore()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
+    private val walletTransfer = StartScheduledHandFakeWalletTransfer()
     private val countdown = StartScheduledHandFakeNextHandCountdown()
-    private val handStarter = HandStarter(tables, handStore, StartScheduledHandServiceFakeLastHandResultStore(), identityShuffler, eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, StartScheduledHandServiceFakeLastHandResultStore(), identityShuffler, eventPublisher, countdown, walletTransfer)
     private val service = StartScheduledHandService(tables, handStore, handStarter)
 
     private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): TableId {

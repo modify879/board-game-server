@@ -14,7 +14,8 @@ import java.time.Clock
 import java.time.Instant
 
 /**
- * 홀덤 등 게임의 바이인 입구다. 지갑에서 게임 테이블로 칩을 옮긴다. 지갑이 없으면 lazy 로 만든다.
+ * 지갑에서 게임 테이블로 지정한 금액만큼 칩을 옮긴다(다른 게임용 공개 API). 지갑이 없으면 lazy 로 만든다.
+ * 홀덤은 잔액 전부를 옮기는 [TransferBalanceToGameService] 를 쓴다.
  *
  * 기본 전파(REQUIRED)를 그대로 쓴다 — REQUIRES_NEW 로 새 트랜잭션을 열면 호출자(게임 착석
  * 유스케이스)의 트랜잭션과 분리되어 지갑 차감과 착석이 원자적이지 않게 된다. 잔액이 부족하면

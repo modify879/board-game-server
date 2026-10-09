@@ -52,6 +52,12 @@ class HoldemTable private constructor(
         return seat
     }
 
+    /** 좌석 스택에 [amount] 를 더한다. 핸드 진행 중에는 부르면 안 된다 — 도메인은 모르니 호출 위치(HandStarter)가 보장한다. */
+    fun topUp(seatNo: Int, amount: Chips) {
+        val seat = seats[seatNo] ?: error("점유되지 않은 좌석에 충전할 수 없다: seatNo=$seatNo, occupied=${seats.keys.sorted()}")
+        seat.applyStack(seat.stack + amount)
+    }
+
     fun hasEmptySeat(): Boolean = seats.size < MAX_SEATS
 
     fun standUp(userId: Long): Chips {

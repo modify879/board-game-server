@@ -4,7 +4,7 @@ interface AdmitJoinRequestUseCase {
     fun admit(command: AdmitJoinRequestCommand): AdmitJoinRequestResult
 }
 
-data class AdmitJoinRequestCommand(val tableId: Long, val userId: Long, val buyIn: Long, val postBlindImmediately: Boolean)
+data class AdmitJoinRequestCommand(val tableId: Long, val userId: Long, val postBlindImmediately: Boolean)
 
 sealed interface AdmitJoinRequestResult {
     data class Seated(val seatNo: Int) : AdmitJoinRequestResult

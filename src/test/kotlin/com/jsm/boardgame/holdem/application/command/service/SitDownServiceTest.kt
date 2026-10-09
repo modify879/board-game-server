@@ -6,6 +6,7 @@ import com.jsm.boardgame.holdem.application.exception.NotConnectedException
 import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.UserConnections
+import com.jsm.boardgame.holdem.application.port.WalletBalance
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
@@ -69,14 +70,21 @@ private class SitDownFakeUserConnections : UserConnections {
     override fun hasOtherSession(userId: Long, excludingSessionId: String): Boolean = false
 }
 
+private class SitDownFakeWalletBalance : WalletBalance {
+    val balances = mutableMapOf<Long, Long>()
+
+    override fun balanceOf(userId: Long): Long = balances[userId] ?: 0
+}
+
 class SitDownServiceTest {
 
     private val tables = SitDownFakeHoldemTableRepository()
     private val handStore = SitDownFakeHandStore()
     private val joinQueue = InMemoryJoinQueue()
     private val userConnections = SitDownFakeUserConnections()
+    private val walletBalance = SitDownFakeWalletBalance().apply { balances[1L] = 8_000; balances[2L] = 8_000 }
     private val eventPublisher = ApplicationEventPublisher { }
-    private val service = SitDownService(tables, handStore, joinQueue, userConnections, eventPublisher)
+    private val service = SitDownService(tables, handStore, joinQueue, userConnections, walletBalance, eventPublisher)
 
     private fun createTable(): TableId = tables.save(HoldemTable.create("테스트 테이블")).id!!
 
@@ -85,7 +93,7 @@ class SitDownServiceTest {
         userConnections.connect(1)
 
         val e = assertFailsWith<TableNotFoundException> {
-            service.sitDown(SitDownCommand(tableId = 999, userId = 1, buyIn = 8_000))
+            service.sitDown(SitDownCommand(tableId = 999, userId = 1))
         }
         assertEquals(HoldemErrorCode.TABLE_NOT_FOUND, e.errorCode)
     }
@@ -99,7 +107,7 @@ class SitDownServiceTest {
         userConnections.connect(1)
 
         val e = assertFailsWith<AlreadySeatedException> {
-            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000))
+            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1))
         }
         assertEquals(HoldemErrorCode.ALREADY_SEATED, e.errorCode)
     }
@@ -117,7 +125,7 @@ class SitDownServiceTest {
         userConnections.connect(1)
 
         val e = assertFailsWith<HandInProgressException> {
-            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000))
+            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1))
         }
         assertEquals(HoldemErrorCode.HAND_IN_PROGRESS, e.errorCode)
     }
@@ -125,23 +133,24 @@ class SitDownServiceTest {
     @Test
     fun `이미 다른 테이블 대기열에 있으면 ALREADY_SEATED`() {
         val otherTableId = createTable()
-        joinQueue.enqueue(otherTableId, 1, Chips.of(8_000), false)
+        joinQueue.enqueue(otherTableId, 1, false)
         val tableId = createTable()
         userConnections.connect(1)
 
         val e = assertFailsWith<AlreadySeatedException> {
-            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000))
+            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1))
         }
         assertEquals(HoldemErrorCode.ALREADY_SEATED, e.errorCode)
     }
 
     @Test
-    fun `바이인이 빅블라인드 미만이면 BUY_IN_OUT_OF_RANGE`() {
+    fun `지갑 잔액이 빅블라인드 미만이면 BUY_IN_OUT_OF_RANGE`() {
         val tableId = createTable()
         userConnections.connect(1)
+        walletBalance.balances[1L] = 100
 
         val e = assertFailsWith<BuyInOutOfRangeException> {
-            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 100))
+            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1))
         }
         assertEquals(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, e.errorCode)
     }
@@ -151,7 +160,7 @@ class SitDownServiceTest {
         val tableId = createTable()
 
         val e = assertFailsWith<NotConnectedException> {
-            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000))
+            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1))
         }
         assertEquals(HoldemErrorCode.NOT_CONNECTED, e.errorCode)
         assertFalse(joinQueue.isQueued(1))
@@ -162,12 +171,11 @@ class SitDownServiceTest {
         val tableId = createTable()
         userConnections.connect(1)
 
-        val position = service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000, postBlindImmediately = true))
+        val position = service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, postBlindImmediately = true))
 
         assertEquals(1, position)
         val entry = joinQueue.entriesOf(tableId).single()
         assertEquals(1L, entry.userId)
-        assertEquals(Chips.of(8_000), entry.buyIn)
         assertTrue(entry.postBlindImmediately)
     }
 
@@ -177,8 +185,8 @@ class SitDownServiceTest {
         userConnections.connect(1)
         userConnections.connect(2)
 
-        service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000))
-        val position = service.sitDown(SitDownCommand(tableId = tableId.value, userId = 2, buyIn = 8_000))
+        service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1))
+        val position = service.sitDown(SitDownCommand(tableId = tableId.value, userId = 2))
 
         assertEquals(2, position)
         val entries = joinQueue.entriesOf(tableId)
@@ -190,7 +198,7 @@ class SitDownServiceTest {
         val tableId = createTable()
         userConnections.connect(1)
 
-        service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000))
+        service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1))
 
         assertFalse(joinQueue.entriesOf(tableId).single().postBlindImmediately)
     }

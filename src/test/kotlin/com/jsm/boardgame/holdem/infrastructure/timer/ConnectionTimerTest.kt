@@ -232,8 +232,8 @@ class ConnectionTimerTest {
         val joinQueue = InMemoryJoinQueue()
         val notifier = ConnectionTimerFakeJoinQueueNotifier()
         val tableId = TableId(5L)
-        joinQueue.enqueue(tableId, 42L, Chips.of(10_000), false)
-        joinQueue.enqueue(tableId, 43L, Chips.of(10_000), false)
+        joinQueue.enqueue(tableId, 42L, false)
+        joinQueue.enqueue(tableId, 43L, false)
         val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase, tables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
 
         timer.onSessionDisconnect(disconnectEvent(42L))
@@ -254,7 +254,7 @@ class ConnectionTimerTest {
         val notifier = ConnectionTimerFakeJoinQueueNotifier()
         val userConnections = ConnectionTimerFakeUserConnections().apply { hasOtherSessionUserIds += 42L }
         val tableId = TableId(5L)
-        joinQueue.enqueue(tableId, 42L, Chips.of(10_000), false)
+        joinQueue.enqueue(tableId, 42L, false)
         val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase, tables, joinQueue, notifier, userConnections, ConnectionTimerFakeTableExecutor())
 
         timer.onSessionDisconnect(disconnectEvent(42L))
@@ -273,7 +273,7 @@ class ConnectionTimerTest {
         val notifier = ConnectionTimerFakeJoinQueueNotifier()
         val userConnections = ConnectionTimerFakeUserConnections()
         val tableId = TableId(5L)
-        joinQueue.enqueue(tableId, 42L, Chips.of(10_000), false)
+        joinQueue.enqueue(tableId, 42L, false)
         val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase, tables, joinQueue, notifier, userConnections, ConnectionTimerFakeTableExecutor())
 
         timer.onSessionDisconnect(disconnectEvent(42L))

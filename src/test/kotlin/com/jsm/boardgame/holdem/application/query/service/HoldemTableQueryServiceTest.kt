@@ -58,7 +58,7 @@ class HoldemTableQueryServiceTest {
 
     @Test
     fun `핸드가 진행 중이면 로비 조회를 거부한다`() {
-        tableQuery.location = SeatLocation(tableId = 5L, seatNo = 1)
+        tableQuery.location = SeatLocation(tableId = 5L, seatNo = 1, stack = 1_000L)
         handStore.put(5L, sampleHand())
 
         val e = assertFailsWith<HandInProgressException> {

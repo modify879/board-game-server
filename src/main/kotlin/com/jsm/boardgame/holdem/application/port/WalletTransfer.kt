@@ -5,6 +5,7 @@ package com.jsm.boardgame.holdem.application.port
  * infrastructure/acl 의 어댑터가 wallet 의 공개 application 만 부른다.
  */
 interface WalletTransfer {
-    fun toGame(userId: Long, amount: Long, tableId: Long, memo: String?)
+    /** 지갑 잔액 전부를 테이블로 옮기고 옮긴 금액을 돌려준다. 잔액이 0이면 0이다. */
+    fun allToGame(userId: Long, tableId: Long, memo: String?): Long
     fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?)
 }
