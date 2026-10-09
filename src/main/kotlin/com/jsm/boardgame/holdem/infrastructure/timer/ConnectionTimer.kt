@@ -143,7 +143,6 @@ class ConnectionTimer(
      */
     fun beginWatch(userId: Long) {
         suspended.remove(userId)
-        dispatchForUser(userId) { updateSeatPresenceUseCase.update(UpdateSeatPresenceCommand(userId, SeatPresence.DISCONNECTED.name)) }
 
         scheduled.remove(userId)?.future?.cancel(false)
         val token = tokens.computeIfAbsent(userId) { AtomicLong() }.incrementAndGet()
@@ -157,6 +156,8 @@ class ConnectionTimer(
             // 컨텍스트 종료 중에는 퇴장 타이머를 걸 이유가 없고, 이를 ERROR로 두면 진짜 ERROR가 묻힌다
             log.debug("컨텍스트 종료 중이라 연결 만료 예약을 걸지 못했습니다: userId={}", userId)
         }
+        // 타이머를 먼저 건다 — DB 장애로 presence 갱신이 던져도 만료 타이머는 이미 걸려 있어야 사용자가 치워진다.
+        dispatchForUser(userId) { updateSeatPresenceUseCase.update(UpdateSeatPresenceCommand(userId, SeatPresence.DISCONNECTED.name)) }
     }
 
     /**
@@ -178,7 +179,13 @@ class ConnectionTimer(
 
     private fun onExpire(userId: Long, token: Long) {
         if (tokens[userId]?.get() != token) return
-        val reservedTableId = dispatchForUser(userId) { expireConnectionUseCase.expire(ExpireConnectionCommand(userId)) }
+        val reservedTableId = try {
+            dispatchForUser(userId) { expireConnectionUseCase.expire(ExpireConnectionCommand(userId)) }
+        } catch (e: Exception) {
+            log.error("연결 만료 처리에 실패했습니다: userId={}", userId, e)
+            rearmWatch(userId, token)
+            return
+        }
         if (reservedTableId != null) {
             pendingStandUps.computeIfAbsent(reservedTableId) { ConcurrentHashMap.newKeySet() }.add(userId)
         }
@@ -190,9 +197,25 @@ class ConnectionTimer(
         val userIds = pendingStandUps.remove(event.tableId) ?: return
         tableExecutor.call(event.tableId) {
             for (userId in userIds) {
-                standUpUseCase.standUp(StandUpCommand(userId))
-                log.info("핸드 종료로 예약된 퇴장을 실행했습니다: userId={}, tableId={}", userId, event.tableId.value)
+                try {
+                    standUpUseCase.standUp(StandUpCommand(userId))
+                    log.info("핸드 종료로 예약된 퇴장을 실행했습니다: userId={}, tableId={}", userId, event.tableId.value)
+                } catch (e: Exception) {
+                    // 한 명의 실패가 나머지 퇴장을 버리면 안 된다 — 일반 3분 감시로 되돌려 자가 치유한다.
+                    log.error("예약된 퇴장에 실패했습니다: userId={}, tableId={}", userId, event.tableId.value, e)
+                    rearmWatch(userId, tokens[userId]?.get())
+                }
             }
+        }
+    }
+
+    /** 실패한 만료를 일반 3분 감시로 되돌린다. 그 사이 재접속했거나 감시가 바뀌었으면(토큰·연결 확인) 건드리지 않는다. */
+    private fun rearmWatch(userId: Long, token: Long?) {
+        if (tokens[userId]?.get() != token || userConnections.isConnected(userId)) return
+        try {
+            beginWatch(userId)
+        } catch (e: Exception) {
+            log.error("연결 감시를 다시 걸지 못했습니다: userId={}", userId, e)
         }
     }
 

@@ -42,8 +42,8 @@ class SerialTableExecutor : TableExecutor {
                 currentTableId.remove()
             }
         })
-        // ponytail: 타임아웃 없이 get() 으로 기다린다 — task 가 걸리면 이 테이블 전체가
-        // 멈춘다. 지금은 감내한다(트랜잭션 자체의 타임아웃이 실질적인 상한선이다).
+        // ponytail: 호출자 타임아웃을 일부러 두지 않는다 — 타임아웃이 나도 task 는 계속 돌아 클라이언트에
+        // 실패를 알린 뒤에 커밋될 수 있다. 상한은 application.yaml 의 DB lock_timeout/statement_timeout 이다.
         return try {
             future.get()
         } catch (e: ExecutionException) {

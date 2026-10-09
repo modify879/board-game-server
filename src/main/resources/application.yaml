@@ -7,6 +7,13 @@ spring:
     compose:
       lifecycle-management: start_and_stop
 
+  datasource:
+    hikari:
+      # 모든 DB 대기에 상한을 둬 테이블 스레드가 영영 걸리지 않게 한다. lock_timeout < statement_timeout 이라
+      # 락 대기는 락 오류로 드러난다. idle_in_transaction 은 앱이 락을 쥔 채 트랜잭션 중간에 멈췄을 때의 안전망이다.
+      data-source-properties:
+        options: "-c lock_timeout=3s -c statement_timeout=10s -c idle_in_transaction_session_timeout=30s"
+
   data:
     web:
       pageable:

@@ -35,6 +35,7 @@ import java.time.ZoneOffset
 import java.util.concurrent.Delayed
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import kotlin.test.assertFailsWith
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -98,6 +99,10 @@ private class ConnectionTimerFakeExpireConnectionUseCase(
         calls += command
         return reservedTableId
     }
+}
+
+private class ConnectionTimerFailingExpireConnectionUseCase : ExpireConnectionUseCase {
+    override fun expire(command: ExpireConnectionCommand): TableId? = throw IllegalStateException("db down")
 }
 
 private class ConnectionTimerFakeStandUpUseCase : StandUpUseCase {
@@ -541,5 +546,72 @@ class ConnectionTimerTest {
         assertEquals(1, scheduler.scheduledCalls.size)
         scheduler.scheduledCalls[0].task.run()
         assertEquals(listOf(99L), expireUseCase.calls.map { it.userId })
+    }
+
+    @Test
+    fun `만료 처리가 실패하면 연결 감시를 다시 건다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        val presenceUseCase = ConnectionTimerFakeUpdateSeatPresenceUseCase()
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, ConnectionTimerFailingExpireConnectionUseCase(), ConnectionTimerFakeStandUpUseCase(), tables, InMemoryJoinQueue(), ConnectionTimerFakeJoinQueueNotifier(), ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
+
+        timer.onSessionDisconnect(disconnectEvent(42L))
+        scheduler.scheduledCalls[0].task.run()
+
+        assertEquals(2, scheduler.scheduledCalls.size)
+        assertEquals(fixedInstant.plus(Duration.ofMinutes(3)), scheduler.scheduledCalls[1].time)
+        assertEquals(SeatPresence.DISCONNECTED.name, presenceUseCase.calls.last().presence)
+    }
+
+    @Test
+    fun `만료 처리가 실패해도 이미 재접속한 사용자의 감시는 다시 걸지 않는다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        val connections = ConnectionTimerFakeUserConnections()
+        val timer = ConnectionTimer(scheduler, clock, ConnectionTimerFakeUpdateSeatPresenceUseCase(), ConnectionTimerFailingExpireConnectionUseCase(), ConnectionTimerFakeStandUpUseCase(), tables, InMemoryJoinQueue(), ConnectionTimerFakeJoinQueueNotifier(), connections, ConnectionTimerFakeTableExecutor())
+
+        timer.onSessionDisconnect(disconnectEvent(42L))
+        connections.connectedUserIds += 42L
+        scheduler.scheduledCalls[0].task.run()
+
+        assertEquals(1, scheduler.scheduledCalls.size)
+    }
+
+    @Test
+    fun `예약된 퇴장 하나가 실패해도 나머지는 실행되고 실패한 사용자는 감시를 다시 건다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        val tableId = TableId(7L)
+        val standUps = mutableListOf<Long>()
+        val standUpUseCase = object : StandUpUseCase {
+            override fun standUp(command: StandUpCommand) {
+                if (command.userId == 42L) throw IllegalStateException("db down")
+                standUps += command.userId
+            }
+        }
+        val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = tableId)
+        val timer = ConnectionTimer(scheduler, clock, ConnectionTimerFakeUpdateSeatPresenceUseCase(), expireUseCase, standUpUseCase, tables, InMemoryJoinQueue(), ConnectionTimerFakeJoinQueueNotifier(), ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
+
+        for (userId in listOf(42L, 43L)) {
+            timer.onSessionDisconnect(disconnectEvent(userId))
+        }
+        scheduler.scheduledCalls.toList().forEach { it.task.run() } // 두 명 모두 핸드 중 예약만 남는다
+        val before = scheduler.scheduledCalls.size
+
+        timer.onHandBroadcastRequested(HandBroadcastRequested(tableId, HoldemTable.create("t"), finishedHand()))
+
+        assertEquals(listOf(43L), standUps)
+        assertEquals(before + 1, scheduler.scheduledCalls.size)
+    }
+
+    @Test
+    fun `presence 갱신이 던져도 만료 타이머는 먼저 걸려 있고 예외는 그대로 전파된다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        val failingPresence = object : UpdateSeatPresenceUseCase {
+            override fun update(command: UpdateSeatPresenceCommand) = throw IllegalStateException("db down")
+        }
+        val timer = ConnectionTimer(scheduler, clock, failingPresence, ConnectionTimerFakeExpireConnectionUseCase(null), ConnectionTimerFakeStandUpUseCase(), tables, InMemoryJoinQueue(), ConnectionTimerFakeJoinQueueNotifier(), ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
+
+        assertFailsWith<IllegalStateException> { timer.beginWatch(42L) }
+
+        assertEquals(1, scheduler.scheduledCalls.size)
+        assertEquals(fixedInstant.plus(Duration.ofMinutes(3)), scheduler.scheduledCalls[0].time)
     }
 }

@@ -1,10 +1,12 @@
 package com.jsm.boardgame.common.web
 
 import com.jsm.boardgame.common.error.BusinessException
+import com.jsm.boardgame.common.error.CommonErrorCode
 import com.jsm.boardgame.common.error.ErrorKind
 import jakarta.servlet.http.HttpServletRequest
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
+import org.springframework.dao.TransientDataAccessException
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatusCode
@@ -31,6 +33,20 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
         logByStatus(status, e.errorCode.code, e.logMessage, e)
 
         return ResponseEntity.status(status).body(problemDetail)
+    }
+
+    // 락·문 타임아웃 같은 일시적 DB 실패. 롤백됐으므로 클라이언트가 안전하게 재시도할 수 있다.
+    @ExceptionHandler(TransientDataAccessException::class)
+    fun handleTransientDataAccessException(
+        e: TransientDataAccessException,
+        request: HttpServletRequest,
+    ): ResponseEntity<ProblemDetail> {
+        val status = HttpStatus.SERVICE_UNAVAILABLE
+        val code = CommonErrorCode.TEMPORARILY_UNAVAILABLE.code
+
+        logByStatus(status, code, e.javaClass.simpleName, e)
+
+        return ResponseEntity.status(status).body(problemDetail(status, code, request.requestURI))
     }
 
     @ExceptionHandler(Exception::class)
@@ -102,6 +118,7 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
         ErrorKind.CONFLICT -> HttpStatus.CONFLICT
         ErrorKind.NOT_FOUND -> HttpStatus.NOT_FOUND
         ErrorKind.FORBIDDEN -> HttpStatus.FORBIDDEN
+        ErrorKind.UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE
     }
 
     companion object {
