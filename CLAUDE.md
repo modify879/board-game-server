@@ -3,7 +3,7 @@
 여러 게임을 올릴 실시간 멀티플레이 서버. Kotlin 2.3 / Spring Boot 4.1 / Java 25 /
 PostgreSQL + Redis / 단일 Gradle 모듈.
 
-설계 결정의 배경은 `docs/architecture-decisions.md` 에 있다. 이 문서는 어기면 실제로 깨지는 것만 담는다.
+설계 결정의 배경은 `docs/decisions/README.md` 에 있다. 이 문서는 어기면 실제로 깨지는 것만 담는다.
 
 ## 명령어
 
@@ -18,23 +18,7 @@ Docker 가 떠 있어야 한다. 접속 정보는 `application.yaml` 에 적지 
 
 `APP_JWT_SECRET`(32바이트 이상)이 없으면 기동하지 않는다. `bootRun`·`test` 는 `build.gradle.kts` 가 개발용 키를 넣어준다 — IDE 에서 메인 클래스를 직접 실행하면 실행 구성의 환경 변수에 넣는다.
 
-## 테스트
-
-- 통합 테스트에는 `@Import(TestcontainersConfiguration::class)` 가 필요하다.
-  빠뜨리면 "Failed to determine a suitable driver class" 로 컨텍스트가 뜨지 않는다
-- 컨테이너가 필요한 테스트만 클래스 이름에 `IntegrationTest` 접미사를 붙인다
-- 목 라이브러리를 쓰지 않는다. 인메모리 페이크를 테스트 파일 안에 만든다
-- **페이크 이름에 테스트별 접두를 붙인다**(`RequestFakeWalletRepository`). top-level `private`
-  클래스는 파일 안에서만 보이지만 이름은 패키지를 차지해, 같은 패키지의 두 테스트가 같은
-  이름을 쓰면 `Redeclaration` 이다
-- 예외는 메시지가 아니라 `errorCode` 로 검증한다
-- 테스트 이름은 백틱을 쓴 한국어 문장
-- 지갑을 열거나 착석하는 통합 테스트(wallet, holdem)는 `UserRepository` 로 **실제 `users` 행을 먼저 만든다**.
-  `fk_wallets_user`·`fk_holdem_seats_user` 때문에 합성 userId 로 열면 FK 위반이다
-- Postgres·Redis 컨테이너는 JVM 당 한 벌로 모든 통합 테스트가 공유한다 — 다른 테스트가 남긴 데이터에 기대지 않는다.
-  이름은 `UniqueNames.suffix()`, Redis 등에 쓰는 합성 userId 는 실제 IDENTITY 와 겹치지 않는 대역(예: 1조부터)을 쓴다
-- 규칙을 테스트로 못 박을 때는 성격이 다른 경로를 여럿 잡는다 — 사전 체크 경로만 타면
-  DB 제약 번역이 한 번도 돌지 않은 채 테스트가 통과한다
+테스트 규칙은 `.claude/rules/testing.md`.
 
 ## 구조
 
@@ -86,6 +70,8 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 
 컨텍스트 전용 규칙은 `.claude/rules/<context>.md` 에 있고 그 컨텍스트 파일을 건드릴 때만 로드된다(`holdem`·`wallet`·`user`).
 
+주제별 규칙은 `.claude/rules/` 의 `testing`·`websocket`·`errors`·`persistence`·`transactions`·`domain-model` 에 있고, 해당 경로 파일을 읽거나 고칠 때만 로드된다.
+
 ## 규칙
 
 1. 게임 간 공유는 없다. `GameRule`/`Move`/`GameState` 같은 게임 공통 상위 타입을 만들지 않는다.
@@ -111,71 +97,13 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
    시계는 `common/config` 의 `Clock` 빈 하나를 공유한다 — `Instant.now()` 가 한 곳만 남아도 TTL 테스트가 흔들린다
 6. 히든 정보는 뷰어별로 마스킹한다. WebSocket 으로 도메인 객체나 전체 게임 상태를 내보내지 않는다.
    공개 뷰와 개인 뷰를 별도 타입으로 조립한다(holdem: `publicViewOf`/`privateViewOf`). 브로드캐스트의 기본값은 뷰어별로 다른 페이로드다
-   - 개인 채널은 `/user/queue/...` 로만 구독한다. 원시 `/queue` 구독은 `StompDestinationGuard` 가 막는다 —
-     열어두면 세션 id 만 알아도 남의 개인 큐를 엿본다
-   - 구독 인가 인터셉터는 목적지를 해석하지 못하면 거부한다(fail-closed). 통과시키면 형식만 비튼 목적지로
-     인가를 건너뛴다
-   - **CONNECT 프레임에서 `StompHeaderAccessor.wrap(message)` 로 `setUser` 하지 않는다.** `wrap` 은 새 인스턴스를
-     만들어 `StompSubProtocolHandler` 가 건 `setUserChangeCallback` 이 없다 — 세션에 반영되지 않아 이후 모든
-     프레임에서 principal 이 null 이다. `MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor::class.java)`
-     로 붙어 있는 accessor 를 쓴다. 읽기만 할 때는 `wrap` 도 무방하다
-   - **`convertAndSendToUser` 는 대상 세션이 없으면 예외도 로그도 없이 버린다.** `SimpUserRegistry` 로 확인해
-     WARN 을 남기되 **전송은 그대로 한다**(레지스트리가 경합할 수 있어 안 보내면 오히려 진짜 유실이 생긴다)
-   - **브로드캐스트는 커밋 전에 내보내지 않는다.** 순번은 `BEFORE_COMMIT` 에서 따고 전송은 `afterCommit` 에서 한다(세부는 holdem rules).
-     커밋 전에 내보내면 뒤이어 롤백됐을 때 클라이언트만 서버보다 앞선 상태를 보게 된다
+   (STOMP 세부는 `.claude/rules/websocket.md`)
 7. 재화는 원시 타입으로 다루지 않는다. 각 게임이 자기 VO 로 갖고, 게임 간에 공유하지 않는다
 8. 오류는 코드로 계약하고, 문구는 클라이언트가 만든다
-   - 예외는 그 실패를 소유한 계층에 둔다. 기준은 "애그리거트가 그 단어를 아는가" —
-     `User` 에 세션·토큰이 없으므로 `LoginFailedException` 은 `application/exception` 이고,
-     `RawPassword` 가 던지는 `InvalidPasswordException` 은 `domain/exception` 이다
-   - 반면 에러 코드 enum 은 계층이 아니라 컨텍스트당 하나다. 쪼개면 예외를 한 계층 옮기는
-     리팩터링이 API 변경이 된다. `common` 에는 기반 타입(`BusinessException`)과 `CommonErrorCode` 까지만
-   - `ErrorCode` 는 `HttpStatus` 를 모른다. 도메인은 `ErrorKind` 까지만 알고 상태 매핑은 핸들러가 한다
-   - 응답에는 `errorCode`, 로그에는 `logMessage`, 둘은 `traceId` 로 잇는다. `detail` 은 비어 있는 게 정상
-   - 4xx 는 WARN 스택 없이, 5xx 는 ERROR 스택 포함
-   - **시큐리티 필터 단계의 401·403 도 같은 계약을 따른다.** `@RestControllerAdvice` 를 안 거치므로
-     `AuthenticationEntryPoint`/`AccessDeniedHandler` 를 `exceptionHandling` 과 `oauth2ResourceServer`
-     **양쪽에** 등록해야 한다. 한쪽만 하면 토큰이 있고 검증에 실패한 경우가 빠진다
+   세부(예외 소유 계층, 에러 코드 enum, 로그 수준, 시큐리티 401·403)는 `.claude/rules/errors.md`
 
-## 표준 형태
+## 주석
 
-- VO 는 `of()` 팩토리에서 정규화하고, 실패하면 에러 코드를 가진 도메인 예외를 던진다.
-  `require` 를 쓰지 않는다 — `IllegalArgumentException` 하나로는 클라이언트가 이유를 구분할 수 없다.
-  길이는 `codePointCount` 로 센다(`String.length` 는 이모지를 2자로 센다)
-- 매퍼는 `reconstitute()`, 그 외 전부 `of()`. `reconstitute()` 가 검증하지 않는 것은 의도다 —
-  `of()` 로 복원하면 규칙을 조이는 순간 기존 데이터를 읽을 수 없게 된다
-- 애그리거트의 식별자는 nullable. `null` = 아직 저장되지 않음. 센티넬을 쓰지 않는다
-- Command 는 원시 타입만 받는다. enum 도 예외가 아니다 — 도메인 타입 변환은 서비스가 한다
-  (`UserRole.of(command.role)`). `application` 이 계약이라 여기서 도메인 enum 을 받으면 상수명이
-  곧 API 계약이 된다. `@RequestParam` 의 도메인 enum 은 그대로 둔다(입력 경계는 안전, 출력은 이미 `String`)
-- 유일성·존재는 DB 가 보장한다. 응용 계층의 `existsBy...` 는 친절한 오류용이고 동시 요청을 막지 못한다.
-  이름 붙인 제약(`uk_users_username`, `fk_wallets_user`)이 실제 보장이고, 어댑터가 그 이름으로 번역한다
-- **제약을 번역하는 어댑터는 `saveAndFlush` 를 쓴다.** `save()` 만 쓰면 UPDATE 가 커밋 시점에야
-  flush 되어 CHECK 위반이 `catch` 를 지나친다. INSERT 는 IDENTITY 채번 때문에 즉시 flush 되어
-  우연히 통과하므로 UPDATE 경로에서만 드러난다. 회귀 테스트는 UPDATE 경로로 잡는다.
-- **assigned id 엔티티는 `Persistable` 로 새 행을 알린다.** PK 가 자동 채번이 아니라 애플리케이션이
-  정하는 값이라 Spring Data 가 새 행인지 스스로 판단하지 못한다 — `Long = 0` 버전 필드로 판단하게
-  하면 첫 저장도 `merge` 로 가고, Hibernate 가 없는 행의 merge 를 거부해 INSERT 가 전부 실패한다.
-  `isNew()` 를 생성 시 `true`, 저장·조회 후 `false` 로 내리는 `Persistable` 이 이 자리를 대신한다
-  (`WalletAdjustmentKeyJpaEntity`, `HandInProgressJpaEntity`)
-- **돈을 잠그는 순서는 항상 요청·테이블 → 지갑이다.** 홀덤 테이블 → 지갑, 충전·환전 요청 → 지갑
-  순으로 잠근다. 지갑을 먼저 잠근 뒤 요청 행이나 홀덤 테이블을 잠그지 않는다 — 순서를 뒤집으면
-  데드락이다.
-- **같은 트랜잭션에 참여한 `@Transactional` 프록시를 예외가 한 번이라도 넘으면 바깥에서 잡아도 트랜잭션은 rollback-only 다.**
-  커밋 시점에 `UnexpectedRollbackException` 으로 터진다. 실패를 기록하고 커밋해야 하면 `noRollbackFor`
-  (`LoginService`), 실패를 격리해야 하면 호출 단위로 `REQUIRES_NEW` 를 쓴다(`AdmitJoinRequestService`)
-- DB 타임아웃은 hikari `options`(`application.yaml`)로 커넥션마다: `lock_timeout=3s`·`statement_timeout=10s`·`idle_in_transaction_session_timeout=30s`.
-  `TransientDataAccessException`(락·문장 타임아웃)은 503 `TEMPORARILY_UNAVAILABLE` — 롤백이 보장돼 재시도 안전. `TableExecutor.call` 에 호출자 타임아웃을 안 두는 이유는 `docs/architecture-decisions.md`
-- **커밋 후 콜백(`afterCommit`, AFTER_COMMIT 리스너)은 예외를 던지지 않는다** — 뒤 콜백이 건너뛰어지고 커밋된 요청이 실패로
-  보인다. 잡아서 로그. 다른 실행기를 기다리지도 않는다(`TableExecutor.call` 금지, `post`) — 그 스레드는 아직 JDBC 커넥션을 쥐고 있다
-- 각 컨텍스트가 자기 ID value class 를 둔다(`TableId`, 컨텍스트별 `UserId` — 남의 domain 타입 금지, 규칙 1). 원시 타입은
-  경계(Command·DTO·JPA·조회 경로·다른 컨텍스트가 받는 이벤트/API)에서만. ID value class 는 `toString()` 을 값으로 재정의한다 —
-  기본값 `UserId(value=1)` 이 JWT subject·`convertAndSendToUser` 같은 문자열 경계로 새면 조용히 틀어진다
-- 남의 리소스는 403 이 아니라 404 다. 서비스가 조회 단계에서 소유자까지 확인한다.
-  도메인의 소유자 검사는 불변식으로 남긴다 — "안 쓰이는 코드" 로 보고 지우지 않는다
-- 문자열 컬럼은 `text`. 길이 제약이 DB 에 없으므로 VO 가 유일한 방어선이다
-- 외부 리소스는 키만 저장하고 URL 은 presentation 이 조립한다
-- 페이지 응답은 `PagedModel`(`spring.data.web.pageable.serialization-mode: via_dto`)
 - **KDoc 안에 `/api/admin` 와일드카드를 그대로 쓰지 않는다.** 별표-슬래시가 주석을 닫아
   `Unclosed comment` 가 엉뚱한 줄을 가리킨다
 
@@ -187,13 +115,3 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 - **첫 편집 전에 `feature/` 브랜치부터 만든다** — 문서 한 줄도 예외 없다. 커밋할 때 만드는 건 위반이다
 - 작업 브랜치는 **항상 `feature/` 로 시작한다** — 버그 수정·리팩터링·테스트·문서 작업도 예외 없다(`fix/`·`chore/`·`test/`·`docs/` 브랜치를 만들지 않는다). 그 뒤에 컨텍스트 접두를 붙인다(`feature/user-signup`, `feature/holdem-view-seq`)
 - 커밋은 Conventional Commits + 컨텍스트 스코프(`fix(holdem): ...`) — 작업 성격은 브랜치가 아니라 커밋 타입으로 드러낸다
-
-## 아직 하지 않은 것
-
-- 스키마 관리 — `ddl-auto: update` 를 계속 쓴다. Flyway 로 갈 계획이 없다.
-  추가만 하고 아무것도 지우지 않으므로 컬럼 삭제·이름/타입 변경은 손으로 SQL 을 친다.
-  Hibernate 가 못 만드는 제약(FK)은 `src/main/resources/data.sql` 의 멱등 DDL 로 건다.
-  **`data.sql` 의 문장 구분자는 `;` 가 아니라 `@@@`** — 기본 분할기가 `do $$ ... $$` 안의 `;` 에서 자른다
-- ArchUnit 의존성 테스트 — 게임이 둘 이상 생기면 도입. 목표는 BuckPal 과 같은 3줄:
-  `application.doesNotDependOn(adapters)` / `domainDoesNotDependOnAdapters()` / `adapters.dontDependOnEachOther()`
-- Micrometer Tracing
