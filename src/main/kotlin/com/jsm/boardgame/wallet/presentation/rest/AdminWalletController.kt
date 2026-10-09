@@ -8,6 +8,7 @@ import com.jsm.boardgame.wallet.application.command.usecase.ApproveWithdrawalReq
 import com.jsm.boardgame.wallet.application.command.usecase.RejectDepositRequestUseCase
 import com.jsm.boardgame.wallet.application.command.usecase.RejectWithdrawalRequestUseCase
 import com.jsm.boardgame.wallet.application.query.service.DepositRequestQueryService
+import com.jsm.boardgame.wallet.application.query.service.WalletQueryService
 import com.jsm.boardgame.wallet.application.query.service.WithdrawalRequestQueryService
 import com.jsm.boardgame.wallet.domain.model.DepositRequestStatus
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestStatus
@@ -15,6 +16,7 @@ import com.jsm.boardgame.wallet.presentation.rest.request.AdjustWalletBalanceReq
 import com.jsm.boardgame.wallet.presentation.rest.request.ApproveDepositRequestRequest
 import com.jsm.boardgame.wallet.presentation.rest.request.RejectDepositRequestRequest
 import com.jsm.boardgame.wallet.presentation.rest.request.RejectWithdrawalRequestRequest
+import com.jsm.boardgame.wallet.presentation.rest.response.AdminWalletBalanceResponse
 import com.jsm.boardgame.wallet.presentation.rest.response.DepositRequestResponse
 import com.jsm.boardgame.wallet.presentation.rest.response.WithdrawalRequestResponse
 import org.springframework.data.domain.Page
@@ -43,6 +45,7 @@ class AdminWalletController(
     private val adjustWalletBalanceUseCase: AdjustWalletBalanceUseCase,
     private val depositRequestQueryService: DepositRequestQueryService,
     private val withdrawalRequestQueryService: WithdrawalRequestQueryService,
+    private val walletQueryService: WalletQueryService,
 ) {
 
     @GetMapping("/deposit-requests")
@@ -95,6 +98,11 @@ class AdminWalletController(
     ) {
         rejectWithdrawalRequestUseCase.reject(request.toCommand(id, jwt.requireUserId()))
     }
+
+    // 지갑이 없거나 없는 사용자면 사용자 지갑 조회(GET /api/wallet)와 같게 0 이다.
+    @GetMapping("/wallets/{userId}")
+    fun getBalance(@PathVariable userId: Long): AdminWalletBalanceResponse =
+        AdminWalletBalanceResponse(userId, walletQueryService.findBalance(userId).balance)
 
     @PostMapping("/wallets/{userId}/adjustments")
     @ResponseStatus(HttpStatus.NO_CONTENT)

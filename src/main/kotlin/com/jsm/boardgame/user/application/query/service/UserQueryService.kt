@@ -2,7 +2,10 @@ package com.jsm.boardgame.user.application.query.service
 
 import com.jsm.boardgame.user.application.query.port.UserQueryRepository
 import com.jsm.boardgame.user.application.query.view.UserProfile
+import com.jsm.boardgame.user.application.query.view.UserSummary
 import com.jsm.boardgame.user.domain.exception.UserNotFoundException
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -19,4 +22,7 @@ class UserQueryService(
      * `UserProfile` 모양에 호출자를 묶지 않기 위해 `findProfile` 과 별도로 둔다.
      */
     fun exists(id: Long): Boolean = userQuery.existsById(id)
+
+    fun search(query: String?, pageable: Pageable): Page<UserSummary> =
+        userQuery.search(query?.trim()?.takeIf { it.isNotEmpty() }, pageable)
 }
