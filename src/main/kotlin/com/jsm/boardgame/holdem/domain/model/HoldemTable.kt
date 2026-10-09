@@ -8,7 +8,9 @@ import com.jsm.boardgame.holdem.domain.exception.TableNotEmptyException
 import com.jsm.boardgame.holdem.domain.exception.TableFullException
 import java.time.Instant
 
-@JvmInline value class TableId(val value: Long)
+@JvmInline value class TableId(val value: Long) {
+    override fun toString(): String = value.toString()
+}
 
 class HoldemTable private constructor(
     val id: TableId?,

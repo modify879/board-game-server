@@ -6,7 +6,9 @@ import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
 import java.time.Instant
 
 @JvmInline
-value class WalletId(val value: Long)
+value class WalletId(val value: Long) {
+    override fun toString(): String = value.toString()
+}
 
 class Wallet private constructor(
     val id: WalletId?,

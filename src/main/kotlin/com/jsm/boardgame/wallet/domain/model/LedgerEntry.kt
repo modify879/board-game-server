@@ -3,7 +3,9 @@ package com.jsm.boardgame.wallet.domain.model
 import java.time.Instant
 
 @JvmInline
-value class LedgerEntryId(val value: Long)
+value class LedgerEntryId(val value: Long) {
+    override fun toString(): String = value.toString()
+}
 
 enum class LedgerDirection { CREDIT, DEBIT }
 
