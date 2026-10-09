@@ -147,9 +147,12 @@ private class HandRecoveryFakeStandUpUseCase : StandUpUseCase {
     override fun standUp(command: StandUpCommand) {}
 }
 
-private class HandRecoveryFakeResumeHandUseCase : ResumeHandUseCase {
+private class HandRecoveryFakeResumeHandUseCase(var failuresLeft: Int = 0) : ResumeHandUseCase {
     val calls = mutableListOf<ResumeHandCommand>()
-    override fun resume(command: ResumeHandCommand) { calls += command }
+    override fun resume(command: ResumeHandCommand) {
+        calls += command
+        if (failuresLeft > 0) { failuresLeft--; error("재개 실패") }
+    }
 }
 
 private class HandRecoveryFakeCancelHandUseCase : CancelHandUseCase {
@@ -515,5 +518,44 @@ class HandRecoveryTest {
         assertEquals(0, cancelUseCase.calls.size)
         assertEquals(0, scheduler.scheduledCalls.size)
         assertEquals(2, presenceUseCase.calls.size) // 유예 없이 부팅 시딩이 둘 다 DISCONNECTED 로 감시한다
+    }
+
+    private fun runoutRecovery(resume: HandRecoveryFakeResumeHandUseCase, cancel: HandRecoveryFakeCancelHandUseCase, scheduler: HandRecoveryFakeTaskScheduler): HandRecovery {
+        val handStore = HandRecoveryFakeHandStore()
+        val tables = HandRecoveryFakeTableRepository()
+        val hand = seatTableWithHand(tables, 1L, 1, 2)
+        hand.act(hand.toActSeatNo!!, BettingAction.RaiseTo(Chips.of(10_000)))
+        hand.act(hand.toActSeatNo!!, BettingAction.Call)
+        handStore.put(TableId(1L), hand)
+        return HandRecovery(handStore, tables, scheduler, clock, resume, cancel, newConnectionTimer(tables), NextHandTimer(HandRecoveryFakeTaskScheduler(), HandRecoveryFakeStartScheduledHandUseCase(), HandRecoveryFakeTableExecutor(), clock, nextHandDelay), HandRecoveryFakeTableExecutor())
+    }
+
+    @Test
+    fun `재개가 5번 연속 실패하면 포기하고 핸드를 취소한다`() {
+        val resume = HandRecoveryFakeResumeHandUseCase(failuresLeft = 5)
+        val cancel = HandRecoveryFakeCancelHandUseCase()
+        val scheduler = HandRecoveryFakeTaskScheduler()
+        runoutRecovery(resume, cancel, scheduler).onApplicationReady()
+
+        assertEquals(1, resume.calls.size)
+        repeat(4) { scheduler.scheduledCalls.removeFirst().task.run() } // 재시도 4번
+        assertEquals(5, resume.calls.size)
+        assertEquals(1, cancel.calls.size)
+        assertEquals(1L, cancel.calls[0].tableId)
+        assertEquals(0, scheduler.scheduledCalls.size)
+    }
+
+    @Test
+    fun `재개가 재시도에서 성공하면 취소하지 않는다`() {
+        val resume = HandRecoveryFakeResumeHandUseCase(failuresLeft = 2)
+        val cancel = HandRecoveryFakeCancelHandUseCase()
+        val scheduler = HandRecoveryFakeTaskScheduler()
+        runoutRecovery(resume, cancel, scheduler).onApplicationReady()
+
+        repeat(2) { scheduler.scheduledCalls.removeFirst().task.run() }
+
+        assertEquals(3, resume.calls.size)
+        assertEquals(0, cancel.calls.size)
+        assertEquals(0, scheduler.scheduledCalls.size)
     }
 }
