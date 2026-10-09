@@ -38,7 +38,7 @@ private class RefreshFakeAuthTokenIssuer : AuthTokenIssuer {
     var lastRole: UserRole? = null
         private set
 
-    override fun issue(userId: Long, role: UserRole): IssuedTokens {
+    override fun issue(userId: UserId, role: UserRole): IssuedTokens {
         lastRole = role
         counter += 1
         val refreshToken = "rt-$counter"
@@ -54,9 +54,9 @@ private class RefreshFakeAuthTokenIssuer : AuthTokenIssuer {
 }
 
 private class RefreshFakeRealtimeConnections : RealtimeConnections {
-    val closeAllOfCalls = mutableListOf<Long>()
+    val closeAllOfCalls = mutableListOf<UserId>()
     val closeAfterGraceCalls = mutableListOf<String>()
-    override fun closeAllOf(userId: Long) { closeAllOfCalls += userId }
+    override fun closeAllOf(userId: UserId) { closeAllOfCalls += userId }
     override fun closeAfterGrace(accessTokenId: String) { closeAfterGraceCalls += accessTokenId }
 }
 
@@ -79,22 +79,22 @@ private class RefreshInMemoryAuthSessionStore(
         val graceExpiresAt: Instant,
     )
 
-    private val sessions = mutableMapOf<Long, StoredSession>()
+    private val sessions = mutableMapOf<UserId, StoredSession>()
     private val blacklist = mutableMapOf<String, Instant>()
     // 인덱스는 회전해도 지우지 않는다 — 지우면 아래 재사용 탐지 테스트가 무의미해진다.
-    private val refreshTokenIndex = mutableMapOf<String, Long>()
+    private val refreshTokenIndex = mutableMapOf<String, UserId>()
 
-    override fun start(userId: Long, session: AuthSession) {
+    override fun start(userId: UserId, session: AuthSession) {
         // 로그인은 항상 새 세션이다 — 직전 칸은 비운다.
         sessions[userId] = StoredSession(session, previousRefreshToken = null, graceExpiresAt = Instant.EPOCH)
         refreshTokenIndex[session.refreshToken] = userId
     }
 
-    override fun userIdForRefreshToken(refreshToken: String): Long? = refreshTokenIndex[refreshToken]
+    override fun userIdForRefreshToken(refreshToken: String): UserId? = refreshTokenIndex[refreshToken]
 
     // AuthSessionStore 포트 계약이 아니다 — 유예 규칙까지 반영해 세션 상태를 들여다보는 페이크 전용 검사용 헬퍼다.
     fun matchesRefreshToken(userId: Long, refreshToken: String): Boolean {
-        val stored = sessions[userId] ?: return false
+        val stored = sessions[UserId(userId)] ?: return false
         if (stored.session.refreshToken == refreshToken) return true
 
         val previous = stored.previousRefreshToken ?: return false
@@ -103,9 +103,9 @@ private class RefreshInMemoryAuthSessionStore(
         return Instant.now().isBefore(stored.graceExpiresAt)
     }
 
-    override fun currentAccessTokenId(userId: Long): String? = sessions[userId]?.session?.accessTokenId
+    override fun currentAccessTokenId(userId: UserId): String? = sessions[userId]?.session?.accessTokenId
 
-    override fun clear(userId: Long) {
+    override fun clear(userId: UserId) {
         sessions.remove(userId)
     }
 
@@ -122,7 +122,7 @@ private class RefreshInMemoryAuthSessionStore(
      * (stored.session.refreshToken)이 들어간다 — 제시된 토큰이 현재 칸과 일치했든 유예 중인 직전
      * 칸과 일치했든 상관없다. 호출자가 넘기는 [next] 에는 애초에 직전 칸을 정할 수단이 없다.
      */
-    override fun rotate(userId: Long, presentedRefreshToken: String, next: AuthSession): RotationResult {
+    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession): RotationResult {
         val stored = sessions[userId] ?: return RotationResult.Mismatch
 
         val matches = if (stored.session.refreshToken == presentedRefreshToken) {
@@ -176,8 +176,8 @@ class RefreshTokenServiceTest {
 
     private fun loginSession(userId: Long, role: UserRole = UserRole.USER): IssuedTokens {
         users.put(userId, role)
-        val tokens = tokenIssuer.issue(userId, role)
-        sessions.start(userId, AuthSession(tokens.accessTokenId, tokens.refreshToken, tokens.refreshTokenExpiresAt))
+        val tokens = tokenIssuer.issue(UserId(userId), role)
+        sessions.start(UserId(userId), AuthSession(tokens.accessTokenId, tokens.refreshToken, tokens.refreshTokenExpiresAt))
         return tokens
     }
 
@@ -206,7 +206,7 @@ class RefreshTokenServiceTest {
         val retried = service.refresh(RefreshTokenCommand(first.refreshToken))
 
         assertNotEquals(rotated.refreshToken, retried.refreshToken)
-        assertNotNull(sessions.currentAccessTokenId(userId))
+        assertNotNull(sessions.currentAccessTokenId(UserId(userId)))
 
         // 세션이 폐기되지 않았으므로 최신 토큰으로 계속 갱신할 수 있다.
         val next = service.refresh(RefreshTokenCommand(retried.refreshToken))
@@ -231,7 +231,7 @@ class RefreshTokenServiceTest {
         // 어디에도 없어 여기서 재사용으로 오인되어 세션째 폐기됐을 것이다.
         val nextForA = service.refresh(RefreshTokenCommand(rotated.refreshToken))
         assertNotEquals(rotated.refreshToken, nextForA.refreshToken)
-        assertNotNull(sessions.currentAccessTokenId(userId))
+        assertNotNull(sessions.currentAccessTokenId(UserId(userId)))
     }
 
     @Test
@@ -250,7 +250,7 @@ class RefreshTokenServiceTest {
             service.refresh(RefreshTokenCommand(first.refreshToken))
         }
         assertEquals(UserErrorCode.REFRESH_TOKEN_INVALID, e.errorCode)
-        assertNull(sessions.currentAccessTokenId(userId))
+        assertNull(sessions.currentAccessTokenId(UserId(userId)))
     }
 
     @Test
@@ -261,7 +261,7 @@ class RefreshTokenServiceTest {
         // 유예는 바로 직전 한 세대에만 적용된다. first 가 유예 밖(두 세대 전)이 되도록
         // 한 번 더 회전시켜야, 이 테스트가 순수한 재사용 탐지(유예 대상이 아닌 경우)를 검증한다.
         val rotatedAgain = service.refresh(RefreshTokenCommand(rotated.refreshToken))
-        val rotatedAgainAccessTokenId = sessions.currentAccessTokenId(userId)!!
+        val rotatedAgainAccessTokenId = sessions.currentAccessTokenId(UserId(userId))!!
 
         val e = assertFailsWith<InvalidRefreshTokenException> {
             service.refresh(RefreshTokenCommand(first.refreshToken))
@@ -270,8 +270,8 @@ class RefreshTokenServiceTest {
 
         // 재사용 탐지로 세션 전체가 폐기됐으므로, 아직 회수하지 않은 최신 토큰마저 통하지 않는다.
         assertFalse(sessions.matchesRefreshToken(userId, rotatedAgain.refreshToken))
-        assertNull(sessions.currentAccessTokenId(userId))
-        assertTrue(realtimeConnections.closeAllOfCalls.contains(userId))
+        assertNull(sessions.currentAccessTokenId(UserId(userId)))
+        assertTrue(realtimeConnections.closeAllOfCalls.contains(UserId(userId)))
     }
 
     @Test
@@ -282,7 +282,7 @@ class RefreshTokenServiceTest {
         // 유예는 바로 직전 한 세대에만 적용된다. first 가 두 세대 전이 되도록 한 번 더 회전시켜야
         // 재사용 탐지 경로(clear 이전 블랙리스트 등록)를 탄다.
         val rotatedAgain = service.refresh(RefreshTokenCommand(rotated.refreshToken))
-        val rotatedAgainAccessTokenId = sessions.currentAccessTokenId(userId)!!
+        val rotatedAgainAccessTokenId = sessions.currentAccessTokenId(UserId(userId))!!
 
         assertFalse(sessions.isAccessTokenBlacklisted(rotatedAgainAccessTokenId))
 
@@ -328,8 +328,8 @@ class RefreshTokenServiceTest {
     fun `리프레시 토큰은 유효하지만 사용자가 존재하지 않으면 REFRESH_TOKEN_INVALID 가 발생한다`() {
         val userId = 12L
         // loginSession 을 거치지 않고 세션만 직접 만들어, users 저장소에는 없는 사용자를 재현한다(탈퇴 등).
-        val tokens = tokenIssuer.issue(userId, UserRole.USER)
-        sessions.start(userId, AuthSession(tokens.accessTokenId, tokens.refreshToken, tokens.refreshTokenExpiresAt))
+        val tokens = tokenIssuer.issue(UserId(userId), UserRole.USER)
+        sessions.start(UserId(userId), AuthSession(tokens.accessTokenId, tokens.refreshToken, tokens.refreshTokenExpiresAt))
 
         val e = assertFailsWith<InvalidRefreshTokenException> {
             service.refresh(RefreshTokenCommand(tokens.refreshToken))

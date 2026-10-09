@@ -25,33 +25,33 @@ import kotlin.test.assertTrue
 private class LogoutFakeAuthTokenIssuer : AuthTokenIssuer {
     private var sequence = 0
 
-    override fun issue(userId: Long, role: UserRole): IssuedTokens {
+    override fun issue(userId: UserId, role: UserRole): IssuedTokens {
         sequence += 1
         return IssuedTokens(
-            accessToken = "access:$userId:$sequence",
+            accessToken = "access:${userId.value}:$sequence",
             accessTokenId = "jti-$sequence",
             accessTokenExpiresAt = Instant.now().plusSeconds(900),
-            refreshToken = "refresh:$userId:$sequence",
+            refreshToken = "refresh:${userId.value}:$sequence",
             refreshTokenExpiresAt = Instant.now().plusSeconds(2_592_000),
         )
     }
 }
 
 private class LogoutFakeAuthSessionStore : AuthSessionStore {
-    private val sessions = mutableMapOf<Long, AuthSession>()
+    private val sessions = mutableMapOf<UserId, AuthSession>()
     private val blacklisted = mutableSetOf<String>()
-    private val refreshTokenIndex = mutableMapOf<String, Long>()
+    private val refreshTokenIndex = mutableMapOf<String, UserId>()
 
-    override fun start(userId: Long, session: AuthSession) {
+    override fun start(userId: UserId, session: AuthSession) {
         sessions[userId] = session
         refreshTokenIndex[session.refreshToken] = userId
     }
 
-    override fun userIdForRefreshToken(refreshToken: String): Long? = refreshTokenIndex[refreshToken]
+    override fun userIdForRefreshToken(refreshToken: String): UserId? = refreshTokenIndex[refreshToken]
 
-    override fun currentAccessTokenId(userId: Long): String? = sessions[userId]?.accessTokenId
+    override fun currentAccessTokenId(userId: UserId): String? = sessions[userId]?.accessTokenId
 
-    override fun clear(userId: Long) {
+    override fun clear(userId: UserId) {
         sessions.remove(userId)
     }
 
@@ -63,7 +63,7 @@ private class LogoutFakeAuthSessionStore : AuthSessionStore {
 
     // 이 픽스처는 그레이스 개념 없이 정확히 일치할 때만 통과한다 — 여기서 필요한 건 로그아웃 후
     // rotate() 가 Mismatch 를 돌려주는 것뿐이다(세션이 clear() 로 이미 지워졌으므로).
-    override fun rotate(userId: Long, presentedRefreshToken: String, next: AuthSession): RotationResult {
+    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession): RotationResult {
         val session = sessions[userId] ?: return RotationResult.Mismatch
         if (session.refreshToken != presentedRefreshToken) return RotationResult.Mismatch
 
@@ -74,14 +74,14 @@ private class LogoutFakeAuthSessionStore : AuthSessionStore {
 }
 
 private class LogoutFakeRealtimeConnections : RealtimeConnections {
-    val closeAllOfCalls = mutableListOf<Long>()
+    val closeAllOfCalls = mutableListOf<UserId>()
     val closeAfterGraceCalls = mutableListOf<String>()
-    override fun closeAllOf(userId: Long) { closeAllOfCalls += userId }
+    override fun closeAllOf(userId: UserId) { closeAllOfCalls += userId }
     override fun closeAfterGrace(accessTokenId: String) { closeAfterGraceCalls += accessTokenId }
 }
 
 private class LogoutRefreshFakeRealtimeConnections : RealtimeConnections {
-    override fun closeAllOf(userId: Long) {}
+    override fun closeAllOf(userId: UserId) {}
     override fun closeAfterGrace(accessTokenId: String) {}
 }
 
@@ -116,9 +116,9 @@ class LogoutServiceTest {
 
     private fun loggedIn(userId: Long): IssuedTokens {
         users.put(userId)
-        val issued = tokenIssuer.issue(userId, UserRole.USER)
+        val issued = tokenIssuer.issue(UserId(userId), UserRole.USER)
         sessions.start(
-            userId,
+            UserId(userId),
             AuthSession(
                 accessTokenId = issued.accessTokenId,
                 refreshToken = issued.refreshToken,
@@ -147,7 +147,7 @@ class LogoutServiceTest {
         service.logout(1L)
 
         assertTrue(sessions.isAccessTokenBlacklisted(issued.accessTokenId))
-        assertTrue(realtimeConnections.closeAllOfCalls.contains(1L))
+        assertTrue(realtimeConnections.closeAllOfCalls.contains(UserId(1L)))
     }
 
     @Test

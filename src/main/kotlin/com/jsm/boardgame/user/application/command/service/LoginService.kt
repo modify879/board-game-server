@@ -78,7 +78,7 @@ class LoginService(
 
         loginAttemptLimiter.reset(username)
 
-        val userId = checkNotNull(user.id) { "조회된 User 는 id 가 채워져 있어야 한다" }.value
+        val userId = checkNotNull(user.id) { "조회된 User 는 id 가 채워져 있어야 한다" }
 
         // 단일 기기 정책: 새 로그인은 이전 기기의 액세스 토큰을 즉시 무효화한다.
         sessions.currentAccessTokenId(userId)?.let { previousAccessTokenId ->

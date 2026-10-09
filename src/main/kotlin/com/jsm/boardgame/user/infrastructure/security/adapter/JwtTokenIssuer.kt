@@ -1,6 +1,7 @@
 package com.jsm.boardgame.user.infrastructure.security.adapter
 
 import com.jsm.boardgame.user.infrastructure.security.config.JwtProperties
+import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
 import com.jsm.boardgame.user.application.port.IssuedTokens
 import com.jsm.boardgame.user.domain.model.UserRole
@@ -40,9 +41,9 @@ class JwtTokenIssuer(
 
     private val random = SecureRandom()
 
-    override fun issue(userId: Long, role: UserRole): IssuedTokens {
+    override fun issue(userId: UserId, role: UserRole): IssuedTokens {
         val now = Instant.now(clock)
-        val subject = userId.toString()
+        val subject = userId.value.toString()
 
         val accessTokenId = UUID.randomUUID().toString()
         val accessTokenExpiresAt = now.plus(accessTokenTtl)
