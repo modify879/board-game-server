@@ -98,7 +98,7 @@ class SerialTableExecutor(
      */
     private fun executorOf(tableId: TableId): ExecutorService? =
         executors[tableId] ?: executors.computeIfAbsent(tableId) {
-            if (tables.findById(tableId) == null) null
+            if (!tables.existsOpen(tableId)) null
             else Executors.newSingleThreadExecutor(Thread.ofVirtual().name("holdem-table-${tableId.value}").factory())
         }
 

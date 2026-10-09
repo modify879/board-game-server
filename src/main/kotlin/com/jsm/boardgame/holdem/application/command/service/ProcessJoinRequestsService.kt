@@ -56,6 +56,10 @@ class ProcessJoinRequestsService(
                     tableId.value, head.userId, e.errorCode,
                 )
                 drop(tableId, head.userId, e.errorCode)
+            } catch (e: InterruptedException) {
+                // 종료 중 인터럽트다 — 머리를 버리면 안 되고, 플래그를 되살려 처리를 멈춘다.
+                Thread.currentThread().interrupt()
+                return
             } catch (e: Exception) {
                 // 착석 시도는 REQUIRES_NEW 라 이미 롤백됐다. 머리를 남기면 뒤 사람 전부가 막히므로 버리고, 클라이언트는 재시도한다.
                 log.error("대기열 항목 처리 중 예기치 못한 오류로 버립니다: tableId={}, userId={}", tableId.value, head.userId, e)

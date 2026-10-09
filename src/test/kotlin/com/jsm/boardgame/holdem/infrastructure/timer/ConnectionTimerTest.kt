@@ -578,6 +578,29 @@ class ConnectionTimerTest {
     }
 
     @Test
+    fun `예약된 퇴장이 실패하는 사이 감시가 바뀌었으면 감시를 다시 걸지 않는다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        val tableId = TableId(7L)
+        lateinit var timer: ConnectionTimer
+        val standUpUseCase = object : StandUpUseCase {
+            override fun standUp(command: StandUpCommand) {
+                timer.cancelWatch(UserId(command.userId)) // 시도 도중 감시가 바뀐다(토큰이 올라간다)
+                throw IllegalStateException("db down")
+            }
+        }
+        val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = tableId)
+        timer = ConnectionTimer(scheduler, clock, ConnectionTimerFakeUpdateSeatPresenceUseCase(), expireUseCase, standUpUseCase, tables, InMemoryJoinQueue(), ConnectionTimerFakeJoinQueueNotifier(), ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
+
+        timer.onSessionDisconnect(disconnectEvent(42L))
+        scheduler.scheduledCalls.toList().forEach { it.task.run() }
+        val before = scheduler.scheduledCalls.size
+
+        timer.onHandBroadcastRequested(HandBroadcastRequested(tableId, HoldemTable.create("t"), finishedHand()))
+
+        assertEquals(before, scheduler.scheduledCalls.size)
+    }
+
+    @Test
     fun `예약된 퇴장 하나가 실패해도 나머지는 실행되고 실패한 사용자는 감시를 다시 건다`() {
         val scheduler = ConnectionTimerFakeTaskScheduler()
         val tableId = TableId(7L)

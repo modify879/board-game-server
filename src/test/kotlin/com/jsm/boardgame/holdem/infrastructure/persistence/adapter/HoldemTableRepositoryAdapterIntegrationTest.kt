@@ -6,6 +6,7 @@ import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.infrastructure.persistence.entity.HoldemSeatJpaRepository
@@ -20,6 +21,7 @@ import org.springframework.context.annotation.Import
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -65,6 +67,18 @@ class HoldemTableRepositoryAdapterIntegrationTest {
         assertEquals(1, seat.seatNo)
         assertEquals(userId, seat.userId)
         assertEquals(buyIn, seat.stack)
+    }
+
+    @Test
+    fun `existsOpen 은 열린 테이블만 true 로 답하고 닫혔거나 없는 테이블은 false 다`() {
+        val open = tables.save(HoldemTable.create("open"))
+        val closed = HoldemTable.create("closed")
+        closed.close(java.time.Instant.now())
+        val closedSaved = tables.save(closed)
+
+        assertTrue(tables.existsOpen(open.id!!))
+        assertFalse(tables.existsOpen(closedSaved.id!!))
+        assertFalse(tables.existsOpen(TableId(Long.MAX_VALUE)))
     }
 
     @Test

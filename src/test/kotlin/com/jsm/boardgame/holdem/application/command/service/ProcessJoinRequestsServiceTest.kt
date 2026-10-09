@@ -182,6 +182,25 @@ class ProcessJoinRequestsServiceTest {
     }
 
     @Test
+    fun `착석 시도가 인터럽트되면 머리를 버리지 않고 인터럽트 플래그를 세운 채 멈춘다`() {
+        val queue = InMemoryJoinQueue()
+        queue.enqueue(tableId, UserId(101L), false)
+        val admit = ProcessJoinRequestsFakeAdmitUseCase(mapOf(101L to { throw InterruptedException("shutdown") }))
+        val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
+        val service = ProcessJoinRequestsService(queue, admit, notifier)
+
+        try {
+            service.process(ProcessJoinRequestsCommand(tableId.value))
+
+            assertTrue(Thread.currentThread().isInterrupted)
+        } finally {
+            Thread.interrupted() // 다른 테스트로 새지 않게 플래그를 지운다
+        }
+        assertEquals(UserId(101L), queue.peekHead(tableId)?.userId)
+        assertTrue(notifier.droppedCalls.isEmpty())
+    }
+
+    @Test
     fun `착석 처리 중에는 취소가 기다리다가 결국 착석되고 취소는 JOIN_REQUEST_NOT_FOUND 로 실패한다`() {
         val queue = InMemoryJoinQueue()
         queue.enqueue(tableId, UserId(101L), false)

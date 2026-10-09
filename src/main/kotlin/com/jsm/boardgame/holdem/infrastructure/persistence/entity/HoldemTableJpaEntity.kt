@@ -34,7 +34,9 @@ class HoldemTableJpaEntity(
     var closedAt: Instant?,
 )
 
-interface HoldemTableJpaRepository : JpaRepository<HoldemTableJpaEntity, Long>, KotlinJdslJpqlExecutor
+interface HoldemTableJpaRepository : JpaRepository<HoldemTableJpaEntity, Long>, KotlinJdslJpqlExecutor {
+    fun existsByIdAndClosedAtIsNull(id: Long): Boolean
+}
 
 fun HoldemTableJpaEntity.toDomain(seats: List<HoldemSeatJpaEntity>): HoldemTable =
     HoldemTable.reconstitute(
