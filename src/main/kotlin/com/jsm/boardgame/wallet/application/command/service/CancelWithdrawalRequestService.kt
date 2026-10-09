@@ -7,6 +7,7 @@ import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestId
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import com.jsm.boardgame.wallet.domain.repository.WithdrawalRequestRepository
@@ -36,13 +37,13 @@ class CancelWithdrawalRequestService(
         val now = Instant.now(clock)
         // 남의 요청도 "없음" 으로 응답한다 — CancelDepositRequestService 와 같은 이유(id 열거 방지).
         val request = withdrawalRequests.findById(WithdrawalRequestId(command.requestId))
-            ?.takeIf { it.userId == command.requesterUserId }
+            ?.takeIf { it.userId == UserId(command.requesterUserId) }
             ?: throw WithdrawalRequestNotFoundException(
                 "취소하려는 환전 요청이 없거나 본인 것이 아님: requestId=${command.requestId}, requesterUserId=${command.requesterUserId}",
             )
 
         // 소유자 검사가 상태 검사보다 먼저다(WithdrawalRequest.cancel 내부) = 이중 환급 방어
-        request.cancel(command.requesterUserId, now)
+        request.cancel(UserId(command.requesterUserId), now)
         withdrawalRequests.save(request)
 
         val wallet = wallets.findOrOpen(request.userId)
@@ -54,6 +55,6 @@ class CancelWithdrawalRequestService(
         )
         wallets.save(wallet)
         ledger.save(entry)
-        eventPublisher.publishEvent(WalletCredited(request.userId))
+        eventPublisher.publishEvent(WalletCredited(request.userId.value))
     }
 }

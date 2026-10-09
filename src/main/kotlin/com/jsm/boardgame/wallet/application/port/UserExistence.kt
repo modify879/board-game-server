@@ -1,5 +1,7 @@
 package com.jsm.boardgame.wallet.application.port
 
+import com.jsm.boardgame.wallet.domain.model.UserId
+
 /**
  * 조정 대상이 실재하는 사용자인지 확인한다. wallet 이 user 에 대해 아는 것은 이 Boolean 하나뿐이다.
  *
@@ -8,5 +10,5 @@ package com.jsm.boardgame.wallet.application.port
  * 라는 wallet 의 규칙이다.
  */
 fun interface UserExistence {
-    fun exists(userId: Long): Boolean
+    fun exists(userId: UserId): Boolean
 }

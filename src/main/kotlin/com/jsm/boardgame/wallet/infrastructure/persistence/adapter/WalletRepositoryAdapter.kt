@@ -7,6 +7,7 @@ import com.jsm.boardgame.common.persistence.violatedConstraint
 import com.jsm.boardgame.wallet.domain.exception.ConcurrentWalletUpdateException
 import com.jsm.boardgame.wallet.domain.exception.InsufficientBalanceException
 import com.jsm.boardgame.wallet.domain.exception.WalletOwnerNotFoundException
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.springframework.dao.DataIntegrityViolationException
@@ -21,10 +22,10 @@ class WalletRepositoryAdapter(
     private val jpa: WalletJpaRepository,
 ) : WalletRepository {
 
-    override fun findByUserId(userId: Long): Wallet? =
-        jpa.findByUserIdForUpdate(userId)?.toDomain()
+    override fun findByUserId(userId: UserId): Wallet? =
+        jpa.findByUserIdForUpdate(userId.value)?.toDomain()
 
-    override fun findOrOpen(userId: Long): Wallet =
+    override fun findOrOpen(userId: UserId): Wallet =
         findByUserId(userId) ?: save(Wallet.open(userId))
 
     /**

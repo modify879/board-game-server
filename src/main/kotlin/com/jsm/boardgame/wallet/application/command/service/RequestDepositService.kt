@@ -4,6 +4,7 @@ import com.jsm.boardgame.wallet.application.command.usecase.RequestDepositUseCas
 import com.jsm.boardgame.wallet.application.command.usecase.RequestDepositCommand
 import com.jsm.boardgame.wallet.domain.model.DepositRequest
 import com.jsm.boardgame.wallet.domain.model.DepositRequestId
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -20,7 +21,7 @@ class RequestDepositService(
 
     override fun request(command: RequestDepositCommand): DepositRequestId {
         val request = DepositRequest.request(
-            userId = command.userId,
+            userId = UserId(command.userId),
             amount = command.amount,
             at = Instant.now(clock),
         )

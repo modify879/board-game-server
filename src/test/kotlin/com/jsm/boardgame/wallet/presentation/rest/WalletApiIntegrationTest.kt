@@ -7,6 +7,7 @@ import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.Money
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.assertj.core.api.Assertions.assertThat
@@ -97,7 +98,7 @@ class WalletApiIntegrationTest {
 
     /** 환전은 요청 시점에 즉시 차감되므로, 요청을 만들려면 잔액이 먼저 있어야 한다. */
     private fun fundWallet(userId: Long, amount: Long) {
-        val wallet = walletRepository.findOrOpen(userId)
+        val wallet = walletRepository.findOrOpen(UserId(userId))
         val entry = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT,
             amount = Money.of(amount),
@@ -124,7 +125,7 @@ class WalletApiIntegrationTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.balance").value(0))
 
-        assertThat(walletRepository.findByUserId(userId)).isNull()
+        assertThat(walletRepository.findByUserId(UserId(userId))).isNull()
     }
 
     @Test

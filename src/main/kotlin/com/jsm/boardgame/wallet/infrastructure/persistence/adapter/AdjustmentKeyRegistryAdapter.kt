@@ -3,6 +3,7 @@ package com.jsm.boardgame.wallet.infrastructure.persistence.adapter
 import com.jsm.boardgame.common.persistence.violatedConstraint
 import com.jsm.boardgame.wallet.application.exception.AdjustmentAlreadyAppliedException
 import com.jsm.boardgame.wallet.application.port.AdjustmentKeyRegistry
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.infrastructure.persistence.entity.WalletAdjustmentKeyJpaEntity
 import com.jsm.boardgame.wallet.infrastructure.persistence.entity.WalletAdjustmentKeyJpaRepository
 import org.springframework.dao.DataIntegrityViolationException
@@ -18,13 +19,13 @@ class AdjustmentKeyRegistryAdapter(
 
     // saveAndFlush 를 쓴다 — WalletRepositoryAdapter 와 같은 이유다. save() 만 쓰면 flush 가
     // 커밋까지 미뤄질 수 있어 PK 위반이 호출자의 @Transactional 커밋 시점에야 터져 이 catch 를 지나친다.
-    override fun claim(key: String, adminUserId: Long, targetUserId: Long, at: Instant) {
+    override fun claim(key: String, adminUserId: UserId, targetUserId: UserId, at: Instant) {
         try {
             jpa.saveAndFlush(
                 WalletAdjustmentKeyJpaEntity(
                     idempotencyKey = key,
-                    adminUserId = adminUserId,
-                    targetUserId = targetUserId,
+                    adminUserId = adminUserId.value,
+                    targetUserId = targetUserId.value,
                     claimedAt = at,
                 ),
             )

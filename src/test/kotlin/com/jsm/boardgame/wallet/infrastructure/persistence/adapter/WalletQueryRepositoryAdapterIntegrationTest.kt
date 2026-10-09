@@ -20,6 +20,7 @@ import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequest
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestStatus
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
@@ -83,7 +84,7 @@ class WalletQueryRepositoryAdapterIntegrationTest {
     @Test
     fun `원장 페이지네이션이 id 내림차순으로 나오고 totalElements 가 맞다`() {
         val userId = uniqueUserId()
-        var wallet = wallets.save(Wallet.open(userId))
+        var wallet = wallets.save(Wallet.open(UserId(userId)))
 
         repeat(3) { i ->
             val entry = wallet.record(
@@ -115,9 +116,9 @@ class WalletQueryRepositoryAdapterIntegrationTest {
     @Test
     fun `findByStatus(null) 은 전체를, findByStatus(PENDING) 은 PENDING 만 돌려준다`() {
         val userId = uniqueUserId()
-        val pending = depositRequests.save(DepositRequest.request(userId, 10_000, now))
-        val approved = depositRequests.save(DepositRequest.request(userId, 20_000, now))
-        approved.approve(adminUserId = 1, creditedAmount = 20_000, at = now)
+        val pending = depositRequests.save(DepositRequest.request(UserId(userId), 10_000, now))
+        val approved = depositRequests.save(DepositRequest.request(UserId(userId), 20_000, now))
+        approved.approve(adminUserId = UserId(1), creditedAmount = 20_000, at = now)
         depositRequests.save(approved)
 
         val all = depositRequestQueryRepository.findByStatus(null, PageRequest.of(0, 10))
@@ -133,9 +134,9 @@ class WalletQueryRepositoryAdapterIntegrationTest {
     fun `findByStatus(null) 은 전체 환전 요청을, findByStatus(PENDING) 은 PENDING 만 돌려준다`() {
         val userId = uniqueUserId()
         val bankAccount = BankAccount.of("국민은행", "11122233344", "홍길동")
-        val pending = withdrawalRequests.save(WithdrawalRequest.request(userId, 10_000, bankAccount, now))
-        val approved = withdrawalRequests.save(WithdrawalRequest.request(userId, 20_000, bankAccount, now))
-        approved.approve(adminUserId = 1, at = now)
+        val pending = withdrawalRequests.save(WithdrawalRequest.request(UserId(userId), 10_000, bankAccount, now))
+        val approved = withdrawalRequests.save(WithdrawalRequest.request(UserId(userId), 20_000, bankAccount, now))
+        approved.approve(adminUserId = UserId(1), at = now)
         withdrawalRequests.save(approved)
 
         val all = withdrawalRequestQueryRepository.findByStatus(null, PageRequest.of(0, 10))

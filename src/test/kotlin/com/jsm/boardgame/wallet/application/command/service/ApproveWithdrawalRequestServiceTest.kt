@@ -9,6 +9,7 @@ import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequest
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestId
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestStatus
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.WithdrawalRequestRepository
 import java.time.Clock
 import java.time.Instant
@@ -44,7 +45,7 @@ class ApproveWithdrawalRequestServiceTest {
     private fun pendingRequest(id: Long = 1, userId: Long = 1, amount: Long = 10_000): WithdrawalRequest =
         WithdrawalRequest.reconstitute(
             id = WithdrawalRequestId(id),
-            userId = userId,
+            userId = UserId(userId),
             amount = Money.of(amount),
             bankAccount = bankAccount,
             requestedAt = Instant.parse("2026-01-01T00:00:00Z"),
@@ -62,7 +63,7 @@ class ApproveWithdrawalRequestServiceTest {
 
         val reloaded = withdrawalRequests.findById(request.id)!!
         assertEquals(WithdrawalRequestStatus.APPROVED, reloaded.status)
-        assertEquals(99L, reloaded.processedBy)
+        assertEquals(UserId(99), reloaded.processedBy)
     }
 
     @Test

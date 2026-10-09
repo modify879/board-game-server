@@ -14,6 +14,7 @@ import com.jsm.boardgame.wallet.domain.exception.WalletOwnerNotFoundException
 import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.model.WalletId
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -56,7 +57,7 @@ class WalletRepositoryAdapterIntegrationTest {
     fun `음수 잔액을 저장하면 InsufficientBalanceException 으로 번역된다`() {
         val negative = Wallet.reconstitute(
             id = WalletId(0),
-            userId = uniqueUserId(),
+            userId = UserId(uniqueUserId()),
             balance = Money.reconstitute(-100),
         )
 
@@ -69,7 +70,7 @@ class WalletRepositoryAdapterIntegrationTest {
     // 이 테스트가 그 함정의 회귀 방지다.
     @Test
     fun `UPDATE 경로에서도 음수 잔액이 InsufficientBalanceException 으로 잡힌다`() {
-        val saved = wallets.save(Wallet.open(userId = uniqueUserId()))
+        val saved = wallets.save(Wallet.open(userId = UserId(uniqueUserId())))
 
         val negative = Wallet.reconstitute(
             id = saved.id!!,
@@ -84,10 +85,10 @@ class WalletRepositoryAdapterIntegrationTest {
     @Test
     fun `같은 userId 로 지갑을 두 번 open 해 저장하면 ConcurrentWalletUpdateException`() {
         val userId = uniqueUserId()
-        wallets.save(Wallet.open(userId = userId))
+        wallets.save(Wallet.open(userId = UserId(userId)))
 
         val e = assertFailsWith<ConcurrentWalletUpdateException> {
-            wallets.save(Wallet.open(userId = userId))
+            wallets.save(Wallet.open(userId = UserId(userId)))
         }
         assertEquals(WalletErrorCode.CONCURRENT_WALLET_UPDATE, e.errorCode)
     }
@@ -95,12 +96,12 @@ class WalletRepositoryAdapterIntegrationTest {
     @Test
     fun `저장 후 findByUserId 가 잔액을 그대로 돌려준다`() {
         val userId = uniqueUserId()
-        val opened = wallets.save(Wallet.open(userId = userId))
+        val opened = wallets.save(Wallet.open(userId = UserId(userId)))
         wallets.save(
-            Wallet.reconstitute(id = opened.id!!, userId = userId, balance = Money.of(500)),
+            Wallet.reconstitute(id = opened.id!!, userId = UserId(userId), balance = Money.of(500)),
         )
 
-        val found = wallets.findByUserId(userId)
+        val found = wallets.findByUserId(UserId(userId))
 
         assertEquals(Money.of(500), found?.balance)
     }
@@ -112,7 +113,7 @@ class WalletRepositoryAdapterIntegrationTest {
         val nonExistentUserId = 987_654_321L
 
         val e = assertFailsWith<WalletOwnerNotFoundException> {
-            wallets.save(Wallet.open(userId = nonExistentUserId))
+            wallets.save(Wallet.open(userId = UserId(nonExistentUserId)))
         }
         assertEquals(WalletErrorCode.WALLET_OWNER_NOT_FOUND, e.errorCode)
     }
@@ -122,7 +123,7 @@ class WalletRepositoryAdapterIntegrationTest {
         val nonExistentUserId = 987_654_322L
 
         val e = assertFailsWith<WalletOwnerNotFoundException> {
-            wallets.findOrOpen(nonExistentUserId)
+            wallets.findOrOpen(UserId(nonExistentUserId))
         }
         assertEquals(WalletErrorCode.WALLET_OWNER_NOT_FOUND, e.errorCode)
     }

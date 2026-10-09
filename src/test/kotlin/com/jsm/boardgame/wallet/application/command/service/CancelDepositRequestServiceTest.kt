@@ -7,6 +7,7 @@ import com.jsm.boardgame.wallet.domain.model.DepositRequest
 import com.jsm.boardgame.wallet.domain.model.DepositRequestId
 import com.jsm.boardgame.wallet.domain.model.DepositRequestStatus
 import com.jsm.boardgame.wallet.domain.model.Money
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import java.time.Clock
 import java.time.Instant
@@ -39,7 +40,7 @@ class CancelDepositRequestServiceTest {
     private fun pendingRequest(userId: Long = 1): DepositRequest =
         DepositRequest.reconstitute(
             id = DepositRequestId(1),
-            userId = userId,
+            userId = UserId(userId),
             requestedAmount = Money.of(10_000),
             requestedAt = Instant.parse("2026-01-01T00:00:00Z"),
             status = DepositRequestStatus.PENDING,

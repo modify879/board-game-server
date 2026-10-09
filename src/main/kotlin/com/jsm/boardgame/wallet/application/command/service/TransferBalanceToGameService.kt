@@ -5,6 +5,7 @@ import com.jsm.boardgame.wallet.application.command.usecase.TransferBalanceToGam
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.springframework.stereotype.Service
@@ -26,7 +27,7 @@ class TransferBalanceToGameService(
 ) : TransferBalanceToGameUseCase {
 
     override fun transfer(command: TransferBalanceToGameCommand): Long {
-        val wallet = wallets.findOrOpen(command.userId)
+        val wallet = wallets.findOrOpen(UserId(command.userId))
         val amount = wallet.balance
         if (amount.amount == 0L) return 0
         val entry = wallet.record(

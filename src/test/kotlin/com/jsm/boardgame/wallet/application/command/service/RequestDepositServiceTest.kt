@@ -4,6 +4,7 @@ import com.jsm.boardgame.wallet.application.command.usecase.RequestDepositComman
 import com.jsm.boardgame.wallet.domain.model.DepositRequest
 import com.jsm.boardgame.wallet.domain.model.DepositRequestId
 import com.jsm.boardgame.wallet.domain.model.Wallet
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import java.time.Clock
@@ -45,12 +46,12 @@ private class FakeDepositRequestRepository : DepositRequestRepository {
 // "지갑이 생성되지 않는다"를 서비스 바깥에서 증거로 남기기 위한 것일 뿐, 실제로 연결되지 않는다.
 private class FakeWalletRepository : WalletRepository {
     val stored = mutableMapOf<Long, Wallet>()
-    override fun findByUserId(userId: Long): Wallet? = stored[userId]
+    override fun findByUserId(userId: UserId): Wallet? = stored[userId.value]
     override fun save(wallet: Wallet): Wallet {
-        stored[wallet.userId] = wallet
+        stored[wallet.userId.value] = wallet
         return wallet
     }
-    override fun findOrOpen(userId: Long): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
+    override fun findOrOpen(userId: UserId): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
 }
 
 class RequestDepositServiceTest {

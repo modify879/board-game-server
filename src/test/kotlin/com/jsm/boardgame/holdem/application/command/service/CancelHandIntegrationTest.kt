@@ -23,6 +23,7 @@ import com.jsm.boardgame.user.domain.repository.UserRepository
 import com.jsm.boardgame.wallet.application.command.usecase.AdjustWalletBalanceCommand
 import com.jsm.boardgame.wallet.application.command.usecase.AdjustWalletBalanceUseCase
 import com.jsm.boardgame.wallet.domain.model.Money
+import com.jsm.boardgame.wallet.domain.model.UserId as WalletUserId
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -84,12 +85,12 @@ class CancelHandIntegrationTest {
         // SB 는 콜해야 해서 체크할 수 없다 -> 만료 폴드 + 즉시 기립. 잔여 스택은 이미 지갑으로 돌아갔다.
         expireTurn.expire(ExpireTurnCommand(tableId.value, sb))
         assertNull(tables.findById(tableId)!!.seatAt(sb))
-        assertEquals(Money.of(10_000L - table.smallBlind.amount), wallets.findByUserId(departedUserId)!!.balance)
+        assertEquals(Money.of(10_000L - table.smallBlind.amount), wallets.findByUserId(WalletUserId(departedUserId))!!.balance)
 
         cancelHand.cancel(CancelHandCommand(tableId.value))
 
         assertNull(handStore.find(tableId))
-        assertEquals(Money.of(10_000L), wallets.findByUserId(departedUserId)!!.balance)
+        assertEquals(Money.of(10_000L), wallets.findByUserId(WalletUserId(departedUserId))!!.balance)
         val saved = tables.findById(tableId)!!
         assertEquals(2, saved.occupiedSeats().size)
         assertEquals(listOf(10_000L, 10_000L), saved.occupiedSeats().map { it.stack.amount })

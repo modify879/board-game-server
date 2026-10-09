@@ -1,9 +1,10 @@
 package com.jsm.boardgame.wallet.domain.repository
 
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.model.Wallet
 
 interface WalletRepository {
-    fun findByUserId(userId: Long): Wallet?
+    fun findByUserId(userId: UserId): Wallet?
     fun save(wallet: Wallet): Wallet
 
     /**
@@ -15,5 +16,5 @@ interface WalletRepository {
      * 롤백은 깨끗하고 재시도하면 통과하므로 지금은 재시도를 넣지 않는다. 넣게 되면
      * 이 한 곳만 고치면 된다는 것이 이 메서드를 둔 이유다.
      */
-    fun findOrOpen(userId: Long): Wallet
+    fun findOrOpen(userId: UserId): Wallet
 }

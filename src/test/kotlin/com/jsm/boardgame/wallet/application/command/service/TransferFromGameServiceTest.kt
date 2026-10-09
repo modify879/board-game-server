@@ -10,6 +10,7 @@ import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.model.WalletId
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import java.time.Clock
@@ -23,7 +24,7 @@ private class TransferFromGameFakeWalletRepository : WalletRepository {
     val stored = mutableMapOf<Long, Wallet>()
     private var sequence = 0L
 
-    override fun findByUserId(userId: Long): Wallet? = stored[userId]
+    override fun findByUserId(userId: UserId): Wallet? = stored[userId.value]
 
     override fun save(wallet: Wallet): Wallet {
         val saved = if (wallet.id == null) {
@@ -32,11 +33,11 @@ private class TransferFromGameFakeWalletRepository : WalletRepository {
         } else {
             wallet
         }
-        stored[wallet.userId] = saved
+        stored[wallet.userId.value] = saved
         return saved
     }
 
-    override fun findOrOpen(userId: Long): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
+    override fun findOrOpen(userId: UserId): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
 }
 
 private class TransferFromGameFakeLedgerEntryRepository : LedgerEntryRepository {
@@ -69,7 +70,7 @@ class TransferFromGameServiceTest {
 
     @Test
     fun `캐시아웃이면 잔액이 늘고 GAME_CASH_OUT 엔트리가 balanceAfter 와 함께 남는다`() {
-        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(2_000))
+        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = UserId(1), balance = Money.of(2_000))
 
         service.transfer(TransferFromGameCommand(userId = 1, amount = 5_000, gameTableId = 7, memo = "holdem"))
 
@@ -77,7 +78,7 @@ class TransferFromGameServiceTest {
         assertEquals(LedgerEntryType.GAME_CASH_OUT, entry.type)
         assertEquals(Money.of(5_000), entry.amount)
         assertEquals(Money.of(7_000), entry.balanceAfter)
-        assertEquals(Money.of(7_000), wallets.findByUserId(1)!!.balance)
+        assertEquals(Money.of(7_000), wallets.findByUserId(UserId(1))!!.balance)
     }
 
     @Test
@@ -109,6 +110,6 @@ class TransferFromGameServiceTest {
     fun `지갑이 없던 사용자도 캐시아웃하면 지갑이 lazy 로 만들어지고 잔액이 채워진다`() {
         service.transfer(TransferFromGameCommand(userId = 42, amount = 3_000, gameTableId = 7, memo = null))
 
-        assertEquals(Money.of(3_000), wallets.findByUserId(42)!!.balance)
+        assertEquals(Money.of(3_000), wallets.findByUserId(UserId(42))!!.balance)
     }
 }

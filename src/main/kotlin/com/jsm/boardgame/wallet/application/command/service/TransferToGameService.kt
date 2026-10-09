@@ -6,6 +6,7 @@ import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.gameTransferMoney
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.springframework.stereotype.Service
@@ -31,7 +32,7 @@ class TransferToGameService(
 
     override fun transfer(command: TransferToGameCommand) {
         val amount = gameTransferMoney(command.amount)
-        val wallet = wallets.findOrOpen(command.userId)
+        val wallet = wallets.findOrOpen(UserId(command.userId))
         val entry = wallet.record(
             type = LedgerEntryType.GAME_BUY_IN,
             amount = amount,

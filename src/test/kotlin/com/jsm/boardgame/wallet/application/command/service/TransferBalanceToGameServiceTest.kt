@@ -8,6 +8,7 @@ import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.model.WalletId
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import java.time.Clock
@@ -21,7 +22,7 @@ private class TransferBalanceToGameFakeWalletRepository : WalletRepository {
     val stored = mutableMapOf<Long, Wallet>()
     private var sequence = 0L
 
-    override fun findByUserId(userId: Long): Wallet? = stored[userId]
+    override fun findByUserId(userId: UserId): Wallet? = stored[userId.value]
 
     override fun save(wallet: Wallet): Wallet {
         val saved = if (wallet.id == null) {
@@ -30,11 +31,11 @@ private class TransferBalanceToGameFakeWalletRepository : WalletRepository {
         } else {
             wallet
         }
-        stored[wallet.userId] = saved
+        stored[wallet.userId.value] = saved
         return saved
     }
 
-    override fun findOrOpen(userId: Long): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
+    override fun findOrOpen(userId: UserId): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
 }
 
 private class TransferBalanceToGameFakeLedgerEntryRepository : LedgerEntryRepository {
@@ -67,12 +68,12 @@ class TransferBalanceToGameServiceTest {
 
     @Test
     fun `잔액 전부를 옮기면 잔액이 0 이 되고 GAME_BUY_IN 엔트리 한 건이 남는다`() {
-        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(12_300))
+        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = UserId(1), balance = Money.of(12_300))
 
         val moved = service.transfer(TransferBalanceToGameCommand(userId = 1, gameTableId = 7, memo = "holdem"))
 
         assertEquals(12_300L, moved)
-        assertEquals(Money.ZERO, wallets.findByUserId(1)!!.balance)
+        assertEquals(Money.ZERO, wallets.findByUserId(UserId(1))!!.balance)
         val entry = ledger.stored.single()
         assertEquals(LedgerEntryType.GAME_BUY_IN, entry.type)
         assertEquals(Money.of(12_300), entry.amount)
@@ -83,7 +84,7 @@ class TransferBalanceToGameServiceTest {
 
     @Test
     fun `잔액이 0 이면 원장을 남기지 않고 0 을 돌려준다`() {
-        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.ZERO)
+        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = UserId(1), balance = Money.ZERO)
 
         val moved = service.transfer(TransferBalanceToGameCommand(userId = 1, gameTableId = 7, memo = null))
 
@@ -96,7 +97,7 @@ class TransferBalanceToGameServiceTest {
         val moved = service.transfer(TransferBalanceToGameCommand(userId = 42, gameTableId = 7, memo = null))
 
         assertEquals(0L, moved)
-        assertEquals(Money.ZERO, wallets.findByUserId(42)!!.balance)
+        assertEquals(Money.ZERO, wallets.findByUserId(UserId(42))!!.balance)
         assertTrue(ledger.stored.isEmpty())
     }
 }

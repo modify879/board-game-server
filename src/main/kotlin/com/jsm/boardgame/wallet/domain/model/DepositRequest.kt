@@ -13,12 +13,12 @@ enum class DepositRequestStatus { PENDING, APPROVED, REJECTED, CANCELED }
 
 class DepositRequest private constructor(
     val id: DepositRequestId?,
-    val userId: Long,
+    val userId: UserId,
     val requestedAmount: Money,
     val requestedAt: Instant,
     status: DepositRequestStatus,
     creditedAmount: Money?,
-    processedBy: Long?,
+    processedBy: UserId?,
     processedAt: Instant?,
     rejectionReason: String?,
 ) {
@@ -29,7 +29,7 @@ class DepositRequest private constructor(
     var creditedAmount: Money? = creditedAmount
         private set
 
-    var processedBy: Long? = processedBy
+    var processedBy: UserId? = processedBy
         private set
 
     var processedAt: Instant? = processedAt
@@ -38,7 +38,7 @@ class DepositRequest private constructor(
     var rejectionReason: String? = rejectionReason
         private set
 
-    fun approve(adminUserId: Long, creditedAmount: Long, at: Instant) {
+    fun approve(adminUserId: UserId, creditedAmount: Long, at: Instant) {
         requirePending()
 
         // 최소 금액(MIN_AMOUNT)을 여기서는 적용하지 않는다 — 관리자는 실제 입금된 금액
@@ -53,7 +53,7 @@ class DepositRequest private constructor(
         this.processedAt = at
     }
 
-    fun reject(adminUserId: Long, reason: String, at: Instant) {
+    fun reject(adminUserId: UserId, reason: String, at: Instant) {
         requirePending()
         if (reason.isBlank()) {
             throw InvalidRejectionReasonException("반려 사유가 비어 있음: requestId=$id")
@@ -65,9 +65,9 @@ class DepositRequest private constructor(
         processedAt = at
     }
 
-    fun cancel(requesterUserId: Long, at: Instant) {
+    fun cancel(requesterUserId: UserId, at: Instant) {
         if (requesterUserId != userId) {
-            throw NotRequestOwnerException("본인 요청이 아님: requestId=$id, owner=$userId, requester=$requesterUserId")
+            throw NotRequestOwnerException("본인 요청이 아님: requestId=$id, owner=${userId.value}, requester=${requesterUserId.value}")
         }
         requirePending()
 
@@ -84,7 +84,7 @@ class DepositRequest private constructor(
     companion object {
         private const val MIN_AMOUNT = 1_000L
 
-        fun request(userId: Long, amount: Long, at: Instant): DepositRequest {
+        fun request(userId: UserId, amount: Long, at: Instant): DepositRequest {
             if (amount < MIN_AMOUNT || amount % MONEY_UNIT != 0L) {
                 throw InvalidDepositAmountException("충전 요청 금액이 유효하지 않음: amount=$amount")
             }
@@ -104,12 +104,12 @@ class DepositRequest private constructor(
         /** 영속 복원 전용 — 검증하지 않는다. */
         fun reconstitute(
             id: DepositRequestId,
-            userId: Long,
+            userId: UserId,
             requestedAmount: Money,
             requestedAt: Instant,
             status: DepositRequestStatus,
             creditedAmount: Money?,
-            processedBy: Long?,
+            processedBy: UserId?,
             processedAt: Instant?,
             rejectionReason: String?,
         ): DepositRequest = DepositRequest(

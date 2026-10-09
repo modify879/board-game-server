@@ -11,6 +11,7 @@ import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.model.WalletId
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import java.time.Clock
@@ -24,7 +25,7 @@ private class TransferToGameFakeWalletRepository : WalletRepository {
     val stored = mutableMapOf<Long, Wallet>()
     private var sequence = 0L
 
-    override fun findByUserId(userId: Long): Wallet? = stored[userId]
+    override fun findByUserId(userId: UserId): Wallet? = stored[userId.value]
 
     override fun save(wallet: Wallet): Wallet {
         val saved = if (wallet.id == null) {
@@ -33,11 +34,11 @@ private class TransferToGameFakeWalletRepository : WalletRepository {
         } else {
             wallet
         }
-        stored[wallet.userId] = saved
+        stored[wallet.userId.value] = saved
         return saved
     }
 
-    override fun findOrOpen(userId: Long): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
+    override fun findOrOpen(userId: UserId): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
 }
 
 private class TransferToGameFakeLedgerEntryRepository : LedgerEntryRepository {
@@ -70,7 +71,7 @@ class TransferToGameServiceTest {
 
     @Test
     fun `바이인이면 잔액이 줄고 GAME_BUY_IN 엔트리가 balanceAfter 와 함께 남는다`() {
-        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(10_000))
+        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = UserId(1), balance = Money.of(10_000))
 
         service.transfer(TransferToGameCommand(userId = 1, amount = 3_000, gameTableId = 7, memo = "holdem"))
 
@@ -78,12 +79,12 @@ class TransferToGameServiceTest {
         assertEquals(LedgerEntryType.GAME_BUY_IN, entry.type)
         assertEquals(Money.of(3_000), entry.amount)
         assertEquals(Money.of(7_000), entry.balanceAfter)
-        assertEquals(Money.of(7_000), wallets.findByUserId(1)!!.balance)
+        assertEquals(Money.of(7_000), wallets.findByUserId(UserId(1))!!.balance)
     }
 
     @Test
     fun `reference 가 GAME_TABLE 타입과 gameTableId 를 담는다`() {
-        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(10_000))
+        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = UserId(1), balance = Money.of(10_000))
 
         service.transfer(TransferToGameCommand(userId = 1, amount = 1_000, gameTableId = 42, memo = null))
 
@@ -94,7 +95,7 @@ class TransferToGameServiceTest {
 
     @Test
     fun `잔액보다 큰 바이인이면 INSUFFICIENT_BALANCE`() {
-        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(1_000))
+        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = UserId(1), balance = Money.of(1_000))
 
         val e = assertFailsWith<InsufficientBalanceException> {
             service.transfer(TransferToGameCommand(userId = 1, amount = 5_000, gameTableId = 7, memo = null))
@@ -124,6 +125,6 @@ class TransferToGameServiceTest {
             service.transfer(TransferToGameCommand(userId = 42, amount = 1_000, gameTableId = 7, memo = null))
         }
         assertEquals(WalletErrorCode.INSUFFICIENT_BALANCE, e.errorCode)
-        assertEquals(Money.ZERO, wallets.findByUserId(42)!!.balance)
+        assertEquals(Money.ZERO, wallets.findByUserId(UserId(42))!!.balance)
     }
 }

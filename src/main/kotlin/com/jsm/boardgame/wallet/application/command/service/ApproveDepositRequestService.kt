@@ -7,6 +7,7 @@ import com.jsm.boardgame.wallet.domain.model.DepositRequestId
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
@@ -38,7 +39,7 @@ class ApproveDepositRequestService(
         //    두 번째 승인은 여기서 블록되다가, 잠금이 풀리면 requirePending() 이 이미 처리된
         //    상태를 보고 떨어진다 — 지갑을 건드리기 전이다. 지갑 반영을 먼저 하면 두 번
         //    입금된 뒤에야 이를 알게 된다.
-        request.approve(command.adminUserId, creditedAmount, now)
+        request.approve(UserId(command.adminUserId), creditedAmount, now)
         depositRequests.save(request)
 
         // 2) 지갑은 없으면 여기서 만든다(findOrOpen).
@@ -52,6 +53,6 @@ class ApproveDepositRequestService(
         )
         wallets.save(wallet)
         ledger.save(entry)
-        eventPublisher.publishEvent(WalletCredited(request.userId))
+        eventPublisher.publishEvent(WalletCredited(request.userId.value))
     }
 }

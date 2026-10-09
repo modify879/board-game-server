@@ -12,6 +12,7 @@ import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.model.WalletId
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequest
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestId
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import com.jsm.boardgame.wallet.domain.repository.WithdrawalRequestRepository
@@ -54,7 +55,7 @@ private class RequestFakeWalletRepository : WalletRepository {
     val stored = mutableMapOf<Long, Wallet>()
     private var sequence = 0L
 
-    override fun findByUserId(userId: Long): Wallet? = stored[userId]
+    override fun findByUserId(userId: UserId): Wallet? = stored[userId.value]
 
     override fun save(wallet: Wallet): Wallet {
         val saved = if (wallet.id == null) {
@@ -63,11 +64,11 @@ private class RequestFakeWalletRepository : WalletRepository {
         } else {
             wallet
         }
-        stored[wallet.userId] = saved
+        stored[wallet.userId.value] = saved
         return saved
     }
 
-    override fun findOrOpen(userId: Long): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
+    override fun findOrOpen(userId: UserId): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
 }
 
 private class RequestFakeLedgerEntryRepository : LedgerEntryRepository {
@@ -100,7 +101,7 @@ class RequestWithdrawalServiceTest {
     private val service = RequestWithdrawalService(withdrawalRequests, wallets, ledger, clock)
 
     private fun walletWithBalance(userId: Long, balance: Long) {
-        wallets.stored[userId] = Wallet.reconstitute(id = WalletId(userId), userId = userId, balance = Money.of(balance))
+        wallets.stored[userId] = Wallet.reconstitute(id = WalletId(userId), userId = UserId(userId), balance = Money.of(balance))
     }
 
     @Test
@@ -109,7 +110,7 @@ class RequestWithdrawalServiceTest {
 
         val id = service.request(RequestWithdrawalCommand(1, 5_000, "국민은행", "123456789012", "홍길동"))
 
-        assertEquals(Money.of(5_000), wallets.findByUserId(1)!!.balance)
+        assertEquals(Money.of(5_000), wallets.findByUserId(UserId(1))!!.balance)
         val entry = ledger.stored.single()
         assertEquals(LedgerEntryType.WITHDRAWAL_HOLD, entry.type)
         assertEquals(LedgerReferenceType.WITHDRAWAL_REQUEST, entry.reference.type)

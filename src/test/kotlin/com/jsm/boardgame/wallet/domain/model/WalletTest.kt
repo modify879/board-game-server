@@ -14,11 +14,11 @@ class WalletTest {
     private val now = Instant.parse("2026-01-01T00:00:00Z")
 
     private fun savedWallet(balance: Money = Money.ZERO): Wallet =
-        Wallet.reconstitute(id = WalletId(1), userId = 1, balance = balance)
+        Wallet.reconstitute(id = WalletId(1), userId = UserId(1), balance = balance)
 
     @Test
     fun `open 은 잔액 0, id null 인 지갑을 만든다`() {
-        val wallet = Wallet.open(userId = 1)
+        val wallet = Wallet.open(userId = UserId(1))
 
         assertNull(wallet.id)
         assertEquals(Money.ZERO, wallet.balance)
@@ -89,7 +89,7 @@ class WalletTest {
 
     @Test
     fun `저장되지 않은 지갑에 record 하면 IllegalStateException 이 발생한다`() {
-        val wallet = Wallet.open(userId = 1)
+        val wallet = Wallet.open(userId = UserId(1))
 
         assertFailsWith<IllegalStateException> {
             wallet.record(

@@ -16,6 +16,7 @@ import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.model.WalletId
+import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import com.jsm.boardgame.wallet.application.event.WalletCredited
@@ -32,7 +33,7 @@ private class AdjustFakeWalletRepository : WalletRepository {
     val stored = mutableMapOf<Long, Wallet>()
     private var sequence = 0L
 
-    override fun findByUserId(userId: Long): Wallet? = stored[userId]
+    override fun findByUserId(userId: UserId): Wallet? = stored[userId.value]
 
     override fun save(wallet: Wallet): Wallet {
         val saved = if (wallet.id == null) {
@@ -41,11 +42,11 @@ private class AdjustFakeWalletRepository : WalletRepository {
         } else {
             wallet
         }
-        stored[wallet.userId] = saved
+        stored[wallet.userId.value] = saved
         return saved
     }
 
-    override fun findOrOpen(userId: Long): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
+    override fun findOrOpen(userId: UserId): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
 }
 
 private class AdjustFakeUserExistence(private val existingUserIds: MutableSet<Long> = mutableSetOf()) : UserExistence {
@@ -53,13 +54,13 @@ private class AdjustFakeUserExistence(private val existingUserIds: MutableSet<Lo
         existingUserIds += userId
     }
 
-    override fun exists(userId: Long): Boolean = userId in existingUserIds
+    override fun exists(userId: UserId): Boolean = userId.value in existingUserIds
 }
 
 private class AdjustFakeAdjustmentKeyRegistry : AdjustmentKeyRegistry {
     private val claimed = mutableSetOf<String>()
 
-    override fun claim(key: String, adminUserId: Long, targetUserId: Long, at: Instant) {
+    override fun claim(key: String, adminUserId: UserId, targetUserId: UserId, at: Instant) {
         if (!claimed.add(key)) {
             throw AdjustmentAlreadyAppliedException("이미 처리한 조정 키: key=$key")
         }
@@ -115,13 +116,13 @@ class AdjustWalletBalanceServiceTest {
         assertEquals("이벤트 보상", entry.memo)
         assertEquals(LedgerReferenceType.ADMIN_ADJUSTMENT, entry.reference.type)
         assertEquals(99L, entry.reference.id)
-        assertEquals(Money.of(5_000), wallets.findByUserId(1)!!.balance)
+        assertEquals(Money.of(5_000), wallets.findByUserId(UserId(1))!!.balance)
     }
 
     @Test
     fun `증액이면 WalletCredited 를 발행하고 감액이면 발행하지 않는다`() {
         userExistence.register(1)
-        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(10_000))
+        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = UserId(1), balance = Money.of(10_000))
 
         service.adjust(AdjustWalletBalanceCommand(targetUserId = 1, amount = -3_000, reason = "오류 회수", adminUserId = 99, idempotencyKey = "key-d"))
         assertEquals(emptyList<Any>(), eventPublisher.events)
@@ -133,7 +134,7 @@ class AdjustWalletBalanceServiceTest {
     @Test
     fun `음수 조정이면 ADMIN_ADJUSTMENT_DEBIT 엔트리가 생기고 잔액이 준다`() {
         userExistence.register(1)
-        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(10_000))
+        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = UserId(1), balance = Money.of(10_000))
 
         service.adjust(
             AdjustWalletBalanceCommand(targetUserId = 1, amount = -3_000, reason = "오류 회수", adminUserId = 99, idempotencyKey = "key-2"),
@@ -141,7 +142,7 @@ class AdjustWalletBalanceServiceTest {
 
         val entry = ledger.stored.single()
         assertEquals(LedgerEntryType.ADMIN_ADJUSTMENT_DEBIT, entry.type)
-        assertEquals(Money.of(7_000), wallets.findByUserId(1)!!.balance)
+        assertEquals(Money.of(7_000), wallets.findByUserId(UserId(1))!!.balance)
     }
 
     @Test
@@ -190,13 +191,13 @@ class AdjustWalletBalanceServiceTest {
             AdjustWalletBalanceCommand(targetUserId = 42, amount = 2_000, reason = "사유", adminUserId = 99, idempotencyKey = "key-7"),
         )
 
-        assertEquals(Money.of(2_000), wallets.findByUserId(42)!!.balance)
+        assertEquals(Money.of(2_000), wallets.findByUserId(UserId(42))!!.balance)
     }
 
     @Test
     fun `잔액보다 큰 음수 조정이면 INSUFFICIENT_BALANCE`() {
         userExistence.register(1)
-        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = 1, balance = Money.of(1_000))
+        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = UserId(1), balance = Money.of(1_000))
 
         val e = assertFailsWith<InsufficientBalanceException> {
             service.adjust(
@@ -233,7 +234,7 @@ class AdjustWalletBalanceServiceTest {
         val e = assertFailsWith<AdjustmentAlreadyAppliedException> { service.adjust(command) }
 
         assertEquals(WalletErrorCode.ADJUSTMENT_ALREADY_APPLIED, e.errorCode)
-        assertEquals(Money.of(1_000), wallets.findByUserId(1)!!.balance)
+        assertEquals(Money.of(1_000), wallets.findByUserId(UserId(1))!!.balance)
         assertEquals(1, ledger.stored.size)
     }
 
@@ -286,7 +287,7 @@ class AdjustWalletBalanceServiceTest {
             AdjustWalletBalanceCommand(targetUserId = 1, amount = 2_000, reason = "사유2", adminUserId = 99, idempotencyKey = "key-b"),
         )
 
-        assertEquals(Money.of(3_000), wallets.findByUserId(1)!!.balance)
+        assertEquals(Money.of(3_000), wallets.findByUserId(UserId(1))!!.balance)
         assertEquals(2, ledger.stored.size)
     }
 }
