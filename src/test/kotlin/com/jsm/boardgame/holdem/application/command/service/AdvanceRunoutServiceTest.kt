@@ -82,7 +82,7 @@ class AdvanceRunoutServiceTest {
         }
         handStore.save(table.id!!, hand)
         handStore.saves = 0
-        return table.id!!
+        return table.id
     }
 
     @Test

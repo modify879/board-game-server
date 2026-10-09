@@ -337,7 +337,7 @@ class BettingRoundTest {
         freshRound().act(3, BettingAction.RaiseTo(actions.minRaiseTo!!))
         freshRound().act(3, BettingAction.RaiseTo(actions.maxRaiseTo!!))
         val e = assertFailsWith<IllegalBettingActionException> {
-            freshRound().act(3, BettingAction.RaiseTo(actions.minRaiseTo!! - chips(100)))
+            freshRound().act(3, BettingAction.RaiseTo(actions.minRaiseTo - chips(100)))
         }
         assertEquals(HoldemErrorCode.RAISE_TOO_SMALL, e.errorCode)
     }
@@ -369,7 +369,7 @@ class BettingRoundTest {
         freshRoundAtBbOption().act(2, BettingAction.RaiseTo(actions.minRaiseTo!!))
         freshRoundAtBbOption().act(2, BettingAction.RaiseTo(actions.maxRaiseTo!!))
         val e = assertFailsWith<IllegalBettingActionException> {
-            freshRoundAtBbOption().act(2, BettingAction.RaiseTo(actions.minRaiseTo!! - chips(100)))
+            freshRoundAtBbOption().act(2, BettingAction.RaiseTo(actions.minRaiseTo - chips(100)))
         }
         assertEquals(HoldemErrorCode.RAISE_TOO_SMALL, e.errorCode)
     }

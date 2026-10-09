@@ -124,13 +124,13 @@ class TopUpSeatFromWalletIntegrationTest {
 
             topUpTableSeats.topUp(TopUpTableSeatsCommand(table.id!!.value)) // lock_timeout 으로 실패해도 던지지 않는다
 
-            assertThat(tables.findById(table.id!!)!!.seatOf(UserId(userId))!!.stack).isEqualTo(Chips.of(10_000))
+            assertThat(tables.findById(table.id)!!.seatOf(UserId(userId))!!.stack).isEqualTo(Chips.of(10_000))
         } finally {
             release.countDown()
             holder.join()
         }
 
-        topUpTableSeats.topUp(TopUpTableSeatsCommand(table.id!!.value)) // 락이 풀리면 다음 합산에서 합쳐진다
-        assertThat(tables.findById(table.id!!)!!.seatOf(UserId(userId))!!.stack).isEqualTo(Chips.of(15_000))
+        topUpTableSeats.topUp(TopUpTableSeatsCommand(table.id.value)) // 락이 풀리면 다음 합산에서 합쳐진다
+        assertThat(tables.findById(table.id)!!.seatOf(UserId(userId))!!.stack).isEqualTo(Chips.of(15_000))
     }
 }

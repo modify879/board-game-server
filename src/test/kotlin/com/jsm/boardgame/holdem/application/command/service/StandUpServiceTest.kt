@@ -112,7 +112,7 @@ class StandUpServiceTest {
         val call = walletTransfer.fromGameCalls.single()
         assertEquals(1L, call.userId)
         assertEquals(8_000L, call.amount)
-        assertEquals(saved.id!!, call.tableId)
+        assertEquals(saved.id, call.tableId)
         assertTrue(eventPublisher.events.any { it is JoinRequestsDue && it.tableId == saved.id })
     }
 
