@@ -49,17 +49,18 @@ class MySeatQueryServiceTest {
 
     @Test
     fun `핸드가 진행 중이지 않으면 handInProgress 가 false 다`() {
-        tableQuery.location = SeatLocation(tableId = 5L, seatNo = 2)
+        tableQuery.location = SeatLocation(tableId = 5L, seatNo = 2, stack = 1_500L)
 
         val view = service.findMine(1L)!!
         assertEquals(5L, view.tableId)
         assertEquals(2, view.seatNo)
         assertEquals(false, view.handInProgress)
+        assertEquals(1_500L, view.stack)
     }
 
     @Test
     fun `핸드가 진행 중이면 handInProgress 가 true 다`() {
-        tableQuery.location = SeatLocation(tableId = 5L, seatNo = 2)
+        tableQuery.location = SeatLocation(tableId = 5L, seatNo = 2, stack = 1_500L)
         handStore.put(5L, sampleHand())
 
         val view = service.findMine(1L)!!

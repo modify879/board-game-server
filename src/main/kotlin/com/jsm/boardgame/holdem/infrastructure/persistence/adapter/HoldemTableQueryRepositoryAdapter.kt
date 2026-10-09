@@ -23,6 +23,7 @@ class HoldemTableQueryRepositoryAdapter(
             selectNew<SeatLocation>(
                 path(HoldemSeatJpaEntity::tableId),
                 path(HoldemSeatJpaEntity::seatNo),
+                path(HoldemSeatJpaEntity::stack),
             ).from(entity(HoldemSeatJpaEntity::class))
                 .where(path(HoldemSeatJpaEntity::userId).eq(userId))
         }.firstOrNull()

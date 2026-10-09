@@ -244,6 +244,7 @@ class HoldemApiIntegrationTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.tableId").value(ctx.tableId.toInt()))
             .andExpect(jsonPath("$.handInProgress").value(true))
+            .andExpect(jsonPath("$.stack").value(10_000))
     }
 
     @Test
@@ -254,6 +255,7 @@ class HoldemApiIntegrationTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.tableId").value(ctx.tableId.toInt()))
             .andExpect(jsonPath("$.handInProgress").value(false))
+            .andExpect(jsonPath("$.stack").value(10_000))
     }
 
     @Test

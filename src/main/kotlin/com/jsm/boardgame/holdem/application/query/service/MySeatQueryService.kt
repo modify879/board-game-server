@@ -22,6 +22,6 @@ class MySeatQueryService(
     fun findMine(userId: Long): MySeatView? {
         val location = holdemTableQuery.findSeatOf(userId) ?: return null
         val handInProgress = handStore.find(TableId(location.tableId)) != null
-        return MySeatView(location.tableId, location.seatNo, handInProgress)
+        return MySeatView(location.tableId, location.seatNo, handInProgress, location.stack)
     }
 }
