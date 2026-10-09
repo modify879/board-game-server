@@ -114,7 +114,7 @@ class ExpireTurnServiceTest {
         }
         val hand = Hand.start(handStacks, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, table.smallBlind, table.bigBlind, identityShuffler)
         handStore.save(table.id!!, hand)
-        return table.id!!
+        return table.id
     }
 
     @Test
@@ -195,7 +195,7 @@ class ExpireTurnServiceTest {
 
         service.expire(ExpireTurnCommand(table.id!!.value, 1))
 
-        assertNull(handStore.find(table.id!!))
+        assertNull(handStore.find(table.id))
     }
 
     @Test

@@ -125,7 +125,7 @@ class AdmitJoinRequestServiceTest {
             seats = seats,
         )
         tables.save(seeded)
-        return table.id!!
+        return table.id
     }
 
     @Test

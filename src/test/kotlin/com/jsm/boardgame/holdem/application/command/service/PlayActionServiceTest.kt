@@ -102,7 +102,7 @@ class PlayActionServiceTest {
         }
         val hand = Hand.start(handStacks, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, table.smallBlind, table.bigBlind, identityShuffler)
         handStore.save(table.id!!, hand)
-        return table.id!!
+        return table.id
     }
 
     @Test
