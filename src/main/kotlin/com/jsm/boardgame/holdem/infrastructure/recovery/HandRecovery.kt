@@ -10,6 +10,7 @@ import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.infrastructure.timer.ConnectionTimer
+import com.jsm.boardgame.holdem.infrastructure.timer.runRetrying
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -119,7 +120,7 @@ class HandRecovery(
         val allUserIds = hand.seatNos.mapNotNull { seatNo -> table.seatAt(seatNo)?.userId }.toSet()
         if (allUserIds.isEmpty()) {
             log.info("테이블 {} 복구 대상 좌석을 찾지 못해 바로 재개합니다.", tableId.value)
-            tableExecutor.call(tableId) { resumeHandUseCase.resume(ResumeHandCommand(tableId.value)) }
+            resumeOrCancel(tableId)
             return
         }
 
@@ -128,7 +129,7 @@ class HandRecovery(
         // ConnectionTimer 의 부팅 시딩(@Order(1))이 평소대로 연결 타이머를 건다(suspendWatch 를 안 했으므로).
         if (hand.isRunningOut) {
             log.info("테이블 {} 런아웃 중인 핸드라 재접속을 기다리지 않고 바로 재개합니다.", tableId.value)
-            tableExecutor.call(tableId) { resumeHandUseCase.resume(ResumeHandCommand(tableId.value)) }
+            resumeOrCancel(tableId)
             return
         }
 
@@ -175,12 +176,25 @@ class HandRecovery(
 
         if (resume) {
             log.info("테이블 {} 전원 재접속을 확인해 핸드를 재개합니다.", tableId.value)
-            tableExecutor.call(tableId) { resumeHandUseCase.resume(ResumeHandCommand(tableId.value)) }
+            resumeOrCancel(tableId)
         } else {
             log.info("테이블 {} 복구 유예 시간 안에 전원이 돌아오지 않아 핸드를 취소합니다.", tableId.value)
-            tableExecutor.call(tableId) { cancelHandUseCase.cancel(CancelHandCommand(tableId.value)) }
+            cancelRetrying(tableId)
         }
     }
+
+    // 재개가 안 되면 핸드가 DB 에 남은 채 멈춘다 — 다시 걸고, 그래도 안 되면 취소·환불한다(그것도 다시 건다).
+    private fun resumeOrCancel(tableId: TableId) = taskScheduler.runRetrying(
+        "핸드 재개 tableId=${tableId.value}", clock,
+        isStale = { false },
+        onGiveUp = { cancelRetrying(tableId) },
+    ) { tableExecutor.call(tableId) { resumeHandUseCase.resume(ResumeHandCommand(tableId.value)) } }
+
+    private fun cancelRetrying(tableId: TableId) = taskScheduler.runRetrying(
+        "핸드 취소 tableId=${tableId.value}", clock,
+        isStale = { false },
+        onGiveUp = { log.error("핸드 취소·환불도 실패했습니다. 더 재시도하지 않습니다: tableId={}", tableId.value) },
+    ) { tableExecutor.call(tableId) { cancelHandUseCase.cancel(CancelHandCommand(tableId.value)) } }
 
     companion object {
         private val log = LoggerFactory.getLogger(HandRecovery::class.java)

@@ -1,11 +1,14 @@
 package com.jsm.boardgame.holdem.infrastructure.timer
 
+import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
+import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.application.port.TurnCountdown
 import com.jsm.boardgame.holdem.domain.model.TableId
+import org.slf4j.LoggerFactory
 import org.springframework.core.Ordered
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
@@ -36,6 +39,7 @@ class TurnTimer(
     private val clock: Clock,
     private val expireTurnUseCase: ExpireTurnUseCase,
     private val tableExecutor: TableExecutor,
+    private val cancelHandUseCase: CancelHandUseCase,
 ) : TurnCountdown {
     private class ScheduledExpiry(val future: ScheduledFuture<*>, val token: Long)
 
@@ -63,8 +67,9 @@ class TurnTimer(
     private fun reschedule(event: HandBroadcastRequested) {
         scheduled.remove(event.tableId)?.future?.cancel(false)
 
-        val seatNo = event.hand?.toActSeatNo ?: return
+        // 끝난 핸드의 이벤트에서도 올린다 — 대기 중인 만료 재시도가 토큰 검사에서 걸러져야 한다.
         val token = tokens.computeIfAbsent(event.tableId) { AtomicLong() }.incrementAndGet()
+        val seatNo = event.hand?.toActSeatNo ?: return
         val future = taskScheduler.schedule(
             { onExpire(event.tableId, seatNo, token) },
             Instant.now(clock).plus(TURN_TIMEOUT),
@@ -82,10 +87,24 @@ class TurnTimer(
     // (toActSeatNo != seatNo 면 no-op)만으로 안전하다 - 더 이상 경합 자체가 나지 않는다.
     private fun onExpire(tableId: TableId, seatNo: Int, token: Long) {
         if (tokens[tableId]?.get() != token) return
-        tableExecutor.call(tableId) { expireTurnUseCase.expire(ExpireTurnCommand(tableId.value, seatNo)) }
+        // 실패하면 이 만료를 대신할 이벤트가 없어 차례가 영영 안 넘어간다 — 다시 걸고, 안 되면 환불한다(그것도 다시 건다).
+        val isStale = { tokens[tableId]?.get() != token }
+        taskScheduler.runRetrying(
+            "차례 만료 tableId=${tableId.value}", clock,
+            isStale = isStale,
+            onGiveUp = { cancelRetrying(tableId, isStale) },
+        ) { tableExecutor.call(tableId) { expireTurnUseCase.expire(ExpireTurnCommand(tableId.value, seatNo)) } }
     }
 
+    private fun cancelRetrying(tableId: TableId, isStale: () -> Boolean) = taskScheduler.runRetrying(
+        "차례 만료 후 핸드 취소 tableId=${tableId.value}", clock,
+        isStale = isStale,
+        onGiveUp = { log.error("차례 만료 실패 뒤 핸드 취소·환불도 실패했습니다. 더 재시도하지 않습니다: tableId={}", tableId.value) },
+    ) { tableExecutor.call(tableId) { cancelHandUseCase.cancel(CancelHandCommand(tableId.value)) } }
+
     companion object {
+        private val log = LoggerFactory.getLogger(TurnTimer::class.java)
+
         // 계획서: 테이블 설정값이 될 자리. 지금은 전역 상수.
         private val TURN_TIMEOUT: Duration = Duration.ofMinutes(1)
     }

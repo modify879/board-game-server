@@ -5,8 +5,10 @@ import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUs
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.TableId
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Lazy
+import org.springframework.core.task.TaskRejectedException
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
 import java.time.Clock
@@ -68,12 +70,32 @@ class NextHandTimer(
     }
 
     // TableExecutor 가 이 시작을 그 테이블의 다른 모든 명령과 같은 스레드에 직렬화하므로 더 이상
-    // 경합이 나지 않는다.
+    // 경합이 나지 않는다. scheduled 항목은 시작 시도 직전에 치우므로 시도 중에 카운트다운이 남아 보이지 않는다.
+    // 실패하면 이 시작을 대신할 이벤트가 없어 테이블이 영영 논다 — 일반 카운트다운을 다시 걸어
+    // (cancel()/remaining() 도 그대로 동작) 카운트다운 주기로 계속 재시도한다.
     private fun onFire(tableId: TableId, token: Long) {
-        tableExecutor.call(tableId) {
-            if (tokens[tableId]?.get() != token) return@call
-            scheduled.remove(tableId)
-            startScheduledHandUseCase.start(StartScheduledHandCommand(tableId.value))
+        try {
+            tableExecutor.call(tableId) {
+                if (tokens[tableId]?.get() != token) return@call
+                scheduled.remove(tableId)
+                startScheduledHandUseCase.start(StartScheduledHandCommand(tableId.value))
+            }
+        } catch (e: InterruptedException) {
+            // 종료 중 스케줄러가 인터럽트한 것이다 — 다시 걸지 않는다
+            Thread.currentThread().interrupt()
+        } catch (e: Exception) {
+            log.error("다음 핸드 시작에 실패해 카운트다운을 다시 겁니다: tableId={}", tableId.value, e)
+            if (tokens[tableId]?.get() != token) return
+            try {
+                restart(tableId)
+            } catch (r: TaskRejectedException) {
+                // 컨텍스트 종료 중에는 다시 걸 이유가 없고, 이를 ERROR로 두면 진짜 ERROR가 묻힌다
+                log.debug("컨텍스트 종료 중이라 다음 핸드 예약을 걸지 못했습니다: tableId={}", tableId.value)
+            }
         }
+    }
+
+    companion object {
+        private val log = LoggerFactory.getLogger(NextHandTimer::class.java)
     }
 }

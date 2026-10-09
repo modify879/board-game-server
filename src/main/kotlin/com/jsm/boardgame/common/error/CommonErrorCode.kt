@@ -4,6 +4,7 @@ package com.jsm.boardgame.common.error
 enum class CommonErrorCode(override val kind: ErrorKind) : ErrorCode {
     AUTHENTICATION_REQUIRED(ErrorKind.UNAUTHORIZED),
     ACCESS_DENIED(ErrorKind.FORBIDDEN),
+    TEMPORARILY_UNAVAILABLE(ErrorKind.UNAVAILABLE),
     ;
 
     override val code: String get() = name

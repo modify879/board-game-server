@@ -207,15 +207,15 @@ class RunoutTimerTest {
     }
 
     @Test
-    fun `취소마저 실패하면 더 재시도하지 않고 멈춘다`() {
+    fun `취소마저 계속 실패하면 5번 백오프로 시도한 뒤 멈춘다`() {
         cancelUseCase.fail = true
         useCase.failures = 5
         timer.onHandBroadcastRequested(event(hand(allIn = true)))
 
-        repeat(5) { scheduler.scheduledCalls[it].task.run() }
+        repeat(9) { scheduler.scheduledCalls[it].task.run() } // 진행 5회 + 취소 재시도 4회
 
-        assertEquals(1, cancelUseCase.calls.size)
-        assertEquals(5, scheduler.scheduledCalls.size)
+        assertEquals(5, cancelUseCase.calls.size)
+        assertEquals(9, scheduler.scheduledCalls.size)
     }
 
     @Test

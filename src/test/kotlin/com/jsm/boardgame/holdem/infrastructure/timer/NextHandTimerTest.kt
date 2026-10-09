@@ -170,4 +170,64 @@ class NextHandTimerTest {
 
         assertEquals(1, skewedUseCase.calls.size)
     }
+
+    private fun failingTimer(failures: Int = 1): NextHandTimer {
+        var left = failures
+        val flaky = object : StartScheduledHandUseCase {
+            override fun start(command: StartScheduledHandCommand) {
+                if (left-- > 0) throw IllegalStateException("db down")
+                useCase.start(command)
+            }
+        }
+        return NextHandTimer(scheduler, flaky, NextHandTimerFakeTableExecutor(), clock, nextHandDelay)
+    }
+
+    @Test
+    fun `시작이 실패하면 카운트다운을 다시 걸고 다음 발화에서 시작한다`() {
+        val failing = failingTimer()
+        failing.restart(tableId)
+        scheduler.scheduledCalls[0].future.delayMillis = 5_000
+
+        scheduler.scheduledCalls[0].task.run()
+
+        assertEquals(2, scheduler.scheduledCalls.size)
+        assertEquals(fixedInstant.plus(nextHandDelay), scheduler.scheduledCalls[1].time)
+        assertEquals(0, useCase.calls.size)
+        scheduler.scheduledCalls[1].future.delayMillis = 4_000
+        assertEquals(Duration.ofMillis(4_000), failing.remaining(tableId))
+
+        scheduler.scheduledCalls[1].task.run()
+        assertEquals(1, useCase.calls.size)
+    }
+
+    @Test
+    fun `실패 뒤 다시 걸린 예약은 cancel 로 막을 수 있다`() {
+        val failing = failingTimer()
+        failing.restart(tableId)
+        scheduler.scheduledCalls[0].task.run()
+
+        failing.cancel(tableId)
+
+        assertTrue(scheduler.scheduledCalls[1].future.cancelled)
+        assertNull(failing.remaining(tableId))
+    }
+
+    @Test
+    fun `실패했어도 그 사이 토큰이 바뀌었으면 다시 걸지 않는다`() {
+        var failing: NextHandTimer? = null
+        val racing = object : StartScheduledHandUseCase {
+            override fun start(command: StartScheduledHandCommand) {
+                failing!!.cancel(tableId) // 실패 직전에 다른 경로가 예약을 비운다
+                failing!!.restart(tableId)
+                throw IllegalStateException("db down")
+            }
+        }
+        failing = NextHandTimer(scheduler, racing, NextHandTimerFakeTableExecutor(), clock, nextHandDelay)
+        failing.restart(tableId)
+
+        scheduler.scheduledCalls[0].task.run()
+
+        // restart 한 번(경합) 외에 실패 복구가 더 걸지 않는다
+        assertEquals(2, scheduler.scheduledCalls.size)
+    }
 }
