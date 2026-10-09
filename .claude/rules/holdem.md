@@ -98,3 +98,4 @@ paths: ["**/holdem/**"]
   `TableViewSequence` 는 메모리 전용이라 재시작하면 0부터 다시 세지만, 재시작은 모든 소켓을 끊으므로 클라이언트가
   재구독(재접속 포함) 시 채널별 last seq 를 리셋하면 문제없다. `WebSocketConfig` 의 `setPreservePublishOrder(true)`
   와 함께써야 한다 — 순번만 있고 세션별 발행 순서가 안 지켜지면 같은 세션 안에서도 메시지가 뒤섞인다
+- **테이블별 인메모리 상태는 `TableId` 를 키로 두고 `TableClosed` 커밋 후 리스너로 스스로 치운다.** `TableClosedListenersTest` 가 `TableId` 키 필드를 가진 컴포넌트를 스캔해 리스너를 강제한다 — Long 키로 두면 이 검사에 보이지 않는다

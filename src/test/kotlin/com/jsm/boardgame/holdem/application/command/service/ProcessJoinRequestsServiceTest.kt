@@ -13,7 +13,9 @@ import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
 import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
+import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.infrastructure.executor.SerialTableExecutor
 import com.jsm.boardgame.holdem.infrastructure.queue.InMemoryJoinQueue
 import java.util.concurrent.CountDownLatch
@@ -27,6 +29,15 @@ import kotlin.test.assertTrue
 
 /** userId 당 하나의 스크립트를 등록한다 — 이 서비스는 userId 마다 admit 을 한 번만 부른다
  *  (성공하면 대기열에서 빠지고, 실패해도 버려지거나 루프가 멈춘다). */
+// 실행기가 테이블 존재만 확인하므로 모든 테이블이 있다고 답한다.
+private class ProcessJoinRequestsFakeHoldemTableRepository : HoldemTableRepository {
+    override fun findById(id: TableId): HoldemTable? = HoldemTable.create("t")
+    override fun findByUserId(userId: Long): HoldemTable? = null
+    override fun findAllSeatedUserIds(): List<Long> = emptyList()
+    override fun findAllTableIds(): List<TableId> = emptyList()
+    override fun save(table: HoldemTable): HoldemTable = table
+}
+
 private class ProcessJoinRequestsFakeAdmitUseCase(
     private val scripts: Map<Long, () -> AdmitJoinRequestResult>,
 ) : AdmitJoinRequestUseCase {
@@ -187,7 +198,7 @@ class ProcessJoinRequestsServiceTest {
         val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
         val service = ProcessJoinRequestsService(queue, admit, notifier)
         val cancelNotifier = ProcessJoinRequestsFakeJoinQueueNotifier()
-        val tableExecutor = SerialTableExecutor()
+        val tableExecutor = SerialTableExecutor(ProcessJoinRequestsFakeHoldemTableRepository())
         val cancelService = CancelJoinRequestService(queue, cancelNotifier, tableExecutor)
 
         val processThread = thread {

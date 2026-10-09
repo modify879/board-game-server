@@ -3,6 +3,7 @@ package com.jsm.boardgame.holdem.infrastructure.executor
 import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import jakarta.annotation.PreDestroy
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -27,9 +28,11 @@ import org.springframework.transaction.event.TransactionalEventListener
  * 자기 자신을 기다리는 데드락이 된다 — 그 자리에서 바로 실행해 피한다.
  */
 @Component
-class SerialTableExecutor : TableExecutor {
+class SerialTableExecutor(
+    private val tables: HoldemTableRepository,
+) : TableExecutor {
 
-    private val executors = ConcurrentHashMap<Long, ExecutorService>()
+    private val executors = ConcurrentHashMap<TableId, ExecutorService?>() // 값이 null 인 항목은 저장되지 않는다 — computeIfAbsent 가 null 을 돌려줄 수 있게 하는 타입일 뿐
     private val currentTableId = ThreadLocal<Long?>()
 
     override fun <T> call(tableId: TableId, task: () -> T): T {
@@ -43,7 +46,7 @@ class SerialTableExecutor : TableExecutor {
             } finally {
                 currentTableId.remove()
             }
-        })
+        }) ?: return task()
         // ponytail: 호출자 타임아웃을 일부러 두지 않는다 — 타임아웃이 나도 task 는 계속 돌아 클라이언트에
         // 실패를 알린 뒤에 커밋될 수 있다. 상한은 application.yaml 의 DB lock_timeout/statement_timeout 이다.
         return try {
@@ -54,39 +57,54 @@ class SerialTableExecutor : TableExecutor {
     }
 
     override fun post(tableId: TableId, task: () -> Unit) {
-        submit(tableId, Callable {
-            currentTableId.set(tableId.value)
+        val run = {
             try {
                 task()
             } catch (e: Exception) {
                 log.error("post 로 넘긴 작업이 실패했습니다: tableId={}", tableId.value, e)
+            }
+        }
+        submit(tableId, Callable {
+            currentTableId.set(tableId.value)
+            try {
+                run()
             } finally {
                 currentTableId.remove()
             }
-        })
+        }) ?: run()
     }
 
     @TransactionalEventListener
     fun onTableClosed(event: TableClosed) {
-        executors.remove(event.tableId.value)?.shutdown()
+        executors.remove(event.tableId)?.shutdown()
     }
 
-    /** [remove] 직전에 옛 실행기를 쥔 호출자가 종료된 실행기에 제출하면 거부된다 — 새 실행기로 한 번만 다시 낸다. */
-    private fun <T> submit(tableId: TableId, callable: Callable<T>): Future<T> =
+    /**
+     * [remove] 직전에 옛 실행기를 쥔 호출자가 종료된 실행기에 제출하면 거부된다 — 새 실행기로 한 번만 다시 낸다.
+     * 실행기가 없는 테이블이면 null — 호출자가 그 자리에서 실행한다.
+     */
+    private fun <T> submit(tableId: TableId, callable: Callable<T>): Future<T>? =
         try {
-            executorOf(tableId).submit(callable)
+            executorOf(tableId)?.submit(callable)
         } catch (e: RejectedExecutionException) {
-            executorOf(tableId).submit(callable)
+            executorOf(tableId)?.submit(callable)
         }
 
-    private fun executorOf(tableId: TableId): ExecutorService =
-        executors.computeIfAbsent(tableId.value) {
-            Executors.newSingleThreadExecutor(Thread.ofVirtual().name("holdem-table-$it").factory())
+    /**
+     * 없는 테이블(없거나 닫힘)에는 실행기를 만들지 않는다 — 직렬화할 상태가 없고 작업이 알아서 TABLE_NOT_FOUND 나
+     * no-op 이 된다. 닫힘은 그 테이블의 실행기 위에서 돌아 커밋 뒤에야 실행기가 지워지므로, 지워진 뒤의 생성 시도는
+     * 항상 커밋된 닫힘을 읽는다(경합 없음). 이미 있는 실행기는 DB 를 안 건드린다.
+     * 있는 실행기는 get 으로 바로 돌려줘 생성 경로(DB 조회를 하며 빈 락을 쥔다)에 들어가지 않는다.
+     */
+    private fun executorOf(tableId: TableId): ExecutorService? =
+        executors[tableId] ?: executors.computeIfAbsent(tableId) {
+            if (tables.findById(tableId) == null) null
+            else Executors.newSingleThreadExecutor(Thread.ofVirtual().name("holdem-table-${tableId.value}").factory())
         }
 
     @PreDestroy
     fun shutdown() {
-        executors.values.forEach { it.shutdown() }
+        executors.values.forEach { it?.shutdown() }
     }
 
     companion object {
