@@ -6,7 +6,7 @@
 -- 번역 경로(WalletRepositoryAdapter.translate)를 테스트할 수 없다. 부팅마다 도는 멱등 DDL 이면
 -- 개발 DB·테스트 컨테이너 양쪽에 똑같이 적용된다.
 --
--- 문장 구분자를 기본값 ';' 대신 '@@@'(spring.sql.init.separator)로 바꿨다 — 스프링의 기본
+-- 문장 구분자는 ';' 가 아니라 '@@@'(spring.sql.init.separator)다 — 스프링의 기본
 -- 스크립트 분할기는 $$ 블록을 모르고 첫 ';' 에서 잘라 "Unterminated dollar quote" 로 깨진다.
 do $$ begin
     alter table wallets

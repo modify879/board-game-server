@@ -7,7 +7,6 @@ import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
 import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
-import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.infrastructure.queue.InMemoryJoinQueue

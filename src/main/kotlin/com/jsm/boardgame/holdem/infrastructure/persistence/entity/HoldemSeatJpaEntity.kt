@@ -15,8 +15,6 @@ import jakarta.persistence.UniqueConstraint
 import org.springframework.data.jpa.repository.JpaRepository
 
 /**
- * 원래는 (table_id, seat_no) 복합키를 생각했지만, 복합키는 unique 제약이 이미 주는 것과 같은
- * 보장을 위해 @IdClass/@EmbeddedId 의례를 끌고 온다 — surrogate id + unique 제약으로 대신한다.
  * uk_holdem_seats_user 는 우연이 아니다: "한 사람, 한 좌석" 을 DB 가 보장하는 자리다
  * (SitDownService 의 사전 체크는 친절한 오류용일 뿐, 동시 요청을 막지 못한다).
  */

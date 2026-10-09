@@ -30,7 +30,7 @@ import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
 // 테이블 자원(방 생성/조회/착석/핸드 진행)을 다룬다. 좌석 하나로 유일하게 찾히는 내 좌석 자원(기립, me/seat)은
-// HoldemSeatController 가 맡는다. 핸드 시작은 수동 진입점이 없다 — 자동 시작만 있다(HandStarter/StartScheduledHandService).
+// HoldemSeatController 가 맡는다.
 @RestController
 @RequestMapping("/api/holdem/tables")
 class HoldemTableController(

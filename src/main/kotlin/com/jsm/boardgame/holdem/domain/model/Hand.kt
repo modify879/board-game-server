@@ -19,19 +19,6 @@ data class HandResult(
     val showdownRanks: Map<Int, HandRank>,
     val showdownOrder: List<Int>,
 ) {
-    /** 두 좌석 이상이 겨룬 팟에서 이긴 좌석. 반드시 [shownSeatNos] 에 포함된다(팟을 가져가려면 공개해야 한다, TDA 13). */
-    val showdownWinners: Set<Int>
-        get() {
-            if (showdownRanks.isEmpty()) return emptySet()
-            val winners = mutableSetOf<Int>()
-            for (pot in pots) {
-                if (pot.eligibleSeats.size < 2) continue
-                val best = pot.eligibleSeats.maxOf { seat -> showdownRanks.getValue(seat) }
-                winners += pot.eligibleSeats.filter { seat -> showdownRanks.getValue(seat) == best }
-            }
-            return winners
-        }
-
     /** 쇼다운까지 간 좌석은 전원 공개한다(사용자 결정 — 머크 없음). */
     val shownSeatNos: Set<Int>
         get() = showdownRanks.keys

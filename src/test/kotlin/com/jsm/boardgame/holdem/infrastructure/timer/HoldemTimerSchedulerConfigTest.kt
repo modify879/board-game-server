@@ -13,9 +13,9 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-class TurnTimerSchedulerConfigTest {
+class HoldemTimerSchedulerConfigTest {
 
-    private val scheduler = TurnTimerSchedulerConfig().taskScheduler() as SimpleAsyncTaskScheduler
+    private val scheduler = HoldemTimerSchedulerConfig().taskScheduler() as SimpleAsyncTaskScheduler
 
     private fun <T> withStarted(block: () -> T): T {
         scheduler.start()

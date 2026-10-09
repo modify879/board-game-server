@@ -28,7 +28,7 @@ private const val CONSTRAINT_HAND_PK = "holdem_hand_in_progress_pkey"
  *
  * 쓰기 순서 — 핸드 시작 → INSERT([save]), 액션마다 → UPDATE state([save]), 핸드 종료 → 정산 커밋 + DELETE.
  * [HandSettler.settle] 이 `tables.save(table)` 다음에 `handStore.remove(tableId)` 를 부르고,
- * 그 둘을 부르는 `StartHandService.start`/`PlayActionService.play` 가 이미 `@Transactional` 이라
+ * 그 둘을 부르는 `StartScheduledHandService`/`PlayActionService` 등 유스케이스가 이미 `@Transactional` 이라
  * 정산과 삭제는 이미 한 트랜잭션 안에 있다 — 여기서 새로 트랜잭션을 열 필요가 없다.
  *
  * 상태 저장이 브로드캐스트보다 먼저 커밋된다 — `HandBroadcaster` 는
@@ -40,11 +40,9 @@ private const val CONSTRAINT_HAND_PK = "holdem_hand_in_progress_pkey"
  * 있고, 하필 그 커밋들이 환불액을 결정하는 핸드 상태다. unlogged table 도 쓰지 않는다 — 크래시 후
  * 재시작 시 PostgreSQL 이 자동으로 TRUNCATE 해, 정확히 복구가 필요한 순간에 행이 비어 있게 된다.
  *
- * 같은 행을 find→변경→save 로 다루는 쓰기가 둘이다 — HTTP 요청을 타는 `PlayActionService` 와,
- * HTTP 호출자 없이 스케줄러 스레드에서 도는 타이머 만료 경로(`ExpireTurnService`). 이 둘이 같은 테이블
- * 행에 동시에 쓰는 경합은 이제 여기서 잡지 않는다 — 테이블당 명령을 한 스레드로 직렬화하는
- * `TableExecutor`(single-writer-per-table) 가 상위에서 막아, 이 어댑터가 쓰기 경합을 검출하거나
- * 번역할 필요가 없어졌다.
+ * 같은 행을 find→변경→save 로 다루는 쓰기가 둘이다 — `PlayActionService` 와 타이머 만료 경로
+ * (`ExpireTurnService`). 동시 쓰기는 테이블당 명령을 한 스레드로 직렬화하는 `TableExecutor` 가
+ * 상위에서 막으므로 이 어댑터는 쓰기 경합을 검출하지 않는다.
  */
 @Repository
 class HandInProgressStoreAdapter(

@@ -3,7 +3,6 @@ package com.jsm.boardgame.holdem.infrastructure.queue
 import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
-import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
 import kotlin.test.Test

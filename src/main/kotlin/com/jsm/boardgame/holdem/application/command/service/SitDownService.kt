@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * 좌석은 더 이상 고르지 않는다 — 모든 착석 요청은 대기열에 들어가고(FIFO), ProcessJoinRequestsService
+ * 좌석은 고르지 않는다 — 모든 착석 요청은 대기열에 들어가고(FIFO), ProcessJoinRequestsService
  * 가 커밋 후 트리거를 받아 가장 낮은 빈 좌석에 순서대로 앉힌다. 바이인(지갑 잔액 전부) 이체는 좌석 배정
  * 시점(AdmitJoinRequestService)에만 일어난다 — 사전 조건 검사와 삽입은 [SeatRequester] 가 한다(테이블 생성과 공유).
  *

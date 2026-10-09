@@ -18,14 +18,14 @@ class Seat private constructor(
         private set
 
     /** BB 대기 중이면 true — 이번 핸드가 자기 자리의 BB 가 아니면 참가하지 않는다(최대 한 바퀴).
-     * 자연스럽게 BB 가 도달하면 StartHandService 가 [clearAwaitingBigBlind] 로 푼다. */
+     * 자연스럽게 BB 가 도달하면 HandStarter 가 [clearAwaitingBigBlind] 로 푼다. */
     var awaitingBigBlind: Boolean = awaitingBigBlind
         private set
 
     /** 착석 시 "BB 즉시 포스팅"을 선택해 아직 그 대가(추가 BB 한 번)를 치르지 않은 좌석.
      * awaitingBigBlind 는 이 선택 시 착석 즉시 false 가 되므로, "이미 정상 참가 중인 좌석"과
      * "즉시 포스팅을 아직 안 치른 좌석"을 구분할 다른 신호가 없다 — 그래서 별도 축으로 둔다.
-     * 이 좌석이 처음 핸드에 참가하는 순간(StartHandService) 단 한 번만 소비되고 이후 계속 false 다. */
+     * 이 좌석이 처음 핸드에 참가하는 순간(HandStarter) 단 한 번만 소비되고 이후 계속 false 다. */
     var owesImmediatePost: Boolean = owesImmediatePost
         private set
 

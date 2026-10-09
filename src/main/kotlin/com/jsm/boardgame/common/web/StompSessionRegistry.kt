@@ -22,12 +22,10 @@ import java.util.concurrent.ScheduledFuture
  * [CapturingWebSocketHandlerDecoratorFactory] 가 소켓이 열릴 때 실제 닫을 수 있는 WebSocketSession
  * 객체를 별도로 채운다 — STOMP 인터셉터가 보는 건 프레임이지 소켓이 아니다.
  *
- * 예전에는 30초마다 모든 세션의 토큰을 다시 검증했다(StompSessionRevalidator, 삭제됨). 지금은
- * 세션마다 정확히 하나의 예약 작업만 떠 있다 — 만료 시각과 폐기 시각 중 먼저 오는 쪽에 닫힌다.
+ * 세션마다 예약 작업이 정확히 하나 떠 있다 — 만료 시각과 폐기 시각 중 먼저 오는 쪽에 닫힌다.
  *
  * 세션 종료는 [SessionDisconnectEvent] 하나로 정리한다 — 소켓이 정상 종료되든 STOMP DISCONNECT
- * 프레임이든 결국 이 이벤트가 뒤따르므로 여기 한 곳만 지우면 된다. 남아 있는 예약 작업은 반드시
- * 취소한다 — 안 지우면 이미 없는 세션에 대해 뒤늦게 닫기를 시도한다(해는 없지만 낭비다).
+ * 프레임이든 결국 이 이벤트가 뒤따르므로 여기 한 곳만 지우면 된다.
  *
  * 일반 WebSocket(SockJS 미사용)에서는 STOMP 의 simpSessionId 와 WebSocketSession.id 가 같은 문자열이다
  * — HoldemStompIntegrationTest 에서 두 맵의 키가 겹치는 것으로 확인한다. 다르다면 여기서 닫을
