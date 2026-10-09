@@ -26,7 +26,7 @@ class InMemoryJoinQueue : JoinQueue {
 
     private val lock = Any()
     private val tableQueues = mutableMapOf<TableId, MutableList<Entry>>()
-    private val userToTable = mutableMapOf<Long, Long>()
+    private val userToTable = mutableMapOf<Long, TableId>()
 
     override fun enqueue(tableId: TableId, userId: Long, postBlindImmediately: Boolean): Int =
         synchronized(lock) {
@@ -35,7 +35,7 @@ class InMemoryJoinQueue : JoinQueue {
             }
             val queue = tableQueues.getOrPut(tableId) { mutableListOf() }
             queue += Entry(userId, postBlindImmediately)
-            userToTable[userId] = tableId.value
+            userToTable[userId] = tableId
             queue.size
         }
 
@@ -44,8 +44,7 @@ class InMemoryJoinQueue : JoinQueue {
     }
 
     override fun removeByUserId(userId: Long): TableId? = synchronized(lock) {
-        val tableIdValue = userToTable.remove(userId) ?: return@synchronized null
-        val tableId = TableId(tableIdValue)
+        val tableId = userToTable.remove(userId) ?: return@synchronized null
         tableQueues[tableId]?.removeIf { it.userId == userId }
         tableId
     }
@@ -62,7 +61,5 @@ class InMemoryJoinQueue : JoinQueue {
 
     override fun isQueued(userId: Long): Boolean = synchronized(lock) { userId in userToTable }
 
-    override fun tableOf(userId: Long): TableId? = synchronized(lock) {
-        userToTable[userId]?.let { TableId(it) }
-    }
+    override fun tableOf(userId: Long): TableId? = synchronized(lock) { userToTable[userId] }
 }

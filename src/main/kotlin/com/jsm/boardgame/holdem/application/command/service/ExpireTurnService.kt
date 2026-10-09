@@ -73,7 +73,7 @@ class ExpireTurnService(
         val returned = table.standUp(userId)
         if (returned.isPositive()) {
             // memo 규칙은 StandUpService 와 같다 - 문구는 클라이언트가 만든다(규칙 8).
-            walletTransfer.fromGame(userId, returned.amount, tableId.value, memo = "holdem")
+            walletTransfer.fromGame(userId, returned.amount, tableId, memo = "holdem")
         }
     }
 

@@ -45,7 +45,7 @@ class StandUpService(
         if (returned.isPositive()) {
             // memo 가 유일하게 "어느 게임인가" 를 나른다 — LedgerEntryType 이 이미 방향을 말하고
             // LedgerReferenceType.GAME_TABLE 엔 게임 이름이 없다. 표시 문구를 넣지 않는다(규칙 8, 문구는 클라이언트가 만든다).
-            walletTransfer.fromGame(command.userId, returned.amount, tableId.value, memo = "holdem")
+            walletTransfer.fromGame(command.userId, returned.amount, tableId, memo = "holdem")
         }
         handStarter.rescheduleOnExit(tableId, table)
         eventPublisher.publishEvent(JoinRequestsDue(tableId))

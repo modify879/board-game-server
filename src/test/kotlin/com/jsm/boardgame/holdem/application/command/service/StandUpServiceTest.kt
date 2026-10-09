@@ -68,15 +68,15 @@ private class StandUpFakeEventPublisher : ApplicationEventPublisher {
 }
 
 private class StandUpFakeWalletTransfer : WalletTransfer {
-    data class FromGameCall(val userId: Long, val amount: Long, val tableId: Long, val memo: String?)
+    data class FromGameCall(val userId: Long, val amount: Long, val tableId: TableId, val memo: String?)
 
     val fromGameCalls = mutableListOf<FromGameCall>()
 
-    override fun allToGame(userId: Long, tableId: Long, memo: String?): Long {
+    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long {
         error("StandUp 는 allToGame 을 부르지 않는다")
     }
 
-    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {
+    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) {
         fromGameCalls += FromGameCall(userId, amount, tableId, memo)
     }
 }
@@ -111,7 +111,7 @@ class StandUpServiceTest {
         val call = walletTransfer.fromGameCalls.single()
         assertEquals(1L, call.userId)
         assertEquals(8_000L, call.amount)
-        assertEquals(saved.id!!.value, call.tableId)
+        assertEquals(saved.id!!, call.tableId)
         assertTrue(eventPublisher.events.any { it is JoinRequestsDue && it.tableId == saved.id })
     }
 

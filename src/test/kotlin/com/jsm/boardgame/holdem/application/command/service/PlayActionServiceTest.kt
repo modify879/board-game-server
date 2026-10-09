@@ -72,8 +72,8 @@ private class PlayActionFakeNextHandCountdown : NextHandCountdown {
 }
 
 private class PlayActionFakeWalletTransfer : WalletTransfer {
-    override fun allToGame(userId: Long, tableId: Long, memo: String?): Long = 0
-    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {}
+    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long = 0
+    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) {}
 }
 
 class PlayActionServiceTest {

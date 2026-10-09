@@ -63,14 +63,14 @@ private class ExpireTurnFakeHandStore : HandStore {
 }
 
 private class ExpireTurnFakeWalletTransfer : WalletTransfer {
-    data class FromGameCall(val userId: Long, val amount: Long, val tableId: Long, val memo: String?)
+    data class FromGameCall(val userId: Long, val amount: Long, val tableId: TableId, val memo: String?)
 
     val fromGameCalls = mutableListOf<FromGameCall>()
 
     // ExpireTurnService 자체는 allToGame 을 부르지 않는다 — 정산(HandSettler)이 잔액 0 으로 부른다.
-    override fun allToGame(userId: Long, tableId: Long, memo: String?): Long = 0
+    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long = 0
 
-    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {
+    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) {
         fromGameCalls += FromGameCall(userId, amount, tableId, memo)
     }
 }
@@ -150,7 +150,7 @@ class ExpireTurnServiceTest {
         val credited = walletTransfer.fromGameCalls.single()
         assertEquals(1000L, credited.userId)
         assertEquals(10_000L, credited.amount)
-        assertEquals(tableId.value, credited.tableId)
+        assertEquals(tableId, credited.tableId)
     }
 
     @Test

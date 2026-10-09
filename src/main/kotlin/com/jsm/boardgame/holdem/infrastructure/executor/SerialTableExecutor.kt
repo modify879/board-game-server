@@ -33,14 +33,14 @@ class SerialTableExecutor(
 ) : TableExecutor {
 
     private val executors = ConcurrentHashMap<TableId, ExecutorService?>() // 값이 null 인 항목은 저장되지 않는다 — computeIfAbsent 가 null 을 돌려줄 수 있게 하는 타입일 뿐
-    private val currentTableId = ThreadLocal<Long?>()
+    private val currentTableId = ThreadLocal<TableId?>()
 
     override fun <T> call(tableId: TableId, task: () -> T): T {
-        if (currentTableId.get() == tableId.value) {
+        if (currentTableId.get() == tableId) {
             return task()
         }
         val future = submit(tableId, Callable {
-            currentTableId.set(tableId.value)
+            currentTableId.set(tableId)
             try {
                 task()
             } finally {
@@ -65,7 +65,7 @@ class SerialTableExecutor(
             }
         }
         submit(tableId, Callable {
-            currentTableId.set(tableId.value)
+            currentTableId.set(tableId)
             try {
                 run()
             } finally {

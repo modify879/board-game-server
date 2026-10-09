@@ -61,8 +61,8 @@ private class AdvanceRunoutFakeNextHandCountdown : NextHandCountdown {
 }
 
 private class AdvanceRunoutFakeWalletTransfer : WalletTransfer {
-    override fun allToGame(userId: Long, tableId: Long, memo: String?): Long = 0
-    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {}
+    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long = 0
+    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) {}
 }
 
 class AdvanceRunoutServiceTest {

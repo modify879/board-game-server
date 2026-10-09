@@ -71,12 +71,12 @@ private class AdmitJoinRequestFakeHandStore : HandStore {
 /** 지갑 잔액을 들고 있다가 allToGame 으로 전부 내어준다. 실패시킬 사용자 id 를 지정하면 그 사용자의 호출에서
  *  BusinessException 을 던져 지갑 실패를 흉내낸다(holdem 은 wallet 의 domain 을 참조하지 않는다). */
 private class AdmitJoinRequestFakeWalletTransfer(private val failingUserIds: Set<Long> = emptySet()) : WalletTransfer {
-    data class AllToGameCall(val userId: Long, val tableId: Long, val memo: String?, val amount: Long)
+    data class AllToGameCall(val userId: Long, val tableId: TableId, val memo: String?, val amount: Long)
 
     val balances = mutableMapOf<Long, Long>()
     val allToGameCalls = mutableListOf<AllToGameCall>()
 
-    override fun allToGame(userId: Long, tableId: Long, memo: String?): Long {
+    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long {
         if (userId in failingUserIds) {
             throw BuyInOutOfRangeException("잔액 부족 등 지갑 실패를 흉내낸다: userId=$userId")
         }
@@ -85,7 +85,7 @@ private class AdmitJoinRequestFakeWalletTransfer(private val failingUserIds: Set
         return amount
     }
 
-    override fun fromGame(userId: Long, amount: Long, tableId: Long, memo: String?) {
+    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) {
         error("AdmitJoinRequestService 는 fromGame 을 부르지 않는다")
     }
 }
