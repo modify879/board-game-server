@@ -11,6 +11,7 @@ import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.springframework.data.jpa.repository.JpaRepository
+import java.time.Instant
 
 @Entity
 @Table(name = "holdem_tables")
@@ -29,6 +30,8 @@ class HoldemTableJpaEntity(
     var smallBlindSeatNo: Int?,
     @Column(name = "big_blind_seat_no")
     var bigBlindSeatNo: Int?,
+    @Column(name = "closed_at")
+    var closedAt: Instant?,
 )
 
 interface HoldemTableJpaRepository : JpaRepository<HoldemTableJpaEntity, Long>, KotlinJdslJpqlExecutor
@@ -43,6 +46,7 @@ fun HoldemTableJpaEntity.toDomain(seats: List<HoldemSeatJpaEntity>): HoldemTable
         seats = seats.associate { it.seatNo to it.toDomain() },
         smallBlindSeatNo = smallBlindSeatNo,
         bigBlindSeatNo = bigBlindSeatNo,
+        closedAt = closedAt,
     )
 
 fun HoldemTable.toJpaEntity(): HoldemTableJpaEntity =
@@ -54,4 +58,5 @@ fun HoldemTable.toJpaEntity(): HoldemTableJpaEntity =
         buttonSeatNo = buttonSeatNo,
         smallBlindSeatNo = smallBlindSeatNo,
         bigBlindSeatNo = bigBlindSeatNo,
+        closedAt = closedAt,
     )

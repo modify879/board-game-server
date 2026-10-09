@@ -25,7 +25,8 @@ class HoldemTableRepositoryAdapter(
 ) : HoldemTableRepository {
 
     override fun findById(id: TableId): HoldemTable? {
-        val tableEntity = tableJpa.findById(id.value).orElse(null) ?: return null
+        // 닫힌 테이블은 없는 테이블로 본다 — 명령·복구·타이머가 전부 이 경로를 거치므로 한 곳에서 걸러진다.
+        val tableEntity = tableJpa.findById(id.value).orElse(null)?.takeIf { it.closedAt == null } ?: return null
         return tableEntity.toDomain(seatJpa.findAllByTableId(tableEntity.id))
     }
 
@@ -36,7 +37,7 @@ class HoldemTableRepositoryAdapter(
 
     override fun findAllSeatedUserIds(): List<Long> = seatJpa.findAll().map { it.userId }
 
-    override fun findAllTableIds(): List<TableId> = tableJpa.findAll().map { TableId(it.id) }
+    override fun findAllTableIds(): List<TableId> = tableJpa.findAll().filter { it.closedAt == null }.map { TableId(it.id) }
 
     override fun save(table: HoldemTable): HoldemTable {
         val savedTable = tableJpa.saveAndFlush(table.toJpaEntity())

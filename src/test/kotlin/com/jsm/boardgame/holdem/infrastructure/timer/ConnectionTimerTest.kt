@@ -139,6 +139,8 @@ private class ConnectionTimerFakeUserConnections : UserConnections {
 private class ConnectionTimerFakeTableExecutor : TableExecutor {
     override fun <T> call(tableId: TableId, task: () -> T): T = task()
     override fun post(tableId: TableId, task: () -> Unit) = task()
+
+    override fun remove(tableId: TableId) {}
 }
 
 private class ConnectionTimerFakeHoldemTableRepository : HoldemTableRepository {

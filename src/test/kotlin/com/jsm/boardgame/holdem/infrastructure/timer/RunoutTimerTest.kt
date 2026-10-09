@@ -94,6 +94,8 @@ private class RunoutTimerFakeCancelHandUseCase : CancelHandUseCase {
 private class RunoutTimerFakeTableExecutor : TableExecutor {
     override fun <T> call(tableId: TableId, task: () -> T): T = task()
     override fun post(tableId: TableId, task: () -> Unit) = task()
+
+    override fun remove(tableId: TableId) {}
 }
 
 class RunoutTimerTest {

@@ -89,6 +89,8 @@ private class TurnTimerFakeCancelHandUseCase : CancelHandUseCase {
 private class TurnTimerFakeTableExecutor : TableExecutor {
     override fun <T> call(tableId: TableId, task: () -> T): T = task()
     override fun post(tableId: TableId, task: () -> Unit) = task()
+
+    override fun remove(tableId: TableId) {}
 }
 
 private fun TurnTimer.commit(event: HandBroadcastRequested) {

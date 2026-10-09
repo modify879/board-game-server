@@ -1,6 +1,8 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.common.error.BusinessException
+import com.jsm.boardgame.common.error.CommonErrorCode
+import com.jsm.boardgame.common.error.ErrorCode
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestCommand
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestResult
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestUseCase
@@ -52,11 +54,19 @@ class ProcessJoinRequestsService(
                     "대기열 항목을 처리하지 못해 버립니다: tableId={}, userId={}, errorCode={}",
                     tableId.value, head.userId, e.errorCode,
                 )
-                joinQueue.removeByUserId(head.userId)
-                notifier.notifyDropped(tableId, head.userId, e.errorCode)
-                notifier.notifyPositions(tableId, joinQueue.entriesOf(tableId))
+                drop(tableId, head.userId, e.errorCode)
+            } catch (e: Exception) {
+                // 착석 시도는 REQUIRES_NEW 라 이미 롤백됐다. 머리를 남기면 뒤 사람 전부가 막히므로 버리고, 클라이언트는 재시도한다.
+                log.error("대기열 항목 처리 중 예기치 못한 오류로 버립니다: tableId={}, userId={}", tableId.value, head.userId, e)
+                drop(tableId, head.userId, CommonErrorCode.TEMPORARILY_UNAVAILABLE)
             }
         }
+    }
+
+    private fun drop(tableId: TableId, userId: Long, errorCode: ErrorCode) {
+        joinQueue.removeByUserId(userId)
+        notifier.notifyDropped(tableId, userId, errorCode)
+        notifier.notifyPositions(tableId, joinQueue.entriesOf(tableId))
     }
 
     companion object {

@@ -2,8 +2,12 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.CreateTableCommand
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
+import com.jsm.boardgame.holdem.application.exception.NotConnectedException
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.UserConnections
+import com.jsm.boardgame.holdem.application.port.WalletBalance
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
+import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
@@ -11,10 +15,13 @@ import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
+import com.jsm.boardgame.holdem.infrastructure.queue.InMemoryJoinQueue
+import org.springframework.context.ApplicationEventPublisher
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 private class CreateTableFakeHoldemTableRepository : HoldemTableRepository {
     val stored = mutableMapOf<Long, HoldemTable>()
@@ -52,11 +59,31 @@ private class CreateTableFakeHandStore : HandStore {
     override fun findAllInProgress(): List<TableId> = stored.keys.map { TableId(it) }
 }
 
+private class CreateTableFakeUserConnections : UserConnections {
+    val connected = mutableSetOf<Long>()
+
+    override fun isConnected(userId: Long): Boolean = userId in connected
+
+    override fun hasOtherSession(userId: Long, excludingSessionId: String): Boolean = false
+}
+
+private class CreateTableFakeWalletBalance : WalletBalance {
+    val balances = mutableMapOf<Long, Long>()
+
+    override fun balanceOf(userId: Long): Long = balances[userId] ?: 0
+}
+
 class CreateTableServiceTest {
 
     private val tables = CreateTableFakeHoldemTableRepository()
     private val handStore = CreateTableFakeHandStore()
-    private val service = CreateTableService(tables, handStore)
+    private val joinQueue = InMemoryJoinQueue()
+    private val userConnections = CreateTableFakeUserConnections().apply { connected += 1L }
+    private val walletBalance = CreateTableFakeWalletBalance().apply { balances[1L] = 8_000 }
+    private val service = CreateTableService(
+        tables,
+        SeatRequester(tables, handStore, joinQueue, userConnections, walletBalance, ApplicationEventPublisher { }),
+    )
 
     private fun seatedTable(userId: Long): HoldemTable {
         val table = HoldemTable.create("기존 테이블")
@@ -94,5 +121,34 @@ class CreateTableServiceTest {
             service.create(CreateTableCommand(ownerUserId = 1, name = "새 테이블"))
         }
         assertEquals(HoldemErrorCode.HAND_IN_PROGRESS, e.errorCode)
+    }
+
+    @Test
+    fun `만든 사람은 새 테이블의 대기열에 들어간다`() {
+        val id = service.create(CreateTableCommand(ownerUserId = 1, name = "새 테이블"))
+
+        assertEquals(id, joinQueue.tableOf(1))
+    }
+
+    @Test
+    fun `지갑 잔액이 빅 블라인드 미만이면 BUY_IN_OUT_OF_RANGE 이고 대기열에 남지 않는다`() {
+        walletBalance.balances[1L] = 100
+
+        val e = assertFailsWith<BuyInOutOfRangeException> {
+            service.create(CreateTableCommand(ownerUserId = 1, name = "새 테이블"))
+        }
+        assertEquals(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, e.errorCode)
+        assertTrue(!joinQueue.isQueued(1))
+    }
+
+    @Test
+    fun `STOMP 연결이 없으면 NOT_CONNECTED 이고 대기열에 남지 않는다`() {
+        userConnections.connected.clear()
+
+        val e = assertFailsWith<NotConnectedException> {
+            service.create(CreateTableCommand(ownerUserId = 1, name = "새 테이블"))
+        }
+        assertEquals(HoldemErrorCode.NOT_CONNECTED, e.errorCode)
+        assertTrue(!joinQueue.isQueued(1))
     }
 }

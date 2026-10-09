@@ -28,3 +28,4 @@ class AlreadySeatedException(logMessage: String) : BusinessException(HoldemError
 class NotSeatedException(logMessage: String) : BusinessException(HoldemErrorCode.NOT_SEATED, logMessage)
 class BuyInOutOfRangeException(logMessage: String) : BusinessException(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, logMessage)
 class TableFullException(logMessage: String) : BusinessException(HoldemErrorCode.TABLE_FULL, logMessage)
+class TableNotEmptyException(logMessage: String) : BusinessException(HoldemErrorCode.TABLE_NOT_EMPTY, logMessage)

@@ -65,6 +65,8 @@ private class TopUpFakeTableExecutor : TableExecutor {
     }
 
     override fun post(tableId: TableId, task: () -> Unit) = error("충전 합산은 post 를 쓰지 않는다")
+
+    override fun remove(tableId: TableId) {}
 }
 
 class TopUpSeatFromWalletServiceTest {

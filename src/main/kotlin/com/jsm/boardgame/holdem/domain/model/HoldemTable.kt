@@ -4,7 +4,9 @@ import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.InvalidTableNameException
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
+import com.jsm.boardgame.holdem.domain.exception.TableNotEmptyException
 import com.jsm.boardgame.holdem.domain.exception.TableFullException
+import java.time.Instant
 
 @JvmInline value class TableId(val value: Long)
 
@@ -17,6 +19,7 @@ class HoldemTable private constructor(
     smallBlindSeatNo: Int?,
     bigBlindSeatNo: Int?,
     seats: Map<Int, Seat>,
+    closedAt: Instant?,
 ) {
     var buttonSeatNo: Int? = buttonSeatNo
         private set
@@ -35,7 +38,19 @@ class HoldemTable private constructor(
     var bigBlindSeatNo: Int? = bigBlindSeatNo
         private set
 
+    /** 방치돼 닫힌 시각. null 이면 열려 있다. 닫힌 테이블은 삭제하지 않고 남긴다 — 원장이 테이블 id 를 참조한다. */
+    var closedAt: Instant? = closedAt
+        private set
+
     private val seats: MutableMap<Int, Seat> = seats.toMutableMap()
+
+    /** 아무도 앉아 있지 않아야 닫을 수 있다. 핸드·대기열 여부는 도메인이 모르니 호출 위치(CloseIdleTableService)가 확인한다. */
+    fun close(at: Instant) {
+        if (seats.isNotEmpty()) {
+            throw TableNotEmptyException("앉은 사용자가 있는 테이블은 닫을 수 없습니다: tableId=$id")
+        }
+        closedAt = at
+    }
 
     /** 가장 낮은 번호의 빈 좌석에 강제로 앉힌다 — 좌석을 고르지 않는다(FIFO 대기열, ProcessJoinRequestsService). */
     fun sitDown(userId: Long, buyIn: Chips, postBlindImmediately: Boolean = false): Seat {
@@ -233,6 +248,7 @@ class HoldemTable private constructor(
                 smallBlindSeatNo = null,
                 bigBlindSeatNo = null,
                 seats = emptyMap(),
+                closedAt = null,
             )
         }
 
@@ -246,6 +262,7 @@ class HoldemTable private constructor(
             seats: Map<Int, Seat>,
             smallBlindSeatNo: Int? = null,
             bigBlindSeatNo: Int? = null,
-        ): HoldemTable = HoldemTable(id, name, smallBlind, bigBlind, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, seats)
+            closedAt: Instant? = null,
+        ): HoldemTable = HoldemTable(id, name, smallBlind, bigBlind, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, seats, closedAt)
     }
 }

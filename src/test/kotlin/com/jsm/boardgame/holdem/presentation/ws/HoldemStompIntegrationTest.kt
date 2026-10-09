@@ -5,9 +5,13 @@ import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.common.error.CommonErrorCode
 import com.jsm.boardgame.common.web.StompSessionRegistry
 import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.holdem.application.command.usecase.CloseIdleTableCommand
+import com.jsm.boardgame.holdem.application.command.usecase.CloseIdleTableUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
+import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.user.infrastructure.security.config.JwtProperties
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
@@ -37,7 +41,9 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.web.socket.client.standard.StandardWebSocketClient
 import org.springframework.web.socket.messaging.WebSocketStompClient
@@ -84,6 +90,12 @@ class HoldemStompIntegrationTest {
 
     @Autowired
     private lateinit var startScheduledHandUseCase: StartScheduledHandUseCase
+
+    @Autowired
+    private lateinit var closeIdleTableUseCase: CloseIdleTableUseCase
+
+    @Autowired
+    private lateinit var tableExecutor: TableExecutor
 
     @LocalServerPort
     private var port: Int = 0
@@ -174,12 +186,11 @@ class HoldemStompIntegrationTest {
         ledgerEntryRepository.save(entry)
     }
 
-    private fun createTable(accessToken: String, name: String = "t-${UUID.randomUUID().toString().take(8)}"): Long {
-        val result = authPost("/api/holdem/tables", accessToken, """{"name":"$name"}""")
-            .andExpect(status().isCreated)
-            .andReturn()
-        return JsonPath.read<Int>(result.response.contentAsString, "$.tableId").toLong()
-    }
+    // REST 생성은 만든 사람을 대기열에 넣는다(CreateTableService) — 이 헬퍼는 대기열이 비어 있는 테이블이 필요해
+    // 저장소로 직접 만든다. accessToken 은 호출부 시그니처를 유지하려고 남겼다.
+    @Suppress("UNUSED_PARAMETER")
+    private fun createTable(accessToken: String, name: String = "t-${UUID.randomUUID().toString().take(8)}"): Long =
+        holdemTableRepository.save(HoldemTable.create(name)).id!!.value
 
     // 착석은 이제 반드시 STOMP 연결이 있어야 대기열에 들어간다(SitDownService) — 이 헬퍼가 그
     // 연결을 먼저 만든다. 반환된 세션은 쓰지 않는다(연결 자체가 목적이라 fire-and-forget).
@@ -778,5 +789,32 @@ class HoldemStompIntegrationTest {
         assertThat(webSocketSessionIds).containsAll(tokenSessionIds)
 
         session.disconnect()
+    }
+
+    @Test
+    fun `방치된 테이블을 닫으면 목록에서 사라지고 착석은 404 이며 구독자는 닫힘 알림을 받는다`() {
+        val (userId, accessToken) = signUpAndLogin()
+        fundWallet(userId, 10_000)
+        val tableId = createTable(accessToken)
+        fun listed() = mockMvc.perform(
+            get("/api/holdem/tables?size=1000").header("Authorization", "Bearer $accessToken"),
+        ).andExpect(status().isOk)
+        listed().andExpect(jsonPath("$.content[?(@.tableId == $tableId)]").isNotEmpty)
+        val (session, _) = tryConnect(accessToken)
+        checkNotNull(session)
+        val (publicHandler, publicQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.publicTopicOf(tableId), publicHandler)
+        assertThat(publicQueue.poll(5, TimeUnit.SECONDS)).isNotNull() // 구독 스냅샷
+
+        val closed = tableExecutor.call(TableId(tableId)) { closeIdleTableUseCase.close(CloseIdleTableCommand(tableId)) }
+
+        assertThat(closed).isTrue()
+        val notice = publicQueue.poll(5, TimeUnit.SECONDS) ?: error("닫힘 알림을 받지 못했다")
+        assertThat(JsonPath.read<String>(notice, "$.type")).isEqualTo("TABLE_CLOSED")
+        assertThat(JsonPath.read<Int>(notice, "$.tableId").toLong()).isEqualTo(tableId)
+        listed().andExpect(jsonPath("$.content[?(@.tableId == $tableId)]").isEmpty)
+        authPost("/api/holdem/tables/$tableId/seats", accessToken, "{}")
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.errorCode").value("TABLE_NOT_FOUND"))
     }
 }

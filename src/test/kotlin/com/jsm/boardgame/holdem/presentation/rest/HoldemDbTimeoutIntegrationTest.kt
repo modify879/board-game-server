@@ -3,6 +3,7 @@ package com.jsm.boardgame.holdem.presentation.rest
 import com.jsm.boardgame.UniqueNames
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
@@ -70,10 +71,8 @@ class HoldemDbTimeoutIntegrationTest {
         val userId = signUp(username, suffix)
         val token = login(username)
         fundWallet(userId, 10_000)
-        val tableId = JsonPath.read<Int>(
-            authPost("/api/holdem/tables", token, """{"name":"t-$suffix"}""").andExpect(status().isCreated).andReturn().response.contentAsString,
-            "$.tableId",
-        )
+        // REST 생성은 만든 사람을 대기열에 넣는다 — 착석 요청을 직접 하려고 저장소로 만든다.
+        val tableId = holdemTableRepository.save(HoldemTable.create("t-$suffix")).id!!.value
         connectStomp(token)
         authPost("/api/holdem/tables/$tableId/seats", token, "{}").andExpect(status().isAccepted)
         awaitSeated(userId)

@@ -24,6 +24,7 @@ private class HoldemTableQueryFakeTableQueryRepository : HoldemTableQueryReposit
 
     override fun findSeatOf(userId: Long): SeatLocation? = location
     override fun findAllTables(pageable: Pageable): Page<TableSummaryView> = PageImpl(tables, pageable, tables.size.toLong())
+    override fun findEmptyTableIds(): List<Long> = emptyList()
 }
 
 private class HoldemTableQueryFakeHandStore : HandStore {

@@ -7,6 +7,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCo
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
 import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
@@ -159,12 +160,11 @@ class HoldemApiIntegrationTest {
 
     private fun balanceOf(userId: Long): Long = walletRepository.findByUserId(userId)?.balance?.amount ?: 0L
 
-    private fun createTable(accessToken: String, name: String = "t-${UUID.randomUUID().toString().take(8)}"): Long {
-        val result = authPost("/api/holdem/tables", accessToken, """{"name":"$name"}""")
-            .andExpect(status().isCreated)
-            .andReturn()
-        return JsonPath.read<Int>(result.response.contentAsString, "$.tableId").toLong()
-    }
+    // REST 생성은 만든 사람을 대기열에 넣는다(CreateTableService) — 이 헬퍼는 대기열이 비어 있는 테이블이 필요해
+    // 저장소로 직접 만든다. accessToken 은 호출부 시그니처를 유지하려고 남겼다.
+    @Suppress("UNUSED_PARAMETER")
+    private fun createTable(accessToken: String, name: String = "t-${UUID.randomUUID().toString().take(8)}"): Long =
+        holdemTableRepository.save(HoldemTable.create(name)).id!!.value
 
     /** SitDownService 가 STOMP 연결이 없는 사용자를 대기열에 넣지 않는다(NOT_CONNECTED) — 실제
      *  STOMP CONNECT 를 열어 SimpUserRegistry 에 이 사용자를 등록시킨다. 구독은 필요 없다. */
@@ -311,12 +311,34 @@ class HoldemApiIntegrationTest {
     }
 
     @Test
-    fun `미착석 사용자가 테이블을 생성하면 201을 응답한다`() {
-        val (_, accessToken) = signUpAndLogin()
+    fun `미착석 사용자가 테이블을 생성하면 201을 응답하고 만든 사람이 그 테이블에 앉는다`() {
+        val (userId, accessToken) = signUpAndLogin()
+        fundWallet(userId, 10_000)
+        connectStomp(accessToken)
 
-        authPost("/api/holdem/tables", accessToken, """{"name":"새 테이블"}""")
+        val result = authPost("/api/holdem/tables", accessToken, """{"name":"새 테이블"}""")
             .andExpect(status().isCreated)
             .andExpect(jsonPath("$.tableId").isNumber)
+            .andReturn()
+
+        awaitSeated(userId)
+        val tableId = JsonPath.read<Int>(result.response.contentAsString, "$.tableId").toLong()
+        assertThat(holdemTableRepository.findByUserId(userId)!!.id!!.value).isEqualTo(tableId)
+    }
+
+    @Test
+    fun `STOMP 연결이 없는 사용자가 테이블을 생성하면 409와 NOT_CONNECTED 를 응답하고 테이블이 남지 않는다`() {
+        val (userId, accessToken) = signUpAndLogin()
+        fundWallet(userId, 10_000)
+        val name = "rollback-" + UniqueNames.suffix()
+
+        authPost("/api/holdem/tables", accessToken, """{"name":"$name"}""")
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("NOT_CONNECTED"))
+
+        val names = holdemTableRepository.findAllTableIds().map { holdemTableRepository.findById(it)?.name }
+        assertThat(names).doesNotContain(name)
+        assertThat(joinQueue.isQueued(userId)).isFalse()
     }
 
     @Test

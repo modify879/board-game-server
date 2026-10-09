@@ -10,6 +10,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.RejectedExecutionException
 
 /**
  * [TableExecutor] 의 인메모리 구현. 단일 인스턴스 배포를 전제한다(InMemoryJoinQueue·
@@ -25,8 +27,6 @@ import java.util.concurrent.Executors
 @Component
 class SerialTableExecutor : TableExecutor {
 
-    // ponytail: 테이블은 삭제되지 않으므로 executor 를 맵에서 빼지 않는다 — 테이블 수만큼만
-    // 쌓이고, 그 수는 실제로 무해할 만큼 작다. 테이블이 삭제되는 날이 오면 그때 정리한다.
     private val executors = ConcurrentHashMap<Long, ExecutorService>()
     private val currentTableId = ThreadLocal<Long?>()
 
@@ -34,7 +34,7 @@ class SerialTableExecutor : TableExecutor {
         if (currentTableId.get() == tableId.value) {
             return task()
         }
-        val future = executorOf(tableId).submit(Callable {
+        val future = submit(tableId, Callable {
             currentTableId.set(tableId.value)
             try {
                 task()
@@ -52,7 +52,7 @@ class SerialTableExecutor : TableExecutor {
     }
 
     override fun post(tableId: TableId, task: () -> Unit) {
-        executorOf(tableId).submit {
+        submit(tableId, Callable {
             currentTableId.set(tableId.value)
             try {
                 task()
@@ -61,8 +61,20 @@ class SerialTableExecutor : TableExecutor {
             } finally {
                 currentTableId.remove()
             }
-        }
+        })
     }
+
+    override fun remove(tableId: TableId) {
+        executors.remove(tableId.value)?.shutdown()
+    }
+
+    /** [remove] 직전에 옛 실행기를 쥔 호출자가 종료된 실행기에 제출하면 거부된다 — 새 실행기로 한 번만 다시 낸다. */
+    private fun <T> submit(tableId: TableId, callable: Callable<T>): Future<T> =
+        try {
+            executorOf(tableId).submit(callable)
+        } catch (e: RejectedExecutionException) {
+            executorOf(tableId).submit(callable)
+        }
 
     private fun executorOf(tableId: TableId): ExecutorService =
         executors.computeIfAbsent(tableId.value) {

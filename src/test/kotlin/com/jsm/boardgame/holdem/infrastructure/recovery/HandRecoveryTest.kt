@@ -186,6 +186,8 @@ private class HandRecoveryFakePrincipal(private val id: Long) : Principal {
 private class HandRecoveryFakeTableExecutor : TableExecutor {
     override fun <T> call(tableId: TableId, task: () -> T): T = task()
     override fun post(tableId: TableId, task: () -> Unit) = task()
+
+    override fun remove(tableId: TableId) {}
 }
 
 class HandRecoveryTest {

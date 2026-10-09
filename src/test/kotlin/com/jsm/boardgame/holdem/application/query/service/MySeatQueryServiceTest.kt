@@ -19,6 +19,7 @@ private class MySeatQueryFakeTableQueryRepository : HoldemTableQueryRepository {
 
     override fun findSeatOf(userId: Long): SeatLocation? = location
     override fun findAllTables(pageable: Pageable): Page<TableSummaryView> = throw UnsupportedOperationException()
+    override fun findEmptyTableIds(): List<Long> = emptyList()
 }
 
 private class MySeatQueryFakeHandStore : HandStore {

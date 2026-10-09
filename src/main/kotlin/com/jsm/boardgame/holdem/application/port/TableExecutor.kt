@@ -15,4 +15,8 @@ interface TableExecutor {
 
     /** [task] 를 그 테이블의 스레드에 올려두고 기다리지 않는다(fire-and-forget). */
     fun post(tableId: TableId, task: () -> Unit)
+
+    /** 테이블이 닫힌 뒤 그 테이블의 실행기를 치운다. 이미 맡은 작업은 끝까지 돈다. 이후 같은 테이블로
+     *  [call]/[post] 가 오면 새 실행기가 뜨고, 그 작업은 테이블이 없음을 보게 된다. */
+    fun remove(tableId: TableId)
 }

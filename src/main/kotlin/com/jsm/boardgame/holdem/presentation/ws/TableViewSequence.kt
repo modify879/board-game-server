@@ -22,4 +22,9 @@ class TableViewSequence {
     /** 증가시키지 않고 현재 값을 읽는다. 아직 한 번도 next() 가 불린 적 없으면 0. */
     fun current(tableId: TableId): Long =
         counters[tableId.value]?.get() ?: 0L
+
+    /** 테이블이 닫히면 카운터를 치운다. */
+    fun remove(tableId: TableId) {
+        counters.remove(tableId.value)
+    }
 }

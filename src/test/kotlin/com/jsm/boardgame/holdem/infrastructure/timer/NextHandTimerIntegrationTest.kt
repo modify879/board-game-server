@@ -9,6 +9,7 @@ import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
@@ -146,12 +147,11 @@ class NextHandTimerIntegrationTest {
         ledgerEntryRepository.save(entry)
     }
 
-    private fun createTable(accessToken: String, name: String = "t-${UUID.randomUUID().toString().take(8)}"): Long {
-        val result = authPost("/api/holdem/tables", accessToken, """{"name":"$name"}""")
-            .andExpect(status().isCreated)
-            .andReturn()
-        return JsonPath.read<Int>(result.response.contentAsString, "$.tableId").toLong()
-    }
+    // REST 생성은 만든 사람을 대기열에 넣는다(CreateTableService) — 이 헬퍼는 대기열이 비어 있는 테이블이 필요해
+    // 저장소로 직접 만든다. accessToken 은 호출부 시그니처를 유지하려고 남겼다.
+    @Suppress("UNUSED_PARAMETER")
+    private fun createTable(accessToken: String, name: String = "t-${UUID.randomUUID().toString().take(8)}"): Long =
+        holdemTableRepository.save(HoldemTable.create(name)).id!!.value
 
     /** 착석은 STOMP 연결이 있어야 대기열에 들어간다(SitDownService) — 연결부터 만든다. */
     private fun tryConnect(accessToken: String) {
