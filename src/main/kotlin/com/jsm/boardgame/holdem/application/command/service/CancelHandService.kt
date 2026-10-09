@@ -23,7 +23,8 @@ import org.springframework.transaction.annotation.Transactional
  *
  * 되돌리는 값은 `HandSnapshot.startingStacks` 다 - 핸드 도중 오간 칩은 애초에 `HoldemTable` 의
  * 좌석 스택에 반영되지 않는다(정산은 항상 [HandSettler.settle] 을 거쳐야 좌석에 반영된다). 그래서
- * 이 복원은 대개 이미 있는 값을 다시 쓰는 것이지만, `hand.stackOf()` 는 핸드 중 값이라 쓰지 않는다.
+ * 이 복원은 대개 이미 있는 값을 다시 쓰는 것이지만, `hand.stackOf()` 는 핸드 중 값이라 쓰지 않는다 —
+ * 진행 중 핸드가 좌석 스택을 도중에 쓰게 되더라도 시작 스택으로 복원하면 환불이 안전하다.
  *
  * 진행 중 핸드가 없으면(이미 정산됐거나 이미 취소됐으면) 조용히 끝난다 - 복구 절차는 죽었다
  * 다시 떠도 같은 행을 다시 탈 수 있어야 해서 멱등해야 한다.

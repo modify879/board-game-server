@@ -78,7 +78,8 @@ class NextHandTimer(
         return Duration.ofMillis(maxOf(0, future.getDelay(TimeUnit.MILLISECONDS)))
     }
 
-    // TableExecutor 가 이 시작을 그 테이블의 다른 모든 명령과 같은 스레드에 직렬화한다. scheduled 항목은 시작 시도 직전에 치우므로 시도 중에 카운트다운이 남아 보이지 않는다.
+    // TableExecutor 가 이 시작을 그 테이블의 다른 모든 명령과 같은 스레드에 직렬화한다.
+    // scheduled 항목은 시작 시도 직전에 치우므로 시도 중에 카운트다운이 남아 보이지 않는다.
     // 실패하면 이 시작을 대신할 이벤트가 없어 테이블이 영영 논다 — 일반 카운트다운을 다시 걸어
     // (cancel()/remaining() 도 그대로 동작) 카운트다운 주기로 계속 재시도한다.
     private fun onFire(tableId: TableId, token: Long) {

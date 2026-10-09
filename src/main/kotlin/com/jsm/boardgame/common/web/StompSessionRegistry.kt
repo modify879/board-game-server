@@ -26,6 +26,8 @@ import java.util.concurrent.ScheduledFuture
  *
  * 세션 종료는 [SessionDisconnectEvent] 하나로 정리한다 — 소켓이 정상 종료되든 STOMP DISCONNECT
  * 프레임이든 결국 이 이벤트가 뒤따르므로 여기 한 곳만 지우면 된다.
+ * 이때 예약된 닫기 작업을 반드시 취소한다 — 안 그러면 끝난 세션마다 작업이 남아, 나중에 이미 없는
+ * 소켓을 닫으려 든다.
  *
  * 일반 WebSocket(SockJS 미사용)에서는 STOMP 의 simpSessionId 와 WebSocketSession.id 가 같은 문자열이다
  * — HoldemStompIntegrationTest 에서 두 맵의 키가 겹치는 것으로 확인한다. 다르다면 여기서 닫을
