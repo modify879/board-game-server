@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
@@ -49,9 +50,9 @@ class CancelHandIntegrationTest {
 
     // fk_wallets_user, fk_holdem_seats_user 때문에 실제 사용자 행을 만든다.
     private fun userWithBuyIn(buyIn: Long): Long {
-        val suffix = UUID.randomUUID().toString().replace("-", "").take(9).lowercase()
+        val suffix = UniqueNames.suffix()
         val userId = users.save(
-            User.register(Username.of("u$suffix"), PasswordHash("hashed-password-value"), Nickname.of("n" + suffix.take(5))),
+            User.register(Username.of("u$suffix"), PasswordHash("hashed-password-value"), Nickname.of("n" + suffix)),
         ).id!!.value
         adjustWallet.adjust(AdjustWalletBalanceCommand(userId, buyIn, "테스트 지급", 1L, UUID.randomUUID().toString()))
         return userId

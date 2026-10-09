@@ -1,5 +1,6 @@
 package com.jsm.boardgame.wallet.application.command.service
 
+import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.domain.model.Nickname
 import com.jsm.boardgame.user.domain.model.PasswordHash
@@ -130,11 +131,11 @@ class WalletPessimisticLockIntegrationTest {
 }
 
 private fun uniqueUserId(users: UserRepository): Long {
-    val suffix = UUID.randomUUID().toString().replace("-", "").take(9).lowercase()
+    val suffix = UniqueNames.suffix()
     val user = User.register(
         username = Username.of("u$suffix"),
         passwordHash = PasswordHash("hashed-password-value"),
-        nickname = Nickname.of("n" + suffix.take(5)),
+        nickname = Nickname.of("n" + suffix),
     )
     return users.save(user).id!!.value
 }

@@ -1,5 +1,6 @@
 package com.jsm.boardgame.user.presentation.rest
 
+import com.jsm.boardgame.UniqueNames
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.domain.model.UserId
@@ -18,7 +19,6 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.time.Instant
-import java.util.UUID
 
 /** 관리자의 계정 잠금 해제 API(`POST /api/admin/users/{id}/unlock`) 통합 테스트. */
 @SpringBootTest
@@ -33,10 +33,10 @@ class AdminUserUnlockIntegrationTest {
     private lateinit var userRepository: UserRepository
 
     private fun uniqueUsername(): String =
-        "u" + UUID.randomUUID().toString().replace("-", "").take(9).lowercase()
+        "u" + UniqueNames.suffix()
 
     private fun uniqueNickname(): String =
-        "n" + UUID.randomUUID().toString().replace("-", "").take(5).lowercase()
+        "n" + UniqueNames.suffix()
 
     private fun signUp(username: String, password: String): ResultActions =
         mockMvc.perform(

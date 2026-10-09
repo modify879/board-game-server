@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.presentation.rest
 
+import com.jsm.boardgame.UniqueNames
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutCommand
@@ -105,10 +106,10 @@ class HoldemShowdownIntegrationTest {
     private val stompClient = WebSocketStompClient(StandardWebSocketClient())
 
     private fun uniqueUsername(): String =
-        "u" + UUID.randomUUID().toString().replace("-", "").take(9).lowercase()
+        "u" + UniqueNames.suffix()
 
     private fun uniqueNickname(): String =
-        "n" + UUID.randomUUID().toString().replace("-", "").take(5).lowercase()
+        "n" + UniqueNames.suffix()
 
     private fun signUp(username: String, password: String): ResultActions =
         mockMvc.perform(

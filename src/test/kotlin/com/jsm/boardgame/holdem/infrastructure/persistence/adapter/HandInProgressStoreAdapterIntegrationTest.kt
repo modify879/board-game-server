@@ -20,12 +20,14 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.support.TransactionTemplate
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @SpringBootTest
 @Import(TestcontainersConfiguration::class)
@@ -155,37 +157,61 @@ class HandInProgressStoreAdapterIntegrationTest {
 
     @Test
     fun `같은 테이블에 핸드를 두 번 새로 저장하면 HAND_IN_PROGRESS 로 거부된다`() {
-        // 각 스레드가 자기만의 REQUIRES_NEW 트랜잭션(자기만의 커넥션·EntityManager) 안에서
-        // handStore.save() 를 한 번씩 부른다. 둘 다 상대가 아직 커밋하기 전에 findById 를 보므로
-        // 둘 다 "없음" 을 보고 새 엔티티로 saveAndFlush 를 시도한다. Postgres 가 그 두 INSERT 를
-        // 행 잠금으로 직렬화해, 먼저 도착한 쪽이 삽입하고(REQUIRES_NEW 라 execute 가 반환하며 즉시 커밋),
-        // 나중 쪽은 같은 PK 에서 유일성 위반으로 즉시 실패한다 — 이 어댑터는 그걸 HandInProgressException 으로 옮긴다.
+        // 결정적 안무 — 타이밍에 기대지 않는다.
+        // 1) 스레드 1: REQUIRES_NEW 트랜잭션에서 save() 로 INSERT 를 flush 하되 커밋하지 않고 "inserted" 를 올린 뒤 "release" 를 기다린다.
+        // 2) 스레드 2: "inserted" 이후 자기 REQUIRES_NEW 에서 save() — findById 는 MVCC 라 행을 못 봐 사전 체크를 지나쳐
+        //    INSERT 로 가고, 스레드 1 의 미커밋 PK 때문에 Lock 대기에 들어간다(DB 제약 번역 경로를 반드시 탄다).
+        // 3) 메인: pg_stat_activity 에서 Lock 대기 백엔드가 보일 때까지 폴링(최대 2초)한 뒤 release 한다.
+        //    앱의 lock_timeout=3s 보다 한참 앞서 풀어야 하므로 대기는 짧게 묶는다.
+        // 스레드 1 이 커밋하면 스레드 2 의 INSERT 가 유일성 위반으로 실패하고, 어댑터가 HandInProgressException 으로 옮긴다.
         val tableId = newTableId() // holdem_tables 행만 있고 핸드 행은 아직 없다.
-        val startLatch = CountDownLatch(2)
+        val inserted = CountDownLatch(1)
+        val release = CountDownLatch(1)
         val results = arrayOfNulls<Throwable>(2)
         val raceTemplate = TransactionTemplate(transactionManager).apply {
             propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
         }
 
-        fun race(index: Int) {
-            startLatch.countDown()
-            startLatch.await()
+        val t1 = Thread {
             try {
                 raceTemplate.execute {
                     handStore.save(tableId, newHand())
+                    inserted.countDown()
+                    release.await(5, TimeUnit.SECONDS)
                 }
             } catch (t: Throwable) {
-                results[index] = t
+                results[0] = t
             }
         }
-
-        val t1 = Thread { race(0) }
-        val t2 = Thread { race(1) }
+        val t2 = Thread {
+            try {
+                inserted.await(5, TimeUnit.SECONDS)
+                raceTemplate.execute { handStore.save(tableId, newHand()) }
+            } catch (t: Throwable) {
+                results[1] = t
+            }
+        }
         t1.start()
         t2.start()
+
+        try {
+            assertTrue(inserted.await(5, TimeUnit.SECONDS), "스레드 1 이 INSERT 하지 못했다")
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+            while (jdbcTemplate.queryForObject(
+                    "select count(*) from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'",
+                    Long::class.java,
+                ) == 0L
+            ) {
+                assertTrue(System.nanoTime() < deadline, "스레드 2 가 Lock 대기에 들어가지 않았다")
+                Thread.sleep(10)
+            }
+        } finally {
+            release.countDown()
+        }
         t1.join()
         t2.join()
 
+        assertNull(results[0], "스레드 1 은 성공해야 한다")
         val failures = results.filterNotNull()
         assertEquals(1, failures.size)
         val failure = failures.single()

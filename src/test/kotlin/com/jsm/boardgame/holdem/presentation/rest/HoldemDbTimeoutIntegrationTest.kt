@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.presentation.rest
 
+import com.jsm.boardgame.UniqueNames
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
@@ -30,7 +31,6 @@ import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.web.socket.client.standard.StandardWebSocketClient
 import org.springframework.web.socket.messaging.WebSocketStompClient
 import java.time.Instant
-import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
@@ -65,7 +65,7 @@ class HoldemDbTimeoutIntegrationTest {
 
     @Test
     fun `지갑 락을 누가 쥐고 있으면 기립은 503 으로 실패하고 락을 풀면 같은 테이블에서 성공한다`() {
-        val suffix = UUID.randomUUID().toString().replace("-", "").take(9).lowercase()
+        val suffix = UniqueNames.suffix()
         val username = "u$suffix"
         val userId = signUp(username, suffix)
         val token = login(username)
@@ -104,7 +104,7 @@ class HoldemDbTimeoutIntegrationTest {
     private fun signUp(username: String, nickSuffix: String): Long {
         val result = mockMvc.perform(
             post("/api/users").contentType(MediaType.APPLICATION_JSON).content(
-                """{"username":"$username","password":"password123","passwordConfirm":"password123","nickname":"n${nickSuffix.take(5)}"}""",
+                """{"username":"$username","password":"password123","passwordConfirm":"password123","nickname":"n${nickSuffix}"}""",
             ),
         ).andExpect(status().isCreated).andReturn()
         return result.response.getHeader("Location")!!.substringAfterLast("/").toLong()
