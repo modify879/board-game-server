@@ -20,6 +20,9 @@ private class FakeDepositRequestRepository : DepositRequestRepository {
 
     override fun findById(id: DepositRequestId): DepositRequest? = stored[id.value]
 
+    override fun findByUserAndIdempotencyKey(userId: UserId, idempotencyKey: String): DepositRequest? =
+        stored.values.firstOrNull { it.userId == userId && it.idempotencyKey == idempotencyKey }
+
     override fun save(request: DepositRequest): DepositRequest {
         val saved = if (request.id == null) {
             sequence += 1
@@ -33,6 +36,7 @@ private class FakeDepositRequestRepository : DepositRequestRepository {
                 processedBy = request.processedBy,
                 processedAt = request.processedAt,
                 rejectionReason = request.rejectionReason,
+                idempotencyKey = request.idempotencyKey,
             )
         } else {
             request
@@ -63,7 +67,7 @@ class RequestDepositServiceTest {
 
     @Test
     fun `요청이 저장되고 id 가 반환된다`() {
-        val id = service.request(RequestDepositCommand(userId = 1, amount = 10_000))
+        val id = service.request(RequestDepositCommand(userId = 1, amount = 10_000, idempotencyKey = "key"))
 
         assertTrue(id.value != 0L)
         assertEquals(10_000L, depositRequests.stored[id.value]?.requestedAmount?.amount)
@@ -71,7 +75,7 @@ class RequestDepositServiceTest {
 
     @Test
     fun `지갑이 생성되지 않는다`() {
-        service.request(RequestDepositCommand(userId = 1, amount = 10_000))
+        service.request(RequestDepositCommand(userId = 1, amount = 10_000, idempotencyKey = "key"))
 
         assertTrue(wallets.stored.isEmpty())
     }

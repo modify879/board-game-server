@@ -8,12 +8,13 @@ data class RequestWithdrawalRequest(
     val accountNumber: String,
     val accountHolder: String,
 ) {
-    fun toCommand(userId: Long): RequestWithdrawalCommand =
+    fun toCommand(userId: Long, idempotencyKey: String?): RequestWithdrawalCommand =
         RequestWithdrawalCommand(
             userId = userId,
             amount = amount,
             bankName = bankName,
             accountNumber = accountNumber,
             accountHolder = accountHolder,
+            idempotencyKey = idempotencyKey,
         )
 }

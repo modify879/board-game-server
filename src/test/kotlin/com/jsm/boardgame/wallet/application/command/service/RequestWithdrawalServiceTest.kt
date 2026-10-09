@@ -29,6 +29,9 @@ private class RequestFakeWithdrawalRequestRepository : WithdrawalRequestReposito
 
     override fun findById(id: WithdrawalRequestId): WithdrawalRequest? = stored[id.value]
 
+    override fun findByUserAndIdempotencyKey(userId: UserId, idempotencyKey: String): WithdrawalRequest? =
+        stored.values.firstOrNull { it.userId == userId && it.idempotencyKey == idempotencyKey }
+
     override fun save(request: WithdrawalRequest): WithdrawalRequest {
         val saved = if (request.id == null) {
             sequence += 1
@@ -42,6 +45,7 @@ private class RequestFakeWithdrawalRequestRepository : WithdrawalRequestReposito
                 processedBy = request.processedBy,
                 processedAt = request.processedAt,
                 rejectionReason = request.rejectionReason,
+                idempotencyKey = request.idempotencyKey,
             )
         } else {
             request
@@ -108,7 +112,7 @@ class RequestWithdrawalServiceTest {
     fun `요청하면 잔액이 즉시 줄고 WITHDRAWAL_HOLD 엔트리가 생기며 reference 가 요청을 가리킨다`() {
         walletWithBalance(1, 10_000)
 
-        val id = service.request(RequestWithdrawalCommand(1, 5_000, "국민은행", "123456789012", "홍길동"))
+        val id = service.request(RequestWithdrawalCommand(1, 5_000, "국민은행", "123456789012", "홍길동", "key"))
 
         assertEquals(Money.of(5_000), wallets.findByUserId(UserId(1))!!.balance)
         val entry = ledger.stored.single()
@@ -122,7 +126,7 @@ class RequestWithdrawalServiceTest {
         walletWithBalance(1, 1_000)
 
         val e = assertFailsWith<InsufficientBalanceException> {
-            service.request(RequestWithdrawalCommand(1, 5_000, "국민은행", "123456789012", "홍길동"))
+            service.request(RequestWithdrawalCommand(1, 5_000, "국민은행", "123456789012", "홍길동", "key"))
         }
         assertEquals(WalletErrorCode.INSUFFICIENT_BALANCE, e.errorCode)
     }
@@ -130,7 +134,7 @@ class RequestWithdrawalServiceTest {
     @Test
     fun `지갑이 없는 사용자가 요청하면 INSUFFICIENT_BALANCE`() {
         val e = assertFailsWith<InsufficientBalanceException> {
-            service.request(RequestWithdrawalCommand(1, 5_000, "국민은행", "123456789012", "홍길동"))
+            service.request(RequestWithdrawalCommand(1, 5_000, "국민은행", "123456789012", "홍길동", "key"))
         }
         assertEquals(WalletErrorCode.INSUFFICIENT_BALANCE, e.errorCode)
     }

@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Import
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
@@ -25,6 +26,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.time.Instant
+import java.util.UUID
 
 /**
  * `wallet` 컨텍스트의 일반 사용자 REST API 통합 테스트.
@@ -43,6 +45,9 @@ class WalletApiIntegrationTest {
 
     @Autowired
     private lateinit var ledgerEntryRepository: LedgerEntryRepository
+
+    @Autowired
+    private lateinit var jdbcTemplate: JdbcTemplate
 
     private fun uniqueUsername(): String =
         "u" + UniqueNames.suffix()
@@ -87,8 +92,15 @@ class WalletApiIntegrationTest {
         return mockMvc.perform(builder)
     }
 
-    private fun authPost(url: String, accessToken: String, body: String? = null): ResultActions {
+    // 충전·환전 요청은 Idempotency-Key 가 필수라, 헤더를 따로 주지 않으면 매번 새 키를 붙인다.
+    private fun authPost(
+        url: String,
+        accessToken: String,
+        body: String? = null,
+        headers: Map<String, String> = mapOf("Idempotency-Key" to UUID.randomUUID().toString()),
+    ): ResultActions {
         val builder = post(url).header("Authorization", "Bearer $accessToken")
+        headers.forEach { (name, value) -> builder.header(name, value) }
         if (body != null) builder.contentType(MediaType.APPLICATION_JSON).content(body)
         return mockMvc.perform(builder)
     }
@@ -272,5 +284,152 @@ class WalletApiIntegrationTest {
         authPost("/api/wallet/withdrawal-requests", accessToken, body)
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.errorCode").value("WITHDRAWAL_AMOUNT_INVALID"))
+    }
+
+    private fun key(value: String) = mapOf("Idempotency-Key" to value)
+
+    private fun withdrawalBody(amount: Int, bankName: String = "국민은행") =
+        """{"amount":$amount,"bankName":"$bankName","accountNumber":"11122233344","accountHolder":"홍길동"}"""
+
+    private fun countRows(table: String, userId: Long): Int =
+        jdbcTemplate.queryForObject("select count(*) from $table where user_id = ?", Int::class.java, userId)!!
+
+    private fun balance(accessToken: String): Int {
+        val result = authGet("/api/wallet", accessToken).andExpect(status().isOk).andReturn()
+        return JsonPath.read(result.response.contentAsString, "$.balance")
+    }
+
+    @Test
+    fun `같은 키로 충전을 다시 요청하면 처음과 같은 201 과 본문을 돌려주고 요청은 하나만 생긴다`() {
+        val (userId, accessToken) = signUpAndLogin()
+        val headers = key(UUID.randomUUID().toString())
+
+        val first = authPost("/api/wallet/deposit-requests", accessToken, """{"amount":5000}""", headers)
+            .andExpect(status().isCreated).andReturn().response.contentAsString
+        val second = authPost("/api/wallet/deposit-requests", accessToken, """{"amount":5000}""", headers)
+            .andExpect(status().isCreated).andReturn().response.contentAsString
+
+        assertThat(second).isEqualTo(first)
+        assertThat(countRows("deposit_requests", userId)).isEqualTo(1)
+    }
+
+    @Test
+    fun `취소된 충전 요청도 같은 키로 다시 보내면 원래 requestId 를 돌려준다`() {
+        val (userId, accessToken) = signUpAndLogin()
+        val headers = key(UUID.randomUUID().toString())
+        val first = authPost("/api/wallet/deposit-requests", accessToken, """{"amount":5000}""", headers)
+            .andExpect(status().isCreated).andReturn().response.contentAsString
+        val requestId = JsonPath.read<Int>(first, "$.requestId")
+        authDelete("/api/wallet/deposit-requests/$requestId", accessToken).andExpect(status().isNoContent)
+
+        val replay = authPost("/api/wallet/deposit-requests", accessToken, """{"amount":5000}""", headers)
+            .andExpect(status().isCreated).andReturn().response.contentAsString
+
+        assertThat(replay).isEqualTo(first)
+        assertThat(countRows("deposit_requests", userId)).isEqualTo(1)
+    }
+
+    @Test
+    fun `같은 키로 다른 금액의 충전을 요청하면 409 와 IDEMPOTENCY_KEY_REUSED 를 응답한다`() {
+        val (userId, accessToken) = signUpAndLogin()
+        val headers = key(UUID.randomUUID().toString())
+        authPost("/api/wallet/deposit-requests", accessToken, """{"amount":5000}""", headers).andExpect(status().isCreated)
+
+        authPost("/api/wallet/deposit-requests", accessToken, """{"amount":6000}""", headers)
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("IDEMPOTENCY_KEY_REUSED"))
+
+        assertThat(countRows("deposit_requests", userId)).isEqualTo(1)
+    }
+
+    @Test
+    fun `같은 키로 환전을 다시 요청하면 같은 requestId 를 돌려주고 잔액은 한 번만 차감되며 홀드 원장은 하나다`() {
+        val (userId, accessToken) = signUpAndLogin()
+        fundWallet(userId, 10_000)
+        val headers = key(UUID.randomUUID().toString())
+
+        val first = authPost("/api/wallet/withdrawal-requests", accessToken, withdrawalBody(4000), headers)
+            .andExpect(status().isCreated).andReturn().response.contentAsString
+        val second = authPost("/api/wallet/withdrawal-requests", accessToken, withdrawalBody(4000), headers)
+            .andExpect(status().isCreated).andReturn().response.contentAsString
+
+        assertThat(second).isEqualTo(first)
+        assertThat(balance(accessToken)).isEqualTo(6000)
+        assertThat(countRows("withdrawal_requests", userId)).isEqualTo(1)
+        val ledger = authGet("/api/wallet/ledger", accessToken).andReturn().response.contentAsString
+        assertThat(JsonPath.read<List<String>>(ledger, "$.content[?(@.type=='WITHDRAWAL_HOLD')].type")).hasSize(1)
+    }
+
+    @Test
+    fun `같은 키로 금액이나 계좌가 다른 환전을 요청하면 409 와 IDEMPOTENCY_KEY_REUSED 이고 지갑은 그대로다`() {
+        val (userId, accessToken) = signUpAndLogin()
+        fundWallet(userId, 10_000)
+        val headers = key(UUID.randomUUID().toString())
+        authPost("/api/wallet/withdrawal-requests", accessToken, withdrawalBody(4000), headers).andExpect(status().isCreated)
+
+        authPost("/api/wallet/withdrawal-requests", accessToken, withdrawalBody(5000), headers)
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("IDEMPOTENCY_KEY_REUSED"))
+        authPost("/api/wallet/withdrawal-requests", accessToken, withdrawalBody(4000, bankName = "신한은행"), headers)
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("IDEMPOTENCY_KEY_REUSED"))
+
+        assertThat(balance(accessToken)).isEqualTo(6000)
+        assertThat(countRows("withdrawal_requests", userId)).isEqualTo(1)
+    }
+
+    @Test
+    fun `다른 사용자가 같은 키를 써도 서로 독립된 요청이 만들어진다`() {
+        val (userIdA, accessTokenA) = signUpAndLogin()
+        val (userIdB, accessTokenB) = signUpAndLogin()
+        fundWallet(userIdA, 10_000)
+        fundWallet(userIdB, 10_000)
+        val headers = key(UUID.randomUUID().toString())
+
+        val depositA = authPost("/api/wallet/deposit-requests", accessTokenA, """{"amount":5000}""", headers)
+            .andExpect(status().isCreated).andReturn().response.contentAsString
+        val depositB = authPost("/api/wallet/deposit-requests", accessTokenB, """{"amount":5000}""", headers)
+            .andExpect(status().isCreated).andReturn().response.contentAsString
+        val withdrawalA = authPost("/api/wallet/withdrawal-requests", accessTokenA, withdrawalBody(4000), headers)
+            .andExpect(status().isCreated).andReturn().response.contentAsString
+        val withdrawalB = authPost("/api/wallet/withdrawal-requests", accessTokenB, withdrawalBody(4000), headers)
+            .andExpect(status().isCreated).andReturn().response.contentAsString
+
+        assertThat(JsonPath.read<Int>(depositA, "$.requestId")).isNotEqualTo(JsonPath.read<Int>(depositB, "$.requestId"))
+        assertThat(JsonPath.read<Int>(withdrawalA, "$.requestId")).isNotEqualTo(JsonPath.read<Int>(withdrawalB, "$.requestId"))
+        assertThat(balance(accessTokenA)).isEqualTo(6000)
+        assertThat(balance(accessTokenB)).isEqualTo(6000)
+    }
+
+    @Test
+    fun `충전 키와 환전 키는 서로 충돌하지 않는다`() {
+        val (userId, accessToken) = signUpAndLogin()
+        fundWallet(userId, 10_000)
+        val headers = key(UUID.randomUUID().toString())
+
+        authPost("/api/wallet/deposit-requests", accessToken, """{"amount":5000}""", headers).andExpect(status().isCreated)
+        authPost("/api/wallet/withdrawal-requests", accessToken, withdrawalBody(4000), headers).andExpect(status().isCreated)
+
+        assertThat(countRows("deposit_requests", userId)).isEqualTo(1)
+        assertThat(countRows("withdrawal_requests", userId)).isEqualTo(1)
+    }
+
+    @Test
+    fun `Idempotency-Key 가 없거나 비었거나 100자를 넘으면 충전과 환전 모두 400 과 IDEMPOTENCY_KEY_INVALID 를 응답한다`() {
+        val (userId, accessToken) = signUpAndLogin()
+        fundWallet(userId, 10_000)
+
+        for (headers in listOf(emptyMap(), key(" "), key("k".repeat(101)))) {
+            authPost("/api/wallet/deposit-requests", accessToken, """{"amount":5000}""", headers)
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.errorCode").value("IDEMPOTENCY_KEY_INVALID"))
+            authPost("/api/wallet/withdrawal-requests", accessToken, withdrawalBody(4000), headers)
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.errorCode").value("IDEMPOTENCY_KEY_INVALID"))
+        }
+
+        assertThat(balance(accessToken)).isEqualTo(10_000)
+        assertThat(countRows("deposit_requests", userId)).isZero()
+        assertThat(countRows("withdrawal_requests", userId)).isZero()
     }
 }

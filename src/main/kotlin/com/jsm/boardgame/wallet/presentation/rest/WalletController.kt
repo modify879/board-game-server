@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
@@ -59,8 +60,9 @@ class WalletController(
     fun requestDeposit(
         @AuthenticationPrincipal jwt: Jwt,
         @RequestBody request: RequestDepositRequest,
+        @RequestHeader("Idempotency-Key", required = false) idempotencyKey: String?,
     ): DepositRequestCreatedResponse {
-        val requestId = requestDepositUseCase.request(request.toCommand(jwt.requireUserId()))
+        val requestId = requestDepositUseCase.request(request.toCommand(jwt.requireUserId(), idempotencyKey))
         return DepositRequestCreatedResponse.from(requestId.value, depositAccountResolver.resolve())
     }
 
@@ -79,8 +81,9 @@ class WalletController(
     fun requestWithdrawal(
         @AuthenticationPrincipal jwt: Jwt,
         @RequestBody request: RequestWithdrawalRequest,
+        @RequestHeader("Idempotency-Key", required = false) idempotencyKey: String?,
     ): WithdrawalRequestCreatedResponse {
-        val requestId = requestWithdrawalUseCase.request(request.toCommand(jwt.requireUserId()))
+        val requestId = requestWithdrawalUseCase.request(request.toCommand(jwt.requireUserId(), idempotencyKey))
         return WithdrawalRequestCreatedResponse.from(requestId.value)
     }
 

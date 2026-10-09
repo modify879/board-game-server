@@ -24,6 +24,8 @@ class WithdrawalRequest private constructor(
     processedBy: UserId?,
     processedAt: Instant?,
     rejectionReason: String?,
+    /** 중복 제출 방어용 클라이언트 키. 이 기능 이전의 행은 null. */
+    val idempotencyKey: String?,
 ) {
     var status: WithdrawalRequestStatus = status
         private set
@@ -79,7 +81,7 @@ class WithdrawalRequest private constructor(
     companion object {
         private const val MIN_AMOUNT = 1_000L
 
-        fun request(userId: UserId, amount: Long, bankAccount: BankAccount, at: Instant): WithdrawalRequest {
+        fun request(userId: UserId, amount: Long, bankAccount: BankAccount, idempotencyKey: String, at: Instant): WithdrawalRequest {
             if (amount < MIN_AMOUNT || amount % MONEY_UNIT != 0L) {
                 throw InvalidWithdrawalAmountException("환전 요청 금액이 유효하지 않음: amount=$amount")
             }
@@ -93,6 +95,7 @@ class WithdrawalRequest private constructor(
                 processedBy = null,
                 processedAt = null,
                 rejectionReason = null,
+                idempotencyKey = idempotencyKey,
             )
         }
 
@@ -107,6 +110,7 @@ class WithdrawalRequest private constructor(
             processedBy: UserId?,
             processedAt: Instant?,
             rejectionReason: String?,
+            idempotencyKey: String?,
         ): WithdrawalRequest = WithdrawalRequest(
             id = id,
             userId = userId,
@@ -117,6 +121,7 @@ class WithdrawalRequest private constructor(
             processedBy = processedBy,
             processedAt = processedAt,
             rejectionReason = rejectionReason,
+            idempotencyKey = idempotencyKey,
         )
     }
 }

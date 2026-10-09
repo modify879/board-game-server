@@ -28,7 +28,7 @@ class WithdrawalRequestRepositoryAdapterIntegrationTest {
 
     @Test
     fun `저장 후 findById 가 상태 금액 계좌 세 필드를 그대로 돌려준다`() {
-        val request = WithdrawalRequest.request(userId = UserId(System.nanoTime()), amount = 10_000, bankAccount = bankAccount, at = now)
+        val request = WithdrawalRequest.request(userId = UserId(System.nanoTime()), amount = 10_000, bankAccount = bankAccount, idempotencyKey = "key", at = now)
         val saved = withdrawalRequests.save(request)
 
         val reloaded = requireNotNull(withdrawalRequests.findById(saved.id!!))
