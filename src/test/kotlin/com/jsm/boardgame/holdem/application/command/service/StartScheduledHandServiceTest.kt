@@ -5,6 +5,7 @@ import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
+import com.jsm.boardgame.holdem.application.port.WalletBalance
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
@@ -14,8 +15,10 @@ import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.transaction.support.TransactionOperations
 import java.time.Duration
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -66,12 +69,22 @@ private class StartScheduledHandFakeNextHandCountdown : NextHandCountdown {
 private class StartScheduledHandFakeWalletTransfer : WalletTransfer {
     /** 지갑 잔액. allToGame 은 잔액 전부를 돌려주고 0 으로 만든다. */
     val balances = mutableMapOf<Long, Long>()
+    val allToGameCalls = mutableListOf<Long>()
+    var failingUserId: Long? = null
 
-    override fun allToGame(userId: UserId, tableId: TableId, memo: String?): Long = balances.remove(userId.value) ?: 0
+    override fun allToGame(userId: UserId, tableId: TableId, memo: String?): Long {
+        allToGameCalls += userId.value
+        if (userId.value == failingUserId) error("지갑 행 락 대기 시간 초과")
+        return balances.remove(userId.value) ?: 0
+    }
 
     override fun fromGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) {
         error("HandStarter 는 fromGame 을 부르지 않는다")
     }
+}
+
+private class StartScheduledHandFakeWalletBalance(private val wallet: StartScheduledHandFakeWalletTransfer) : WalletBalance {
+    override fun balanceOf(userId: UserId): Long = wallet.balances[userId.value] ?: 0
 }
 
 class StartScheduledHandServiceTest {
@@ -82,8 +95,13 @@ class StartScheduledHandServiceTest {
     private val eventPublisher = ApplicationEventPublisher { }
     private val walletTransfer = StartScheduledHandFakeWalletTransfer()
     private val countdown = StartScheduledHandFakeNextHandCountdown()
-    private val handStarter = HandStarter(tables, handStore, StartScheduledHandServiceFakeLastHandResultStore(), identityShuffler, eventPublisher, countdown, walletTransfer)
-    private val service = StartScheduledHandService(tables, handStore, handStarter)
+    private val handStarter = HandStarter(tables, handStore, StartScheduledHandServiceFakeLastHandResultStore(), identityShuffler, eventPublisher, countdown)
+    private val tableSeatsTopUp = TableSeatsTopUp(
+        tables, StartScheduledHandFakeWalletBalance(walletTransfer), SeatTopUper(tables, handStore, walletTransfer),
+    )
+    private val service = StartScheduledHandService(
+        tables, handStore, handStarter, tableSeatsTopUp, TransactionOperations.withoutTransaction(),
+    )
 
     private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): TableId {
         var table = HoldemTable.create("test-table")
@@ -138,6 +156,42 @@ class StartScheduledHandServiceTest {
         service.start(StartScheduledHandCommand(tableId.value)) // 예외 없이 끝나야 한다
 
         assertNull(handStore.find(tableId))
+    }
+
+    @Test
+    fun `핸드가 시작되면 착석 중 지갑에 들어온 잔액이 그 좌석 스택에 합쳐진다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        walletTransfer.balances[2L] = 5_000
+
+        service.start(StartScheduledHandCommand(tableId.value))
+
+        assertEquals(Chips.of(15_000), tables.findById(tableId)!!.seatAt(2)!!.stack)
+        assertTrue(handStore.find(tableId)!!.stackOf(2).amount > 10_000L) // 시작 트랜잭션이 합쳐진 스택을 읽었다
+    }
+
+    @Test
+    fun `한 좌석의 지갑 합산이 던져도 핸드는 시작되고 다른 좌석은 합쳐진다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+        walletTransfer.balances[1L] = 1_000
+        walletTransfer.balances[3L] = 3_000
+        walletTransfer.failingUserId = 1L
+
+        service.start(StartScheduledHandCommand(tableId.value))
+
+        assertTrue(handStore.find(tableId) != null)
+        val table = tables.findById(tableId)!!
+        assertEquals(Chips.of(10_000), table.seatAt(1)!!.stack)
+        assertEquals(Chips.of(13_000), table.seatAt(3)!!.stack)
+    }
+
+    @Test
+    fun `지갑 잔액이 0이면 이체를 부르지 않는다 - 지갑 락을 잡지 않는다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+
+        service.start(StartScheduledHandCommand(tableId.value))
+
+        assertTrue(walletTransfer.allToGameCalls.isEmpty())
+        assertTrue(handStore.find(tableId) != null)
     }
 }
 

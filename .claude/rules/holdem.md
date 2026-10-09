@@ -81,10 +81,16 @@ paths: ["**/holdem/**"]
   스택은 더 변하지 않으므로 그 자리에서 정산하고, 그 핸드가 끝날 때까지 그 좌석 번호에는 앉을 수 없다(정산이 새 착석자를 덮어쓴다)
 - **바이인은 지갑 잔액 전부이고, 착석 중 지갑에 들어온 돈(충전 승인·출금 취소/반려·관리자 증액)은 핸드가 없으면 입금 즉시 스택에 합쳐진다.**
   wallet 이 커밋 전에 `WalletCredited` 를 올리면 `WalletCreditedListener`(AFTER_COMMIT, 예외는 로그만)가 `TopUpSeatFromWalletService` 를 불러
-  `TableExecutor` 위에서 합치고 공개 뷰를 브로드캐스트한다. 핸드 도중에는 스택이 바뀌지 않는다(table stakes) — 정산 직후 `HandSettler` 가
-  남은 점유 좌석마다 합쳐 정산 브로드캐스트에 싣는다. `HandStarter.start` 의 합산은 놓친 이벤트의 안전망이다. 금액을 받아 `TransferToGame` 으로
-  옮기지 않고 잠근 지갑에서 읽고 옮기는 `TransferBalanceToGame` 을 쓴다: 읽고-이체 사이에 출금이 끼면 잔액 부족 예외가 핸드 시작 트랜잭션을
-  rollback-only 로 만들어 테이블이 멈춘다. 착석 중 출금은 테이블로 옮겨지지 않은 지갑 잔액에서만 가능하다 — 테이블 돈은 기립 후에 뺀다
+  그 사용자의 테이블을 찾아 `tableExecutor.post` 로 넘긴다(`call` 금지 — 지갑 스레드는 커밋 뒤에도 JDBC 커넥션이 바인딩돼 있어 테이블 큐를
+  기다리면 풀이 마르고 idle-in-transaction 타임아웃에 걸린다). 테이블 스레드에서 `TopUpTableSeatsService` 가 합치고 공개 뷰를 한 번 브로드캐스트한다.
+  핸드 도중에는 스택이 바뀌지 않는다(table stakes) — 정산 직후에는 `HandSettler` 가 `SeatTopUpDue` 만 올리고 `SeatTopUpProcessor`(AFTER_COMMIT)가 같은 합산을
+  테이블 스레드에 `post` 한다(정산 브로드캐스트 뒤에 후속 갱신이 나간다). 핸드 시작 때는 `StartScheduledHandService` 가 **시작 트랜잭션 앞에서** 합친다.
+  **합산은 정산·핸드 시작 트랜잭션 안에서 하지 않는다.** 지갑 행 락 대기(`lock_timeout`)·실패가 그 트랜잭션을 롤백시키면 끝난 핸드가 지워지거나
+  테이블이 멈추는데, 합산은 편의 기능이다. 그래서 좌석마다 `SeatTopUper` 의 `REQUIRES_NEW` 로 격리하고(프록시를 넘은 예외는 바깥을 rollback-only 로 만든다),
+  `TableSeatsTopUp` 이 실패를 ERROR 로 남기고 그 좌석만 건너뛴다 — 건너뛴 좌석은 다음 핸드 시작·다음 입금 때 합쳐진다. 지갑 잔액을 락 없이 먼저
+  읽어 0 이면 지갑 행 락을 잡지 않는다(읽고-이체 사이의 경합은 이체가 락 안에서 다시 읽으므로 괜찮다). 금액을 받아 `TransferToGame` 으로
+  옮기지 않고 잠근 지갑에서 읽고 옮기는 `TransferBalanceToGame` 을 쓴다: 읽고-이체 사이에 출금이 끼면 잔액 부족 예외가 난다. 착석 중 출금은
+  테이블로 옮겨지지 않은 지갑 잔액에서만 가능하다 — 테이블 돈은 기립 후에 뺀다
 - **착석은 항상 대기열을 거친다 — 핸드 진행 여부와 무관하다.** 좌석은 고르지 않는다: 가장 낮은 번호의 빈 좌석에
   FIFO 순서대로 앉힌다. 대기열은 인메모리(`JoinQueue`)다 — 좌석 배정 전이라 돈이 걸려 있지 않고, 재시작하면
   비워져도 안전하다(복구할 게 없다). 트리거는 셋: 대기열 삽입 커밋(SitDownService), 핸드 정산(HandSettler),
