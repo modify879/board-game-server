@@ -7,6 +7,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCo
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
 import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
@@ -196,7 +197,7 @@ class HoldemApiIntegrationTest {
     private fun awaitSeated(userId: Long, timeoutMs: Long = 5_000) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            if (holdemTableRepository.findByUserId(userId) != null) return
+            if (holdemTableRepository.findByUserId(UserId(userId)) != null) return
             Thread.sleep(20)
         }
         error("착석이 시간 안에 끝나지 않았습니다: userId=$userId")
@@ -207,7 +208,7 @@ class HoldemApiIntegrationTest {
     private fun awaitDropped(userId: Long, timeoutMs: Long = 5_000) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            if (!joinQueue.isQueued(userId)) return
+            if (!joinQueue.isQueued(UserId(userId))) return
             Thread.sleep(20)
         }
         error("대기열 처리가 시간 안에 끝나지 않았습니다: userId=$userId")
@@ -323,7 +324,7 @@ class HoldemApiIntegrationTest {
 
         awaitSeated(userId)
         val tableId = JsonPath.read<Int>(result.response.contentAsString, "$.tableId").toLong()
-        assertThat(holdemTableRepository.findByUserId(userId)!!.id!!.value).isEqualTo(tableId)
+        assertThat(holdemTableRepository.findByUserId(UserId(userId))!!.id!!.value).isEqualTo(tableId)
     }
 
     @Test
@@ -338,7 +339,7 @@ class HoldemApiIntegrationTest {
 
         val names = holdemTableRepository.findAllTableIds().map { holdemTableRepository.findById(it)?.name }
         assertThat(names).doesNotContain(name)
-        assertThat(joinQueue.isQueued(userId)).isFalse()
+        assertThat(joinQueue.isQueued(UserId(userId))).isFalse()
     }
 
     @Test
@@ -409,7 +410,7 @@ class HoldemApiIntegrationTest {
             .andExpect(status().isAccepted)
         awaitSeated(userId)
 
-        assertThat(holdemTableRepository.findByUserId(userId)!!.seatOf(userId)!!.stack.amount).isEqualTo(10_000L)
+        assertThat(holdemTableRepository.findByUserId(UserId(userId))!!.seatOf(UserId(userId))!!.stack.amount).isEqualTo(10_000L)
         assertThat(balanceOf(userId)).isEqualTo(0L)
     }
 
@@ -476,7 +477,7 @@ class HoldemApiIntegrationTest {
 
         val savedTable = holdemTableRepository.findById(TableId(ctx.tableId))!!
         assertThat(joinQueue.entriesOf(TableId(ctx.tableId))).isEmpty()
-        assertThat(savedTable.seatOf(spectatorId)).isNull()
+        assertThat(savedTable.seatOf(UserId(spectatorId))).isNull()
         assertThat(balanceOf(spectatorId)).isEqualTo(0L)
     }
 
@@ -499,7 +500,7 @@ class HoldemApiIntegrationTest {
         val savedTable = holdemTableRepository.findById(TableId(ctx.tableId))!!
         // seatedWithHandInProgress() 가 좌석 1·2 를 채우므로, 폴드로 핸드가 정산된 뒤 대기 중이던
         // requester 는 가장 낮은 빈 좌석인 3에 앉는다.
-        assertThat(savedTable.seatOf(requesterId)?.seatNo).isEqualTo(3)
+        assertThat(savedTable.seatOf(UserId(requesterId))?.seatNo).isEqualTo(3)
         assertThat(balanceOf(requesterId)).isEqualTo(0L)
     }
 

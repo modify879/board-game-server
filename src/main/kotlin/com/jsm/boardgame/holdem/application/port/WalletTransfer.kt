@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.port
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.model.TableId
 
 /**
@@ -8,6 +9,6 @@ import com.jsm.boardgame.holdem.domain.model.TableId
  */
 interface WalletTransfer {
     /** 지갑 잔액 전부를 테이블로 옮기고 옮긴 금액을 돌려준다. 잔액이 0이면 0이다. */
-    fun allToGame(userId: Long, tableId: TableId, memo: String?): Long
-    fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?)
+    fun allToGame(userId: UserId, tableId: TableId, memo: String?): Long
+    fun fromGame(userId: UserId, amount: Long, tableId: TableId, memo: String?)
 }

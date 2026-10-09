@@ -13,6 +13,7 @@ import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import com.jsm.boardgame.holdem.infrastructure.queue.InMemoryJoinQueue
@@ -29,9 +30,9 @@ private class CreateTableFakeHoldemTableRepository : HoldemTableRepository {
 
     override fun findById(id: TableId): HoldemTable? = stored[id.value]
 
-    override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
+    override fun findByUserId(userId: UserId): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
-    override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
+    override fun findAllSeatedUserIds(): List<UserId> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllTableIds(): List<TableId> = stored.values.mapNotNull { it.id }
 
@@ -60,17 +61,17 @@ private class CreateTableFakeHandStore : HandStore {
 }
 
 private class CreateTableFakeUserConnections : UserConnections {
-    val connected = mutableSetOf<Long>()
+    val connected = mutableSetOf<UserId>()
 
-    override fun isConnected(userId: Long): Boolean = userId in connected
+    override fun isConnected(userId: UserId): Boolean = userId in connected
 
-    override fun hasOtherSession(userId: Long, excludingSessionId: String): Boolean = false
+    override fun hasOtherSession(userId: UserId, excludingSessionId: String): Boolean = false
 }
 
 private class CreateTableFakeWalletBalance : WalletBalance {
-    val balances = mutableMapOf<Long, Long>()
+    val balances = mutableMapOf<UserId, Long>()
 
-    override fun balanceOf(userId: Long): Long = balances[userId] ?: 0
+    override fun balanceOf(userId: UserId): Long = balances[userId] ?: 0
 }
 
 class CreateTableServiceTest {
@@ -78,14 +79,14 @@ class CreateTableServiceTest {
     private val tables = CreateTableFakeHoldemTableRepository()
     private val handStore = CreateTableFakeHandStore()
     private val joinQueue = InMemoryJoinQueue()
-    private val userConnections = CreateTableFakeUserConnections().apply { connected += 1L }
-    private val walletBalance = CreateTableFakeWalletBalance().apply { balances[1L] = 8_000 }
+    private val userConnections = CreateTableFakeUserConnections().apply { connected += UserId(1L) }
+    private val walletBalance = CreateTableFakeWalletBalance().apply { balances[UserId(1L)] = 8_000 }
     private val service = CreateTableService(
         tables,
         SeatRequester(tables, handStore, joinQueue, userConnections, walletBalance, ApplicationEventPublisher { }),
     )
 
-    private fun seatedTable(userId: Long): HoldemTable {
+    private fun seatedTable(userId: UserId): HoldemTable {
         val table = HoldemTable.create("기존 테이블")
         table.sitDown(userId, Chips.of(8_000))
         return tables.save(table)
@@ -101,7 +102,7 @@ class CreateTableServiceTest {
 
     @Test
     fun `이미 다른 테이블에 앉아 있으면 핸드가 없어도 ALREADY_SEATED`() {
-        seatedTable(userId = 1)
+        seatedTable(userId = UserId(1L))
 
         val e = assertFailsWith<AlreadySeatedException> {
             service.create(CreateTableCommand(ownerUserId = 1, name = "새 테이블"))
@@ -111,7 +112,7 @@ class CreateTableServiceTest {
 
     @Test
     fun `이미 앉은 테이블에서 핸드가 진행 중이면 HAND_IN_PROGRESS`() {
-        val table = seatedTable(userId = 1)
+        val table = seatedTable(userId = UserId(1L))
         handStore.save(
             table.id!!,
             Hand.start(mapOf(1 to Chips.of(8_000), 2 to Chips.of(8_000)), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, HoldemTable.SMALL_BLIND, HoldemTable.BIG_BLIND, Shuffler { it }),
@@ -127,18 +128,18 @@ class CreateTableServiceTest {
     fun `만든 사람은 새 테이블의 대기열에 들어간다`() {
         val id = service.create(CreateTableCommand(ownerUserId = 1, name = "새 테이블"))
 
-        assertEquals(id, joinQueue.tableOf(1))
+        assertEquals(id, joinQueue.tableOf(UserId(1L)))
     }
 
     @Test
     fun `지갑 잔액이 빅 블라인드 미만이면 BUY_IN_OUT_OF_RANGE 이고 대기열에 남지 않는다`() {
-        walletBalance.balances[1L] = 100
+        walletBalance.balances[UserId(1L)] = 100
 
         val e = assertFailsWith<BuyInOutOfRangeException> {
             service.create(CreateTableCommand(ownerUserId = 1, name = "새 테이블"))
         }
         assertEquals(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, e.errorCode)
-        assertTrue(!joinQueue.isQueued(1))
+        assertTrue(!joinQueue.isQueued(UserId(1L)))
     }
 
     @Test
@@ -149,6 +150,6 @@ class CreateTableServiceTest {
             service.create(CreateTableCommand(ownerUserId = 1, name = "새 테이블"))
         }
         assertEquals(HoldemErrorCode.NOT_CONNECTED, e.errorCode)
-        assertTrue(!joinQueue.isQueued(1))
+        assertTrue(!joinQueue.isQueued(UserId(1L)))
     }
 }

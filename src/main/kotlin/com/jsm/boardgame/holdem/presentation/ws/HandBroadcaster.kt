@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
@@ -82,11 +83,11 @@ class HandBroadcaster(
      * 포커에서 "당신 차례" 알림이 이렇게 증발하면 유저는 자기 차례인 줄 몰라 타임아웃 자동
      * 폴드로 돈을 잃는다 — 그래서 세션 유무를 미리 확인해 WARN 을 남긴다.
      */
-    private fun sendPrivate(tableId: TableId, userId: Long, view: SeatPrivateView) {
-        if (userRegistry.getUser(userId.toString()) == null) {
+    private fun sendPrivate(tableId: TableId, userId: UserId, view: SeatPrivateView) {
+        if (userRegistry.getUser(userId.value.toString()) == null) {
             log.warn("private view dropped: no active session for userId={}, tableId={}", userId, tableId.value)
         }
-        messagingTemplate.convertAndSendToUser(userId.toString(), HoldemDestinations.privateQueueSendTargetOf(tableId.value), view)
+        messagingTemplate.convertAndSendToUser(userId.value.toString(), HoldemDestinations.privateQueueSendTargetOf(tableId.value), view)
     }
 
     companion object {

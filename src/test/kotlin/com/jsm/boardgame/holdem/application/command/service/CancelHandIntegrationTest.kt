@@ -12,6 +12,7 @@ import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import com.jsm.boardgame.user.domain.model.Nickname
@@ -62,10 +63,10 @@ class CancelHandIntegrationTest {
     fun `만료 폴드로 기립한 좌석이 있어도 취소는 성공하고 그 사용자는 시작 스택 전부를 지갑으로 돌려받는다`() {
         val userIds = List(3) { userWithBuyIn(10_000) }
         var table = HoldemTable.create("cancel-${System.nanoTime()}")
-        userIds.forEach { table.sitDown(it, Chips.of(10_000)) }
+        userIds.forEach { table.sitDown(UserId(it), Chips.of(10_000)) }
         table.moveButtonToNextOccupiedSeat()
         val tableId = tables.save(table).id!!
-        userIds.forEach { walletTransfer.allToGame(it, tableId, "holdem") }
+        userIds.forEach { walletTransfer.allToGame(UserId(it), tableId, "holdem") }
         table = tables.findById(tableId)!!
 
         val seatNos = table.occupiedSeats().map { it.seatNo }.sorted()
@@ -77,7 +78,7 @@ class CancelHandIntegrationTest {
         )
         hand.act(button, BettingAction.Call)
         handStore.save(tableId, hand)
-        val departedUserId = table.seatAt(sb)!!.userId
+        val departedUserId = table.seatAt(sb)!!.userId.value
         assertEquals(sb, hand.toActSeatNo)
 
         // SB 는 콜해야 해서 체크할 수 없다 -> 만료 폴드 + 즉시 기립. 잔여 스택은 이미 지갑으로 돌아갔다.

@@ -16,6 +16,7 @@ import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.Seat
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
@@ -40,8 +41,8 @@ private class AdmitJoinRequestFakeTableRepository : HoldemTableRepository {
     )
 
     override fun findById(id: TableId): HoldemTable? = store[id.value]?.let { reconstituteFrom(it) }
-    override fun findByUserId(userId: Long): HoldemTable? = store.values.find { it.seatOf(userId) != null }
-    override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
+    override fun findByUserId(userId: UserId): HoldemTable? = store.values.find { it.seatOf(userId) != null }
+    override fun findAllSeatedUserIds(): List<UserId> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
     override fun findAllTableIds(): List<TableId> = store.values.mapNotNull { it.id }
 
     override fun save(table: HoldemTable): HoldemTable {
@@ -70,13 +71,13 @@ private class AdmitJoinRequestFakeHandStore : HandStore {
 
 /** 지갑 잔액을 들고 있다가 allToGame 으로 전부 내어준다. 실패시킬 사용자 id 를 지정하면 그 사용자의 호출에서
  *  BusinessException 을 던져 지갑 실패를 흉내낸다(holdem 은 wallet 의 domain 을 참조하지 않는다). */
-private class AdmitJoinRequestFakeWalletTransfer(private val failingUserIds: Set<Long> = emptySet()) : WalletTransfer {
-    data class AllToGameCall(val userId: Long, val tableId: TableId, val memo: String?, val amount: Long)
+private class AdmitJoinRequestFakeWalletTransfer(private val failingUserIds: Set<UserId> = emptySet()) : WalletTransfer {
+    data class AllToGameCall(val userId: UserId, val tableId: TableId, val memo: String?, val amount: Long)
 
-    val balances = mutableMapOf<Long, Long>()
+    val balances = mutableMapOf<UserId, Long>()
     val allToGameCalls = mutableListOf<AllToGameCall>()
 
-    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long {
+    override fun allToGame(userId: UserId, tableId: TableId, memo: String?): Long {
         if (userId in failingUserIds) {
             throw BuyInOutOfRangeException("잔액 부족 등 지갑 실패를 흉내낸다: userId=$userId")
         }
@@ -85,7 +86,7 @@ private class AdmitJoinRequestFakeWalletTransfer(private val failingUserIds: Set
         return amount
     }
 
-    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) {
+    override fun fromGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) {
         error("AdmitJoinRequestService 는 fromGame 을 부르지 않는다")
     }
 }
@@ -113,7 +114,7 @@ class AdmitJoinRequestServiceTest {
         var table = HoldemTable.create("test-table")
         table = tables.save(table)
         val seats = buyIns.associate { (seatNo, buyIn) ->
-            seatNo to Seat.reconstitute(seatNo, userId = seatNo.toLong(), stack = Chips.of(buyIn), presence = SeatPresence.SEATED)
+            seatNo to Seat.reconstitute(seatNo, userId = UserId(seatNo.toLong()), stack = Chips.of(buyIn), presence = SeatPresence.SEATED)
         }
         val seeded = HoldemTable.reconstitute(
             id = table.id!!,
@@ -145,52 +146,52 @@ class AdmitJoinRequestServiceTest {
 
         assertEquals(AdmitJoinRequestResult.Blocked, result)
         val savedTable = tables.findById(tableId)!!
-        assertNull(savedTable.seatOf(9001L))
+        assertNull(savedTable.seatOf(UserId(9001L)))
         assertTrue(walletTransfer.allToGameCalls.isEmpty())
     }
 
     @Test
     fun `핸드가 없고 빈 좌석이 있으면 참가자를 좌석에 앉히고 지갑 잔액 전부를 스택으로 옮긴다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        walletTransfer.balances[9002L] = 8_000
+        walletTransfer.balances[UserId(9002L)] = 8_000
 
         val result = service.admit(AdmitJoinRequestCommand(tableId.value, 9002L, postBlindImmediately = false))
 
         assertEquals(AdmitJoinRequestResult.Seated(3), result)
         val savedTable = tables.findById(tableId)!!
-        assertEquals(9002L, savedTable.seatAt(3)?.userId)
+        assertEquals(UserId(9002L), savedTable.seatAt(3)?.userId)
         assertEquals(Chips.of(8_000), savedTable.seatAt(3)?.stack)
         val call = walletTransfer.allToGameCalls.single()
-        assertEquals(9002L, call.userId)
+        assertEquals(UserId(9002L), call.userId)
         assertEquals(8_000L, call.amount)
-        assertEquals(0L, walletTransfer.balances[9002L] ?: 0L)
+        assertEquals(0L, walletTransfer.balances[UserId(9002L)] ?: 0L)
     }
 
     @Test
     fun `배정 시점 잔액이 빅블라인드 미만이면 BUY_IN_OUT_OF_RANGE 로 착석하지 않는다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        walletTransfer.balances[9006L] = 100
+        walletTransfer.balances[UserId(9006L)] = 100
 
         val e = assertFailsWith<BuyInOutOfRangeException> {
             service.admit(AdmitJoinRequestCommand(tableId.value, 9006L, postBlindImmediately = false))
         }
 
         assertEquals(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, e.errorCode)
-        assertNull(tables.findById(tableId)!!.seatOf(9006L))
+        assertNull(tables.findById(tableId)!!.seatOf(UserId(9006L)))
     }
 
     @Test
     fun `지갑 이체가 실패하면 예외를 던지고 좌석에 앉히지 않는다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
 
-        val failingWallet = AdmitJoinRequestFakeWalletTransfer(failingUserIds = setOf(9003L))
+        val failingWallet = AdmitJoinRequestFakeWalletTransfer(failingUserIds = setOf(UserId(9003L)))
         val failingService = AdmitJoinRequestService(tables, handStore, failingWallet, handStarter)
 
         assertFailsWith<BuyInOutOfRangeException> {
             failingService.admit(AdmitJoinRequestCommand(tableId.value, 9003L, postBlindImmediately = false))
         }
 
-        assertNull(tables.findById(tableId)!!.seatOf(9003L))
+        assertNull(tables.findById(tableId)!!.seatOf(UserId(9003L)))
     }
 
     @Test
@@ -199,7 +200,7 @@ class AdmitJoinRequestServiceTest {
 
         var otherTable = HoldemTable.create("other-table")
         otherTable = tables.save(otherTable)
-        otherTable.sitDown(9004L, Chips.of(8_000))
+        otherTable.sitDown(UserId(9004L), Chips.of(8_000))
         tables.save(otherTable)
 
         assertFailsWith<AlreadySeatedException> {

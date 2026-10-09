@@ -206,17 +206,17 @@ class HandSnapshotTest {
         val hand = threeHandedHand()
         hand.act(1, BettingAction.Fold)
 
-        hand.recordDeparture(1, 77L)
+        hand.recordDeparture(1, UserId(77L))
 
-        assertEquals(mapOf(1 to 77L), hand.snapshot().departedUserIds)
-        assertEquals(mapOf(1 to 77L), Hand.reconstitute(hand.snapshot(), identityShuffler).departedUserIds)
+        assertEquals(mapOf(1 to UserId(77L)), hand.snapshot().departedUserIds)
+        assertEquals(mapOf(1 to UserId(77L)), Hand.reconstitute(hand.snapshot(), identityShuffler).departedUserIds)
     }
 
     @Test
     fun `폴드하지 않은 좌석의 이탈 기록은 거부된다`() {
         val hand = threeHandedHand()
 
-        val e = assertFailsWith<com.jsm.boardgame.holdem.domain.exception.IllegalHandStateException> { hand.recordDeparture(1, 77L) }
+        val e = assertFailsWith<com.jsm.boardgame.holdem.domain.exception.IllegalHandStateException> { hand.recordDeparture(1, UserId(77L)) }
 
         assertEquals(HoldemErrorCode.DEPARTURE_NOT_FOLDED, e.errorCode)
     }

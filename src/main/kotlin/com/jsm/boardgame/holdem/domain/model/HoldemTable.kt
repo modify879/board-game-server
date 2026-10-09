@@ -53,7 +53,7 @@ class HoldemTable private constructor(
     }
 
     /** 가장 낮은 번호의 빈 좌석에 강제로 앉힌다 — 좌석을 고르지 않는다(FIFO 대기열, ProcessJoinRequestsService). */
-    fun sitDown(userId: Long, buyIn: Chips, postBlindImmediately: Boolean = false): Seat {
+    fun sitDown(userId: UserId, buyIn: Chips, postBlindImmediately: Boolean = false): Seat {
         if (seatOf(userId) != null) {
             throw AlreadySeatedException("이미 이 테이블에 앉아 있는 사용자입니다: userId=$userId")
         }
@@ -75,13 +75,13 @@ class HoldemTable private constructor(
 
     fun hasEmptySeat(): Boolean = seats.size < MAX_SEATS
 
-    fun standUp(userId: Long): Chips {
+    fun standUp(userId: UserId): Chips {
         val seat = seatOf(userId) ?: throw NotSeatedException("이 테이블에 앉아 있지 않은 사용자입니다: userId=$userId")
         seats.remove(seat.seatNo)
         return seat.stack
     }
 
-    fun markPresence(userId: Long, presence: SeatPresence) {
+    fun markPresence(userId: UserId, presence: SeatPresence) {
         val seat = seatOf(userId) ?: throw NotSeatedException("이 테이블에 앉아 있지 않은 사용자입니다: userId=$userId")
         seat.applyPresence(presence)
     }
@@ -96,7 +96,7 @@ class HoldemTable private constructor(
         seats[seatNo]?.consumeImmediatePost()
     }
 
-    fun seatOf(userId: Long): Seat? = seats.values.find { it.userId == userId }
+    fun seatOf(userId: UserId): Seat? = seats.values.find { it.userId == userId }
 
     fun seatAt(seatNo: Int): Seat? = seats[seatNo]
 

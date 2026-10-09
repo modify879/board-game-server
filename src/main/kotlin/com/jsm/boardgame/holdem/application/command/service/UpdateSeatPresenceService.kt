@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceCommand
 import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceUseCase
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
@@ -18,8 +19,8 @@ class UpdateSeatPresenceService(
 ) : UpdateSeatPresenceUseCase {
 
     override fun update(command: UpdateSeatPresenceCommand) {
-        val table = tables.findByUserId(command.userId) ?: return
-        table.markPresence(command.userId, SeatPresence.valueOf(command.presence))
+        val table = tables.findByUserId(UserId(command.userId)) ?: return
+        table.markPresence(UserId(command.userId), SeatPresence.valueOf(command.presence))
         tables.save(table)
     }
 }

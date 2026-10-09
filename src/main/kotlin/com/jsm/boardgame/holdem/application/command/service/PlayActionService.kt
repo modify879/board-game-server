@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.PlayActionCommand
 import com.jsm.boardgame.holdem.application.command.usecase.PlayActionUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
@@ -36,7 +37,7 @@ class PlayActionService(
             ?: throw TableNotFoundException("테이블을 찾을 수 없습니다: tableId=${command.tableId}")
         val hand = handStore.find(tableId)
             ?: throw HandNotFoundException("진행 중인 핸드가 없습니다: tableId=${command.tableId}")
-        val seat = table.seatOf(command.userId)
+        val seat = table.seatOf(UserId(command.userId))
             ?: throw NotSeatedException("이 테이블에 앉아 있지 않은 사용자입니다: userId=${command.userId}")
 
         hand.act(seat.seatNo, toBettingAction(command.action, command.raiseToAmount))

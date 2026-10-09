@@ -4,6 +4,7 @@ import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.wallet.application.command.usecase.ApproveDepositRequestCommand
 import com.jsm.boardgame.wallet.application.command.usecase.ApproveDepositRequestUseCase
@@ -65,13 +66,13 @@ class TopUpSeatFromWalletIntegrationTest {
     fun `핸드가 없는 테이블에 앉아 있으면 충전 승인 즉시 지갑 잔액 전부가 좌석 스택에 합쳐진다`() {
         val userId = signUp()
         var table = tables.save(HoldemTable.create("topup-${UUID.randomUUID().toString().take(8)}"))
-        table.sitDown(userId, Chips.of(10_000))
+        table.sitDown(UserId(userId), Chips.of(10_000))
         table = tables.save(table)
 
         val requestId = requestDeposit.request(RequestDepositCommand(userId, 10_000))
         approveDeposit.approve(ApproveDepositRequestCommand(requestId.value, adminUserId = userId, creditedAmount = null))
 
-        assertThat(tables.findById(table.id!!)!!.seatOf(userId)!!.stack).isEqualTo(Chips.of(20_000))
+        assertThat(tables.findById(table.id!!)!!.seatOf(UserId(userId))!!.stack).isEqualTo(Chips.of(20_000))
         assertThat(wallets.findByUserId(userId)!!.balance).isEqualTo(Money.ZERO)
     }
 }

@@ -15,6 +15,7 @@ import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.Seat
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import com.jsm.boardgame.holdem.presentation.ws.payload.publicViewOf
@@ -34,9 +35,9 @@ private class HandSettlerFakeTableRepository : HoldemTableRepository {
 
     override fun findById(id: TableId): HoldemTable? = store[id.value]
 
-    override fun findByUserId(userId: Long): HoldemTable? = store.values.find { it.seatOf(userId) != null }
+    override fun findByUserId(userId: UserId): HoldemTable? = store.values.find { it.seatOf(userId) != null }
 
-    override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
+    override fun findAllSeatedUserIds(): List<UserId> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun save(table: HoldemTable): HoldemTable {
         val id = table.id ?: TableId(nextId++)
@@ -93,15 +94,15 @@ private class HandSettlerFakeNextHandCountdown : NextHandCountdown {
 
 private class HandSettlerFakeWalletTransfer : WalletTransfer {
     /** userId -> 지갑 잔액. allToGame 이 비운다. */
-    val balances = mutableMapOf<Long, Long>()
-    val allToGameCalls = mutableListOf<Long>()
+    val balances = mutableMapOf<UserId, Long>()
+    val allToGameCalls = mutableListOf<UserId>()
 
-    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long {
+    override fun allToGame(userId: UserId, tableId: TableId, memo: String?): Long {
         allToGameCalls += userId
         return balances.remove(userId) ?: 0
     }
 
-    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) = error("정산은 fromGame 을 부르지 않는다")
+    override fun fromGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) = error("정산은 fromGame 을 부르지 않는다")
 }
 
 class HandSettlerTest {
@@ -116,7 +117,7 @@ class HandSettlerTest {
 
     private fun seatedTable(vararg stacks: Pair<Int, Long>): HoldemTable {
         val seats = stacks.associate { (seatNo, stack) ->
-            seatNo to Seat.reconstitute(seatNo, userId = seatNo * 1000L, stack = Chips.of(stack), presence = SeatPresence.SEATED)
+            seatNo to Seat.reconstitute(seatNo, userId = UserId(seatNo * 1000L), stack = Chips.of(stack), presence = SeatPresence.SEATED)
         }
         val table = HoldemTable.reconstitute(
             id = TableId(1),
@@ -141,7 +142,7 @@ class HandSettlerTest {
 
         val saved = lastHandResults.find(tableId)
         assertNotNull(saved)
-        assertEquals(listOf(LastHandResult.Payout(2, 2000L, 300)), saved.payouts)
+        assertEquals(listOf(LastHandResult.Payout(2, UserId(2000L), 300)), saved.payouts)
         assertEquals(emptyList(), saved.shownHands)
     }
 
@@ -176,8 +177,8 @@ class HandSettlerTest {
 
         assertNull(tables.findById(tableId)!!.seatAt(2)) // 좌석 2 는 기립했다
         val saved = lastHandResults.find(tableId)!!
-        assertEquals(setOf(1000L, 2000L), saved.shownHands.map { it.userId }.toSet())
-        assertEquals(listOf(LastHandResult.Payout(1, 1000L, 400)), saved.payouts)
+        assertEquals(setOf(UserId(1000L), UserId(2000L)), saved.shownHands.map { it.userId }.toSet())
+        assertEquals(listOf(LastHandResult.Payout(1, UserId(1000L), 400)), saved.payouts)
         val event = eventPublisher.events.filterIsInstance<HandBroadcastRequested>().single()
         assertEquals(saved, event.lastResult)
     }
@@ -211,7 +212,7 @@ class HandSettlerTest {
         val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
         val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
         hand.act(1, BettingAction.Fold) // 좌석 2 가 SB 100 을 따 10_100
-        walletTransfer.balances[2000L] = 5_000L
+        walletTransfer.balances[UserId(2000L)] = 5_000L
 
         settler.settle(tableId, table, hand)
 
@@ -228,7 +229,7 @@ class HandSettlerTest {
         val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
         val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
         hand.act(1, BettingAction.Fold)
-        walletTransfer.balances[2000L] = 5_000L
+        walletTransfer.balances[UserId(2000L)] = 5_000L
 
         settler.settle(tableId, table, hand)
 
@@ -249,7 +250,7 @@ class HandSettlerTest {
 
         settler.settle(tableId, table, hand)
 
-        assertEquals(listOf(1000L), walletTransfer.allToGameCalls) // 좌석 2(2000L)는 기립했다
+        assertEquals(listOf(UserId(1000L)), walletTransfer.allToGameCalls) // 좌석 2(2000L)는 기립했다
     }
 
     @Test

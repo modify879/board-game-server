@@ -12,6 +12,7 @@ import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.SeatStatus
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
@@ -28,10 +29,10 @@ private class ExpireTurnFakeTableRepository : HoldemTableRepository {
 
     override fun findById(id: TableId): HoldemTable? = store[id.value]?.let { copyOf(it) }
 
-    override fun findByUserId(userId: Long): HoldemTable? =
+    override fun findByUserId(userId: UserId): HoldemTable? =
         store.values.firstOrNull { it.seatOf(userId) != null }?.let { copyOf(it) }
 
-    override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
+    override fun findAllSeatedUserIds(): List<UserId> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllTableIds(): List<TableId> = store.values.mapNotNull { it.id }
 
@@ -63,14 +64,14 @@ private class ExpireTurnFakeHandStore : HandStore {
 }
 
 private class ExpireTurnFakeWalletTransfer : WalletTransfer {
-    data class FromGameCall(val userId: Long, val amount: Long, val tableId: TableId, val memo: String?)
+    data class FromGameCall(val userId: UserId, val amount: Long, val tableId: TableId, val memo: String?)
 
     val fromGameCalls = mutableListOf<FromGameCall>()
 
     // ExpireTurnService 자체는 allToGame 을 부르지 않는다 — 정산(HandSettler)이 잔액 0 으로 부른다.
-    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long = 0
+    override fun allToGame(userId: UserId, tableId: TableId, memo: String?): Long = 0
 
-    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) {
+    override fun fromGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) {
         fromGameCalls += FromGameCall(userId, amount, tableId, memo)
     }
 }
@@ -96,7 +97,7 @@ class ExpireTurnServiceTest {
         var table = HoldemTable.create("test-table")
         table = tables.save(table)
         for ((seatNo, buyIn) in stacks) {
-            table.sitDown(userId = seatNo * 1000L, buyIn = Chips.of(buyIn))
+            table.sitDown(userId = UserId(seatNo * 1000L), buyIn = Chips.of(buyIn))
         }
         table.moveButtonToNextOccupiedSeat()
         table = tables.save(table)
@@ -148,7 +149,7 @@ class ExpireTurnServiceTest {
         assertEquals(SeatStatus.FOLDED, hand.statusOf(toAct))
         assertNull(tables.findById(tableId)!!.seatAt(toAct))
         val credited = walletTransfer.fromGameCalls.single()
-        assertEquals(1000L, credited.userId)
+        assertEquals(UserId(1000L), credited.userId)
         assertEquals(10_000L, credited.amount)
         assertEquals(tableId, credited.tableId)
     }
@@ -189,7 +190,7 @@ class ExpireTurnServiceTest {
     fun `핸드가 없으면 조용히 끝난다`() {
         var table = HoldemTable.create("no-hand")
         table = tables.save(table)
-        table.sitDown(userId = 1000L, buyIn = Chips.of(10_000))
+        table.sitDown(userId = UserId(1000L), buyIn = Chips.of(10_000))
         tables.save(table)
 
         service.expire(ExpireTurnCommand(table.id!!.value, 1))

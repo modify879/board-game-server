@@ -5,6 +5,7 @@ import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -15,9 +16,9 @@ private class UpdateSeatPresenceFakeHoldemTableRepository : HoldemTableRepositor
 
     override fun findById(id: TableId): HoldemTable? = stored[id.value]
 
-    override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
+    override fun findByUserId(userId: UserId): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
-    override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
+    override fun findAllSeatedUserIds(): List<UserId> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllTableIds(): List<TableId> = stored.values.mapNotNull { it.id }
 
@@ -44,7 +45,7 @@ class UpdateSeatPresenceServiceTest {
     @Test
     fun `착석한 사용자의 좌석 연결 상태를 바꾼다`() {
         val table = tables.save(HoldemTable.create("테스트 테이블"))
-        table.sitDown(1, Chips.of(8_000))
+        table.sitDown(UserId(1), Chips.of(8_000))
         val saved = tables.save(table)
 
         service.update(UpdateSeatPresenceCommand(userId = 1, presence = "DISCONNECTED"))

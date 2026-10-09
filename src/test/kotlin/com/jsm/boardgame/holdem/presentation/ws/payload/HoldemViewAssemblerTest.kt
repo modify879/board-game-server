@@ -8,6 +8,7 @@ import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import java.time.Duration
 import kotlin.test.Test
@@ -31,13 +32,13 @@ private fun fixedShuffler(vararg notation: String): Shuffler {
 private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): HoldemTable {
     val table = HoldemTable.create("assembler-test")
     for ((seatNo, buyIn) in buyIns) {
-        table.sitDown(userId = seatNo * 100L, buyIn = Chips.of(buyIn))
+        table.sitDown(userId = UserId(seatNo * 100L), buyIn = Chips.of(buyIn))
     }
     return table
 }
 
 /** [tableWithSeats] 가 앉힌 사용자 id(좌석 번호 * 100)로 만든 끝난 핸드의 결과. */
-private fun lastOf(hand: Hand): LastHandResult = LastHandResult.of(hand, hand.seatNos.associateWith { it * 100L })
+private fun lastOf(hand: Hand): LastHandResult = LastHandResult.of(hand, hand.seatNos.associateWith { UserId(it * 100L) })
 
 class HoldemViewAssemblerTest {
 
@@ -62,7 +63,7 @@ class HoldemViewAssemblerTest {
     @Test
     fun `연결이 끊긴 좌석은 공개 뷰에 presence DISCONNECTED 로 나타난다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        table.markPresence(100, SeatPresence.DISCONNECTED)
+        table.markPresence(UserId(100), SeatPresence.DISCONNECTED)
 
         val view = publicViewOf(TableId(1), table, null, null, 1L, null, null)
 
@@ -571,8 +572,8 @@ class HoldemViewAssemblerTest {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         val last = LastHandResult(
             board = listOf("As", "Kd", "7c", "2h", "9s"),
-            payouts = listOf(LastHandResult.Payout(2, 200L, 300)),
-            shownHands = listOf(LastHandResult.ShownHand(2, 200L, listOf("Ah", "Ad"), "THREE_OF_A_KIND")),
+            payouts = listOf(LastHandResult.Payout(2, UserId(200L), 300)),
+            shownHands = listOf(LastHandResult.ShownHand(2, UserId(200L), listOf("Ah", "Ad"), "THREE_OF_A_KIND")),
         )
 
         val view = publicViewOf(TableId(1), table, null, last, 1L, null, null)
@@ -603,7 +604,7 @@ class HoldemViewAssemblerTest {
             table.bigBlind,
             identityShuffler,
         )
-        val stale = LastHandResult(listOf("As"), listOf(LastHandResult.Payout(1, 100L, 999)), emptyList())
+        val stale = LastHandResult(listOf("As"), listOf(LastHandResult.Payout(1, UserId(100L), 999)), emptyList())
 
         val view = publicViewOf(TableId(1), table, hand, stale, 1L, null, null)
 
@@ -627,7 +628,7 @@ class HoldemViewAssemblerTest {
         )
         hand.act(1, BettingAction.Fold)
         // 정산 시점 점유자(200)가 아닌 값을 넘겨, 조립기가 hand 에서 다시 유도하지 않는지 본다.
-        val passed = LastHandResult(listOf("As"), listOf(LastHandResult.Payout(2, 777L, 300)), emptyList())
+        val passed = LastHandResult(listOf("As"), listOf(LastHandResult.Payout(2, UserId(777L), 300)), emptyList())
 
         val view = publicViewOf(TableId(1), table, hand, passed, 1L, null, null)
 

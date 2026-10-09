@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.SitDownCommand
 import com.jsm.boardgame.holdem.application.command.usecase.SitDownUseCase
 import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
@@ -31,6 +32,6 @@ class SitDownService(
     override fun sitDown(command: SitDownCommand): Int {
         val table = tables.findById(TableId(command.tableId))
             ?: throw TableNotFoundException("존재하지 않는 테이블입니다: tableId=${command.tableId}")
-        return seatRequester.request(table, command.userId, command.postBlindImmediately)
+        return seatRequester.request(table, UserId(command.userId), command.postBlindImmediately)
     }
 }

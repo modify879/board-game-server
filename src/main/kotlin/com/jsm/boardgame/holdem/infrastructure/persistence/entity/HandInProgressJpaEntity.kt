@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.persistence.entity
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.model.Card
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.HandSnapshot
@@ -113,7 +114,7 @@ fun HandSnapshot.toJson(): HandStateJson = HandStateJson(
     currentRound = currentRound?.toJson(),
     showdownLeaderSeatNo = showdownLeaderSeatNo,
     runningOut = runningOut,
-    departedUserIds = departedUserIds,
+    departedUserIds = departedUserIds.mapValues { it.value.value },
 )
 
 private fun HandSnapshot.BettingRoundSnapshot.toJson(): HandStateJson.BettingRoundJson = HandStateJson.BettingRoundJson(
@@ -148,7 +149,7 @@ fun HandStateJson.toSnapshot(): HandSnapshot = HandSnapshot(
     currentRound = currentRound?.toSnapshot(),
     showdownLeaderSeatNo = showdownLeaderSeatNo,
     runningOut = runningOut,
-    departedUserIds = departedUserIds,
+    departedUserIds = departedUserIds.mapValues { UserId(it.value) },
 )
 
 private fun HandStateJson.BettingRoundJson.toSnapshot(): HandSnapshot.BettingRoundSnapshot = HandSnapshot.BettingRoundSnapshot(

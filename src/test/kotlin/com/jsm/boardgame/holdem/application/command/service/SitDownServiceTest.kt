@@ -14,6 +14,7 @@ import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import com.jsm.boardgame.holdem.infrastructure.queue.InMemoryJoinQueue
@@ -33,9 +34,9 @@ private class SitDownFakeHoldemTableRepository : HoldemTableRepository {
 
     override fun findById(id: TableId): HoldemTable? = stored[id.value]
 
-    override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
+    override fun findByUserId(userId: UserId): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
-    override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
+    override fun findAllSeatedUserIds(): List<UserId> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
 
     override fun findAllTableIds(): List<TableId> = stored.values.mapNotNull { it.id }
 
@@ -68,15 +69,15 @@ private class SitDownFakeUserConnections : UserConnections {
 
     fun connect(userId: Long) { connectedUserIds += userId }
 
-    override fun isConnected(userId: Long): Boolean = userId in connectedUserIds
+    override fun isConnected(userId: UserId): Boolean = userId.value in connectedUserIds
 
-    override fun hasOtherSession(userId: Long, excludingSessionId: String): Boolean = false
+    override fun hasOtherSession(userId: UserId, excludingSessionId: String): Boolean = false
 }
 
 private class SitDownFakeWalletBalance : WalletBalance {
     val balances = mutableMapOf<Long, Long>()
 
-    override fun balanceOf(userId: Long): Long = balances[userId] ?: 0
+    override fun balanceOf(userId: UserId): Long = balances[userId.value] ?: 0
 }
 
 class SitDownServiceTest {
@@ -104,7 +105,7 @@ class SitDownServiceTest {
     @Test
     fun `이미 다른 테이블에 앉아 있으면 핸드가 없어도 ALREADY_SEATED`() {
         val otherTable = tables.save(HoldemTable.create("다른 테이블"))
-        otherTable.sitDown(userId = 1, buyIn = Chips.of(8_000))
+        otherTable.sitDown(userId = UserId(1), buyIn = Chips.of(8_000))
         tables.save(otherTable)
         val tableId = createTable()
         userConnections.connect(1)
@@ -118,7 +119,7 @@ class SitDownServiceTest {
     @Test
     fun `이미 앉은 테이블에서 핸드가 진행 중이면 HAND_IN_PROGRESS`() {
         val otherTable = tables.save(HoldemTable.create("다른 테이블"))
-        otherTable.sitDown(userId = 1, buyIn = Chips.of(8_000))
+        otherTable.sitDown(userId = UserId(1), buyIn = Chips.of(8_000))
         val savedOther = tables.save(otherTable)
         handStore.save(
             savedOther.id!!,
@@ -136,7 +137,7 @@ class SitDownServiceTest {
     @Test
     fun `이미 다른 테이블 대기열에 있으면 ALREADY_SEATED`() {
         val otherTableId = createTable()
-        joinQueue.enqueue(otherTableId, 1, false)
+        joinQueue.enqueue(otherTableId, UserId(1), false)
         val tableId = createTable()
         userConnections.connect(1)
 
@@ -166,7 +167,7 @@ class SitDownServiceTest {
             service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1))
         }
         assertEquals(HoldemErrorCode.NOT_CONNECTED, e.errorCode)
-        assertFalse(joinQueue.isQueued(1))
+        assertFalse(joinQueue.isQueued(UserId(1)))
     }
 
     @Test
@@ -178,7 +179,7 @@ class SitDownServiceTest {
 
         assertEquals(1, position)
         val entry = joinQueue.entriesOf(tableId).single()
-        assertEquals(1L, entry.userId)
+        assertEquals(UserId(1L), entry.userId)
         assertTrue(entry.postBlindImmediately)
     }
 
@@ -193,7 +194,7 @@ class SitDownServiceTest {
 
         assertEquals(2, position)
         val entries = joinQueue.entriesOf(tableId)
-        assertEquals(listOf(1L, 2L), entries.map { it.userId })
+        assertEquals(listOf(UserId(1L), UserId(2L)), entries.map { it.userId })
     }
 
     @Test
@@ -214,7 +215,7 @@ class SitDownServiceTest {
         TransactionSynchronizationManager.initSynchronization()
         try {
             service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, postBlindImmediately = true))
-            assertTrue(joinQueue.isQueued(1))
+            assertTrue(joinQueue.isQueued(UserId(1)))
             TransactionSynchronizationUtils.invokeAfterCompletion(
                 TransactionSynchronizationManager.getSynchronizations(), TransactionSynchronization.STATUS_ROLLED_BACK,
             )
@@ -222,7 +223,7 @@ class SitDownServiceTest {
             TransactionSynchronizationManager.clear()
         }
 
-        assertFalse(joinQueue.isQueued(1))
+        assertFalse(joinQueue.isQueued(UserId(1)))
         assertEquals(1, service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, postBlindImmediately = true)))
     }
 
@@ -241,6 +242,6 @@ class SitDownServiceTest {
             TransactionSynchronizationManager.clear()
         }
 
-        assertTrue(joinQueue.isQueued(1))
+        assertTrue(joinQueue.isQueued(UserId(1)))
     }
 }

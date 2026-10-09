@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.queue
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
@@ -20,15 +21,15 @@ import org.springframework.transaction.event.TransactionalEventListener
  */
 @Component
 class InMemoryJoinQueue : JoinQueue {
-    private data class Entry(val userId: Long, val postBlindImmediately: Boolean) {
+    private data class Entry(val userId: UserId, val postBlindImmediately: Boolean) {
         fun toView() = JoinQueueEntry(userId, postBlindImmediately)
     }
 
     private val lock = Any()
     private val tableQueues = mutableMapOf<TableId, MutableList<Entry>>()
-    private val userToTable = mutableMapOf<Long, TableId>()
+    private val userToTable = mutableMapOf<UserId, TableId>()
 
-    override fun enqueue(tableId: TableId, userId: Long, postBlindImmediately: Boolean): Int =
+    override fun enqueue(tableId: TableId, userId: UserId, postBlindImmediately: Boolean): Int =
         synchronized(lock) {
             if (userId in userToTable) {
                 throw AlreadySeatedException("이미 대기열에 있는 사용자입니다: userId=$userId")
@@ -43,7 +44,7 @@ class InMemoryJoinQueue : JoinQueue {
         tableQueues[tableId]?.firstOrNull()?.toView()
     }
 
-    override fun removeByUserId(userId: Long): TableId? = synchronized(lock) {
+    override fun removeByUserId(userId: UserId): TableId? = synchronized(lock) {
         val tableId = userToTable.remove(userId) ?: return@synchronized null
         tableQueues[tableId]?.removeIf { it.userId == userId }
         tableId
@@ -59,7 +60,7 @@ class InMemoryJoinQueue : JoinQueue {
         Unit
     }
 
-    override fun isQueued(userId: Long): Boolean = synchronized(lock) { userId in userToTable }
+    override fun isQueued(userId: UserId): Boolean = synchronized(lock) { userId in userToTable }
 
-    override fun tableOf(userId: Long): TableId? = synchronized(lock) { userToTable[userId] }
+    override fun tableOf(userId: UserId): TableId? = synchronized(lock) { userToTable[userId] }
 }

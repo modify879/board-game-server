@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.TopUpSeatFromWalletCommand
 import com.jsm.boardgame.holdem.application.command.usecase.TopUpSeatFromWalletUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
@@ -33,11 +34,11 @@ class TopUpSeatFromWalletService(
 ) : TopUpSeatFromWalletUseCase {
 
     override fun topUp(command: TopUpSeatFromWalletCommand) {
-        val tableId = tables.findByUserId(command.userId)?.id ?: return
-        tableExecutor.call(tableId) { transactions.executeWithoutResult { topUpInTable(tableId, command.userId) } }
+        val tableId = tables.findByUserId(UserId(command.userId))?.id ?: return
+        tableExecutor.call(tableId) { transactions.executeWithoutResult { topUpInTable(tableId, UserId(command.userId)) } }
     }
 
-    private fun topUpInTable(tableId: TableId, userId: Long) {
+    private fun topUpInTable(tableId: TableId, userId: UserId) {
         val table = tables.findById(tableId) ?: return
         val seat = table.seatOf(userId) ?: return
         if (handStore.find(tableId) != null) return

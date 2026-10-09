@@ -9,6 +9,7 @@ import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
@@ -21,8 +22,8 @@ private class TopUpFakeHoldemTableRepository : HoldemTableRepository {
     val stored = mutableMapOf<Long, HoldemTable>()
 
     override fun findById(id: TableId): HoldemTable? = stored[id.value]
-    override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
-    override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
+    override fun findByUserId(userId: UserId): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
+    override fun findAllSeatedUserIds(): List<UserId> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
     override fun findAllTableIds(): List<TableId> = stored.values.mapNotNull { it.id }
     override fun save(table: HoldemTable): HoldemTable {
         stored[table.id!!.value] = table
@@ -48,12 +49,12 @@ private class TopUpFakeWalletTransfer : WalletTransfer {
     val balances = mutableMapOf<Long, Long>()
     val allToGameCalls = mutableListOf<Long>()
 
-    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long {
-        allToGameCalls += userId
-        return balances.remove(userId) ?: 0
+    override fun allToGame(userId: UserId, tableId: TableId, memo: String?): Long {
+        allToGameCalls += userId.value
+        return balances.remove(userId.value) ?: 0
     }
 
-    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) = error("충전 합산은 fromGame 을 부르지 않는다")
+    override fun fromGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) = error("충전 합산은 fromGame 을 부르지 않는다")
 }
 
 private class TopUpFakeTableExecutor : TableExecutor {
@@ -80,8 +81,8 @@ class TopUpSeatFromWalletServiceTest {
 
     private fun seatedTable(): TableId {
         val table = tables.save(HoldemTable.reconstitute(TableId(1), "t", Chips.of(100), Chips.of(200), null, emptyMap()))
-        table.sitDown(1000L, Chips.of(1_000))
-        table.sitDown(2000L, Chips.of(1_000))
+        table.sitDown(UserId(1000L), Chips.of(1_000))
+        table.sitDown(UserId(2000L), Chips.of(1_000))
         return table.id!!
     }
 
@@ -92,8 +93,8 @@ class TopUpSeatFromWalletServiceTest {
 
         service.topUp(TopUpSeatFromWalletCommand(1000L))
 
-        assertEquals(Chips.of(1_500), tables.findById(tableId)!!.seatOf(1000L)!!.stack)
-        assertEquals(Chips.of(1_000), tables.findById(tableId)!!.seatOf(2000L)!!.stack)
+        assertEquals(Chips.of(1_500), tables.findById(tableId)!!.seatOf(UserId(1000L))!!.stack)
+        assertEquals(Chips.of(1_000), tables.findById(tableId)!!.seatOf(UserId(2000L))!!.stack)
         assertEquals(listOf(tableId), executor.calledTables)
         val event = eventPublisher.events.filterIsInstance<HandBroadcastRequested>().single()
         assertEquals(tableId, event.tableId)
@@ -111,7 +112,7 @@ class TopUpSeatFromWalletServiceTest {
 
         service.topUp(TopUpSeatFromWalletCommand(1000L))
 
-        assertEquals(Chips.of(1_000), tables.findById(tableId)!!.seatOf(1000L)!!.stack)
+        assertEquals(Chips.of(1_000), tables.findById(tableId)!!.seatOf(UserId(1000L))!!.stack)
         assertTrue(walletTransfer.allToGameCalls.isEmpty())
         assertTrue(eventPublisher.events.isEmpty())
     }
@@ -134,7 +135,7 @@ class TopUpSeatFromWalletServiceTest {
 
         service.topUp(TopUpSeatFromWalletCommand(1000L))
 
-        assertEquals(Chips.of(1_000), tables.findById(tableId)!!.seatOf(1000L)!!.stack)
+        assertEquals(Chips.of(1_000), tables.findById(tableId)!!.seatOf(UserId(1000L))!!.stack)
         assertEquals(listOf(1000L), walletTransfer.allToGameCalls)
         assertTrue(eventPublisher.events.isEmpty())
     }

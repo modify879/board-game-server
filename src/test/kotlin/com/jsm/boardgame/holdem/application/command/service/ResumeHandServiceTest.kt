@@ -8,6 +8,7 @@ import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
@@ -21,8 +22,8 @@ private class ResumeHandFakeTableRepository : HoldemTableRepository {
     var saveCalls = 0
 
     override fun findById(id: TableId): HoldemTable? = store[id.value]
-    override fun findByUserId(userId: Long): HoldemTable? = store.values.firstOrNull { it.seatOf(userId) != null }
-    override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
+    override fun findByUserId(userId: UserId): HoldemTable? = store.values.firstOrNull { it.seatOf(userId) != null }
+    override fun findAllSeatedUserIds(): List<UserId> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
     override fun findAllTableIds(): List<TableId> = store.values.mapNotNull { it.id }
     override fun save(table: HoldemTable): HoldemTable {
         saveCalls++
@@ -54,8 +55,8 @@ class ResumeHandServiceTest {
             id = tableId, name = "t", smallBlind = Chips.of(100), bigBlind = Chips.of(200),
             buttonSeatNo = null, seats = emptyMap(),
         )
-        table.sitDown(userId = 1L, buyIn = Chips.of(10_000))
-        table.sitDown(userId = 2L, buyIn = Chips.of(10_000))
+        table.sitDown(userId = UserId(1L), buyIn = Chips.of(10_000))
+        table.sitDown(userId = UserId(2L), buyIn = Chips.of(10_000))
         table.moveButtonToNextOccupiedSeat()
         tables.store[tableId.value] = table
         val stacks = table.occupiedSeats().associate { it.seatNo to Chips.of(10_000) }

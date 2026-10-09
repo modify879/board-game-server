@@ -8,6 +8,7 @@ import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.presentation.ws.payload.PayoutPublicView
 import com.jsm.boardgame.holdem.presentation.ws.payload.TablePublicView
@@ -60,7 +61,7 @@ class HandBroadcasterTest {
 
     private val last = LastHandResult(
         board = listOf("As", "Kd", "7c", "2h", "9s"),
-        payouts = listOf(LastHandResult.Payout(1, 1000L, 2_000)),
+        payouts = listOf(LastHandResult.Payout(1, UserId(1000L), 2_000)),
         shownHands = emptyList(),
     )
 
@@ -75,7 +76,7 @@ class HandBroadcasterTest {
             HandBroadcasterFakeLastHandResultStore(stored),
         )
         val table = HoldemTable.create("t")
-        table.sitDown(1000L, Chips.of(1_000))
+        table.sitDown(UserId(1000L), Chips.of(1_000))
 
         broadcaster.publish(TableId(1L), table, hand, eventLastResult, 1L)
 
@@ -107,7 +108,7 @@ class HandBroadcasterTest {
             smallBlind = Chips.of(100), bigBlind = Chips.of(200), shuffler = { it },
         )
         hand.act(1, BettingAction.Fold)
-        val fromEvent = LastHandResult(listOf("2c"), listOf(LastHandResult.Payout(2, 2000L, 300)), emptyList())
+        val fromEvent = LastHandResult(listOf("2c"), listOf(LastHandResult.Payout(2, UserId(2000L), 300)), emptyList())
 
         val view = publish(stored = last, hand = hand, eventLastResult = fromEvent)
 

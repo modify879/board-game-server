@@ -10,6 +10,7 @@ import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
@@ -23,9 +24,9 @@ private class StartScheduledHandFakeTableRepository : HoldemTableRepository {
     private var sequence = 0L
 
     override fun findById(id: TableId): HoldemTable? = stored[id.value]
-    override fun findByUserId(userId: Long): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
+    override fun findByUserId(userId: UserId): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
 
-    override fun findAllSeatedUserIds(): List<Long> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
+    override fun findAllSeatedUserIds(): List<UserId> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
     override fun findAllTableIds(): List<TableId> = stored.values.mapNotNull { it.id }
 
     override fun save(table: HoldemTable): HoldemTable {
@@ -66,9 +67,9 @@ private class StartScheduledHandFakeWalletTransfer : WalletTransfer {
     /** 지갑 잔액. allToGame 은 잔액 전부를 돌려주고 0 으로 만든다. */
     val balances = mutableMapOf<Long, Long>()
 
-    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long = balances.remove(userId) ?: 0
+    override fun allToGame(userId: UserId, tableId: TableId, memo: String?): Long = balances.remove(userId.value) ?: 0
 
-    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) {
+    override fun fromGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) {
         error("HandStarter 는 fromGame 을 부르지 않는다")
     }
 }
@@ -88,7 +89,7 @@ class StartScheduledHandServiceTest {
         var table = HoldemTable.create("test-table")
         table = tables.save(table)
         for ((seatNo, buyIn) in buyIns) {
-            table.sitDown(userId = seatNo.toLong(), buyIn = Chips.of(buyIn))
+            table.sitDown(userId = UserId(seatNo.toLong()), buyIn = Chips.of(buyIn))
         }
         table = tables.save(table)
         return table.id!!

@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestCommand
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestResult
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestUseCase
@@ -44,14 +45,14 @@ class AdmitJoinRequestService(
         if (handStore.find(tableId) != null) return AdmitJoinRequestResult.Blocked
         if (!table.hasEmptySeat()) return AdmitJoinRequestResult.Blocked
 
-        if (tables.findByUserId(command.userId) != null) {
+        if (tables.findByUserId(UserId(command.userId)) != null) {
             throw AlreadySeatedException("다른 테이블에 이미 앉아 있습니다: userId=${command.userId}")
         }
 
         // 잔액이 BB 미만이면 sitDown 이 BuyInOutOfRange 로 던지고 REQUIRES_NEW 가 이체까지 롤백한다.
-        val amount = walletTransfer.allToGame(command.userId, tableId, memo = "holdem")
-        table.sitDown(command.userId, Chips.of(amount), command.postBlindImmediately)
-        val seatNo = table.seatOf(command.userId)!!.seatNo
+        val amount = walletTransfer.allToGame(UserId(command.userId), tableId, memo = "holdem")
+        table.sitDown(UserId(command.userId), Chips.of(amount), command.postBlindImmediately)
+        val seatNo = table.seatOf(UserId(command.userId))!!.seatNo
         handStarter.rescheduleOnEntry(tableId, table)
         return AdmitJoinRequestResult.Seated(seatNo)
     }

@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.persistence.entity
 
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Seat
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
@@ -55,7 +56,7 @@ interface HoldemSeatJpaRepository : JpaRepository<HoldemSeatJpaEntity, Long>, Ko
 fun HoldemSeatJpaEntity.toDomain(): Seat =
     Seat.reconstitute(
         seatNo = seatNo,
-        userId = userId,
+        userId = UserId(userId),
         stack = Chips.reconstitute(stack),
         presence = SeatPresence.valueOf(presence),
         awaitingBigBlind = awaitingBigBlind,

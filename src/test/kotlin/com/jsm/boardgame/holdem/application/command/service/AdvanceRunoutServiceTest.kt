@@ -12,6 +12,7 @@ import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
@@ -24,8 +25,8 @@ import kotlin.test.assertTrue
 private class AdvanceRunoutFakeTableRepository : HoldemTableRepository {
     private val store = mutableMapOf<Long, HoldemTable>()
     override fun findById(id: TableId): HoldemTable? = store[id.value]
-    override fun findByUserId(userId: Long): HoldemTable? = store.values.find { it.seatOf(userId) != null }
-    override fun findAllSeatedUserIds(): List<Long> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
+    override fun findByUserId(userId: UserId): HoldemTable? = store.values.find { it.seatOf(userId) != null }
+    override fun findAllSeatedUserIds(): List<UserId> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
     override fun findAllTableIds(): List<TableId> = store.values.mapNotNull { it.id }
     override fun save(table: HoldemTable): HoldemTable {
         store[table.id!!.value] = table
@@ -61,8 +62,8 @@ private class AdvanceRunoutFakeNextHandCountdown : NextHandCountdown {
 }
 
 private class AdvanceRunoutFakeWalletTransfer : WalletTransfer {
-    override fun allToGame(userId: Long, tableId: TableId, memo: String?): Long = 0
-    override fun fromGame(userId: Long, amount: Long, tableId: TableId, memo: String?) {}
+    override fun allToGame(userId: UserId, tableId: TableId, memo: String?): Long = 0
+    override fun fromGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) {}
 }
 
 class AdvanceRunoutServiceTest {
@@ -76,8 +77,8 @@ class AdvanceRunoutServiceTest {
 
     private fun tableWithHand(allIn: Boolean): TableId {
         val table = HoldemTable.reconstitute(TableId(1), "t", Chips.of(100), Chips.of(200), 1, emptyMap())
-        table.sitDown(1000L, Chips.of(1_000))
-        table.sitDown(2000L, Chips.of(1_000))
+        table.sitDown(UserId(1000L), Chips.of(1_000))
+        table.sitDown(UserId(2000L), Chips.of(1_000))
         tables.save(table)
         val stacks = mapOf(1 to Chips.of(1_000), 2 to Chips.of(1_000))
         val hand = Hand.start(stacks, 1, 1, 2, Chips.of(100), Chips.of(200), Shuffler { it })
