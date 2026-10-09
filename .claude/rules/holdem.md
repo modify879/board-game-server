@@ -4,14 +4,8 @@ paths: ["**/holdem/**"]
 
 # holdem
 
-텍사스 홀덤 캐시게임. 이 저장소의 첫 게임이고 **규칙 1(게임 간 공유 금지)의 첫 시험대**다.
-두 번째 게임이 들어올 때 공유 추상화가 생기는지는 여기서 결정된다.
-
-`user` 컨텍스트의 파일 배치를 그대로 따른다. 아래는 홀덤에만 해당하는 것만.
-
 ## 이 컨텍스트에서만 지킬 것
 
-- **도메인 테스트는 스프링도 컨테이너도 없이 돈다.** 그게 도메인을 분리해서 얻는 것이다
 - **브로드캐스트 페이로드 타입에 홀카드를 담을 필드를 두지 않는다.** 예외는 둘뿐이다 — `ShownHandView` 는
   끝난 핸드의 `HandResult.shownSeatNos` 로만, `RevealedHandView` 는 올인 런아웃 중(TDA) `Hand.revealedSeatNos` 로만 만든다. `/topic/tables/{id}` 에는 `TablePublicView` 만,
   `/user/queue/...` 에는 `SeatPrivateView` 만 흐르게 해 규칙 6을 "좌석마다 루프 돌 것을 기억하라" 가 아니라
@@ -20,10 +14,8 @@ paths: ["**/holdem/**"]
 - **방/좌석은 holdem 안에 둔다.** 별도 컨텍스트로 빼지 않는다 — 좌석이 버튼 이동·블라인드 포스팅·
   사이드팟 자격까지 얽혀 있어, 밖으로 빼면 홀덤에만 있는 개념이 공용 좌석 모델로 새어 나간다
 - **`Chips` 는 holdem 자기 VO 다.** `wallet` 의 `Money` 를 쓰지 않고, 다른 게임과 공유하지도 않는다(규칙 7).
-  `wallet` 은 바이인/캐시아웃에서 **application 계층에서만** 부른다 —
-  holdem 의 `domain` 이 `wallet` 의 `domain` 을 참조하면 규칙 위반이다
-- **셔플은 `Shuffler` 포트로 주입받는다**(규칙 5). 도메인이 직접 무작위를 부르면 패를 고정할 수 없어
-  핸드 평가·사이드팟 규칙을 테스트할 수 없다
+  `wallet` 은 바이인/캐시아웃에서 **application 계층에서만** 부른다(규칙 1)
+- **셔플은 `Shuffler` 포트로 주입받는다**(규칙 5)
 - **핸드 히스토리를 남기지 않는다.** 감사·분쟁·통계 요구가 없다. 필요한 건 재시작 복구뿐이라
   이벤트 로그가 아니라 **진행 중 핸드의 상태 스냅샷 1행**을 둔다. 이벤트 소싱은 재생 엔진이라는
   정상 경로와 다른 코드를 하나 더 만드는데, 거기서 틀리면 복구 시 돈이 틀어지고
@@ -81,12 +73,11 @@ paths: ["**/holdem/**"]
   스택은 더 변하지 않으므로 그 자리에서 정산하고, 그 핸드가 끝날 때까지 그 좌석 번호에는 앉을 수 없다(정산이 새 착석자를 덮어쓴다)
 - **바이인은 지갑 잔액 전부이고, 착석 중 지갑에 들어온 돈(충전 승인·출금 취소/반려·관리자 증액)은 핸드가 없으면 입금 즉시 스택에 합쳐진다.**
   wallet 이 커밋 전에 `WalletCredited` 를 올리면 `WalletCreditedListener`(AFTER_COMMIT, 예외는 로그만)가 `TopUpSeatFromWalletService` 를 불러
-  그 사용자의 테이블을 찾아 `tableExecutor.post` 로 넘긴다(`call` 금지 — 지갑 스레드는 커밋 뒤에도 JDBC 커넥션이 바인딩돼 있어 테이블 큐를
-  기다리면 풀이 마르고 idle-in-transaction 타임아웃에 걸린다). 테이블 스레드에서 `TopUpTableSeatsService` 가 합치고 공개 뷰를 한 번 브로드캐스트한다.
+  그 사용자의 테이블을 찾아 `tableExecutor.post` 로 넘긴다(`call` 금지 — CLAUDE.md 커밋 후 콜백 규칙). 테이블 스레드에서 `TopUpTableSeatsService` 가 합치고 공개 뷰를 한 번 브로드캐스트한다.
   핸드 도중에는 스택이 바뀌지 않는다(table stakes) — 정산 직후에는 `HandSettler` 가 `SeatTopUpDue` 만 올리고 `SeatTopUpProcessor`(AFTER_COMMIT)가 같은 합산을
   테이블 스레드에 `post` 한다(정산 브로드캐스트 뒤에 후속 갱신이 나간다). 핸드 시작 때는 `StartScheduledHandService` 가 **시작 트랜잭션 앞에서** 합친다.
   **합산은 정산·핸드 시작 트랜잭션 안에서 하지 않는다.** 지갑 행 락 대기(`lock_timeout`)·실패가 그 트랜잭션을 롤백시키면 끝난 핸드가 지워지거나
-  테이블이 멈추는데, 합산은 편의 기능이다. 그래서 좌석마다 `SeatTopUper` 의 `REQUIRES_NEW` 로 격리하고(프록시를 넘은 예외는 바깥을 rollback-only 로 만든다),
+  테이블이 멈추는데, 합산은 편의 기능이다. 그래서 좌석마다 `SeatTopUper` 의 `REQUIRES_NEW` 로 격리하고(CLAUDE.md 표준 형태의 rollback-only 항목),
   `TableSeatsTopUp` 이 실패를 ERROR 로 남기고 그 좌석만 건너뛴다 — 건너뛴 좌석은 다음 핸드 시작·다음 입금 때 합쳐진다. 지갑 잔액을 락 없이 먼저
   읽어 0 이면 지갑 행 락을 잡지 않는다(읽고-이체 사이의 경합은 이체가 락 안에서 다시 읽으므로 괜찮다). 금액을 받아 `TransferToGame` 으로
   옮기지 않고 잠근 지갑에서 읽고 옮기는 `TransferBalanceToGame` 을 쓴다: 읽고-이체 사이에 출금이 끼면 잔액 부족 예외가 난다. 착석 중 출금은
@@ -103,5 +94,13 @@ paths: ["**/holdem/**"]
   여기 도달하기 때문이다(순번 순서 = 커밋 순서). 실제 전송은 여전히 `afterCommit` 이라 규칙 6은 그대로 지켜진다.
   `TableViewSequence` 는 메모리 전용이라 재시작하면 0부터 다시 세지만, 재시작은 모든 소켓을 끊으므로 클라이언트가
   재구독(재접속 포함) 시 채널별 last seq 를 리셋하면 문제없다. `WebSocketConfig` 의 `setPreservePublishOrder(true)`
-  와 함께써야 한다 — 순번만 있고 세션별 발행 순서가 안 지켜지면 같은 세션 안에서도 메시지가 뒤섞인다
+  와 함께 써야 한다 — 순번만 있고 세션별 발행 순서가 안 지켜지면 같은 세션 안에서도 메시지가 뒤섞인다
 - **테이블별 인메모리 상태는 `TableId` 를 키로 두고 `TableClosed` 커밋 후 리스너로 스스로 치운다.** `TableClosedListenersTest` 가 `TableId` 키 필드를 가진 컴포넌트를 스캔해 리스너를 강제한다 — Long 키로 두면 이 검사에 보이지 않는다
+- **테이블은 비면 자동으로 닫힌다.** 착석 0명·핸드 없음·대기열 없음이 1분(`IdleTableSweeper`, 15초 스윕) 이어지면 `closed_at` 으로 닫는다 —
+  행을 지우지 않는다(지갑 원장이 테이블 id 를 참조한다). 닫힌 테이블은 `HoldemTableRepository.findById` 가 없는 것으로 돌려 명령·조회 모두 `TABLE_NOT_FOUND`.
+  닫힐 때 공개 토픽에 `{"tableId","type":"TABLE_CLOSED"}` 를 보내고, 닫힌·없는 테이블을 재구독하면 스냅샷 대신 같은 알림을 다시 보낸다
+  (ERROR 프레임으로 거부하지 않는다 — STOMP 세션 전체가 끊긴다)
+- **`SerialTableExecutor` 는 실행기를 새로 만들 때만 `existsOpen` 으로 확인한다.** 없거나 닫힌 테이블엔 실행기를 만들지 않고 호출자 스레드에서 돌린다 —
+  임의 id 요청·닫힘 직후 타이머가 실행기를 되살려 쌓지 않게
+- **타이머 스케줄러는 가상 스레드 `SimpleAsyncTaskScheduler` 다.** 단 `scheduleWithFixedDelay` 작업은 모든 타이머를 깨우는 단일 스케줄러 스레드에서 돈다 —
+  거기서 `tableExecutor.call` 로 기다리면 서버 전체 타이머가 멈추므로 `post` 한다(`IdleTableSweeper`)
