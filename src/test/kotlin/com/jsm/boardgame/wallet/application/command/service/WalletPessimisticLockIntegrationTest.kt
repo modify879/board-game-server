@@ -95,7 +95,7 @@ class WalletPessimisticLockIntegrationTest {
     @Test
     fun `같은 입금 요청을 동시에 두 번 승인하면 하나만 성공하고 잔액은 한 번만 반영된다`() {
         val userId = uniqueUserId(users)
-        val requestId = requestDeposit.request(RequestDepositCommand(userId = userId, amount = 10_000L)).value
+        val requestId = requestDeposit.request(RequestDepositCommand(userId = userId, amount = 10_000L, idempotencyKey = "key-$userId")).value
         val executor = Executors.newFixedThreadPool(2)
         val readyLatch = CountDownLatch(2)
         val goLatch = CountDownLatch(1)

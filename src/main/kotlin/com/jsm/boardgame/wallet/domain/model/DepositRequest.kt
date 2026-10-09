@@ -23,6 +23,8 @@ class DepositRequest private constructor(
     processedBy: UserId?,
     processedAt: Instant?,
     rejectionReason: String?,
+    /** 중복 제출 방어용 클라이언트 키. 이 기능 이전의 행은 null. */
+    val idempotencyKey: String?,
 ) {
     var status: DepositRequestStatus = status
         private set
@@ -86,7 +88,7 @@ class DepositRequest private constructor(
     companion object {
         private const val MIN_AMOUNT = 1_000L
 
-        fun request(userId: UserId, amount: Long, at: Instant): DepositRequest {
+        fun request(userId: UserId, amount: Long, idempotencyKey: String, at: Instant): DepositRequest {
             if (amount < MIN_AMOUNT || amount % MONEY_UNIT != 0L) {
                 throw InvalidDepositAmountException("충전 요청 금액이 유효하지 않음: amount=$amount")
             }
@@ -100,6 +102,7 @@ class DepositRequest private constructor(
                 processedBy = null,
                 processedAt = null,
                 rejectionReason = null,
+                idempotencyKey = idempotencyKey,
             )
         }
 
@@ -114,6 +117,7 @@ class DepositRequest private constructor(
             processedBy: UserId?,
             processedAt: Instant?,
             rejectionReason: String?,
+            idempotencyKey: String?,
         ): DepositRequest = DepositRequest(
             id = id,
             userId = userId,
@@ -124,6 +128,7 @@ class DepositRequest private constructor(
             processedBy = processedBy,
             processedAt = processedAt,
             rejectionReason = rejectionReason,
+            idempotencyKey = idempotencyKey,
         )
     }
 }

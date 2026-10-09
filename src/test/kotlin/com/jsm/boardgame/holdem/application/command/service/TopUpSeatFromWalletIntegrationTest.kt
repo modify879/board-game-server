@@ -92,7 +92,7 @@ class TopUpSeatFromWalletIntegrationTest {
         table.sitDown(UserId(userId), Chips.of(10_000))
         table = tables.save(table)
 
-        val requestId = requestDeposit.request(RequestDepositCommand(userId, 10_000))
+        val requestId = requestDeposit.request(RequestDepositCommand(userId, 10_000, "key-$userId-a"))
         approveDeposit.approve(ApproveDepositRequestCommand(requestId.value, adminUserId = userId, creditedAmount = null))
 
         awaitTrue { tables.findById(table.id!!)!!.seatOf(UserId(userId))!!.stack == Chips.of(20_000) }
@@ -104,7 +104,7 @@ class TopUpSeatFromWalletIntegrationTest {
     fun `다른 트랜잭션이 지갑 행을 잡고 있으면 합산은 예외 없이 건너뛰고 스택을 지킨다`() {
         val userId = signUp()
         // 앉기 전에 충전을 승인해 잔액이 지갑에 남게 한다(앉아 있었다면 승인 즉시 합쳐진다).
-        val requestId = requestDeposit.request(RequestDepositCommand(userId, 5_000))
+        val requestId = requestDeposit.request(RequestDepositCommand(userId, 5_000, "key-$userId-b"))
         approveDeposit.approve(ApproveDepositRequestCommand(requestId.value, adminUserId = userId, creditedAmount = null))
         var table = tables.save(HoldemTable.create("topup-lock-${UUID.randomUUID().toString().take(8)}"))
         table.sitDown(UserId(userId), Chips.of(10_000))

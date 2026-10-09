@@ -36,6 +36,9 @@ private class RejectFakeWithdrawalRequestRepository : WithdrawalRequestRepositor
 
     override fun findById(id: WithdrawalRequestId): WithdrawalRequest? = stored[id.value]
 
+    override fun findByUserAndIdempotencyKey(userId: UserId, idempotencyKey: String): WithdrawalRequest? =
+        stored.values.firstOrNull { it.userId == userId && it.idempotencyKey == idempotencyKey }
+
     override fun save(request: WithdrawalRequest): WithdrawalRequest {
         stored[request.id!!.value] = request
         return request
@@ -109,6 +112,7 @@ class RejectWithdrawalRequestServiceTest {
             processedBy = null,
             processedAt = null,
             rejectionReason = null,
+            idempotencyKey = null,
         ).also { withdrawalRequests.put(it) }
     }
 

@@ -15,6 +15,7 @@ import jakarta.persistence.Id
 import jakarta.persistence.Index
 import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
+import jakarta.persistence.UniqueConstraint
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
@@ -29,6 +30,8 @@ import java.time.Instant
         Index(name = "idx_withdrawal_requests_user", columnList = "user_id, id"),
         Index(name = "idx_withdrawal_requests_status", columnList = "status, id"),
     ],
+    // idempotency_key 가 null 인 기존 행은 서로 충돌하지 않는다(Postgres 는 null 을 서로 다른 값으로 본다).
+    uniqueConstraints = [UniqueConstraint(name = "uk_withdrawal_requests_user_key", columnNames = ["user_id", "idempotency_key"])],
 )
 class WithdrawalRequestJpaEntity(
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -64,6 +67,9 @@ class WithdrawalRequestJpaEntity(
 
     @Column(name = "rejection_reason", columnDefinition = "text")
     var rejectionReason: String?,
+
+    @Column(name = "idempotency_key", columnDefinition = "text")
+    var idempotencyKey: String?,
 )
 
 interface WithdrawalRequestJpaRepository :
@@ -78,6 +84,8 @@ interface WithdrawalRequestJpaRepository :
     @Transactional
     @Query("select w from WithdrawalRequestJpaEntity w where w.id = :id")
     fun findByIdForUpdate(@Param("id") id: Long): WithdrawalRequestJpaEntity?
+
+    fun findByUserIdAndIdempotencyKey(userId: Long, idempotencyKey: String): WithdrawalRequestJpaEntity?
 }
 
 fun WithdrawalRequestJpaEntity.toDomain(): WithdrawalRequest =
@@ -91,6 +99,7 @@ fun WithdrawalRequestJpaEntity.toDomain(): WithdrawalRequest =
         processedBy = processedBy?.let(::UserId),
         processedAt = processedAt,
         rejectionReason = rejectionReason,
+        idempotencyKey = idempotencyKey,
     )
 
 fun WithdrawalRequest.toJpaEntity(): WithdrawalRequestJpaEntity =
@@ -105,5 +114,5 @@ fun WithdrawalRequest.toJpaEntity(): WithdrawalRequestJpaEntity =
         status = status.name,
         processedBy = processedBy?.value,
         processedAt = processedAt,
-        rejectionReason = rejectionReason,
+        rejectionReason = rejectionReason,    idempotencyKey = idempotencyKey,
     )

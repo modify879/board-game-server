@@ -26,7 +26,7 @@ class DepositRequestRepositoryAdapterIntegrationTest {
 
     @Test
     fun `저장 후 findById 가 상태 금액 처리자 사유를 그대로 돌려준다`() {
-        val request = DepositRequest.request(userId = UserId(System.nanoTime()), amount = 10_000, at = now)
+        val request = DepositRequest.request(userId = UserId(System.nanoTime()), amount = 10_000, idempotencyKey = "key", at = now)
         val saved = depositRequests.save(request)
 
         val reloaded = requireNotNull(depositRequests.findById(saved.id!!))

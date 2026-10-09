@@ -34,6 +34,10 @@ enum class WalletErrorCode(override val kind: ErrorKind) : ErrorCode {
     ADJUSTMENT_ALREADY_APPLIED(ErrorKind.CONFLICT),
     // Idempotency-Key 헤더가 없거나 비었거나 100 코드포인트를 넘음.
     IDEMPOTENCY_KEY_INVALID(ErrorKind.INVALID),
+    // 같은 Idempotency-Key 를 다른 요청 내용(금액·계좌)으로 다시 보냄 — 키는 한 요청에만 묶인다.
+    IDEMPOTENCY_KEY_REUSED(ErrorKind.CONFLICT),
+    // 동시에 같은 키로 요청됨 — 잠시 후 같은 키로 다시 보내면 원래 결과를 받는다.
+    IDEMPOTENCY_KEY_CONFLICT(ErrorKind.CONFLICT),
     ;
 
     override val code: String get() = name

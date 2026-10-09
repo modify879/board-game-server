@@ -15,3 +15,13 @@ class AdjustmentAlreadyAppliedException(
 class IdempotencyKeyInvalidException(
     logMessage: String,
 ) : BusinessException(WalletErrorCode.IDEMPOTENCY_KEY_INVALID, logMessage)
+
+/** 같은 Idempotency-Key 를 다른 요청 내용으로 다시 보냄. */
+class IdempotencyKeyReusedException(
+    logMessage: String,
+) : BusinessException(WalletErrorCode.IDEMPOTENCY_KEY_REUSED, logMessage)
+
+/** 같은 Idempotency-Key 의 요청이 동시에 처리 중 — 요청 테이블의 (user_id, idempotency_key) 유니크 위반을 번역한다. */
+class IdempotencyKeyConflictException(
+    logMessage: String,
+) : BusinessException(WalletErrorCode.IDEMPOTENCY_KEY_CONFLICT, logMessage)

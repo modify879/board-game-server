@@ -2,7 +2,6 @@ package com.jsm.boardgame.wallet.application.command.service
 
 import com.jsm.boardgame.wallet.application.command.usecase.AdjustWalletBalanceCommand
 import com.jsm.boardgame.wallet.application.command.usecase.AdjustWalletBalanceUseCase
-import com.jsm.boardgame.wallet.application.exception.IdempotencyKeyInvalidException
 import com.jsm.boardgame.wallet.application.port.AdjustmentKeyRegistry
 import com.jsm.boardgame.wallet.application.port.UserExistence
 import com.jsm.boardgame.wallet.domain.exception.WalletOwnerNotFoundException
@@ -18,8 +17,6 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 import java.time.Instant
-
-private const val IDEMPOTENCY_KEY_MAX_LENGTH = 100
 
 /** 관리자가 지갑 잔액을 직접 지급·회수한다. 지갑이 없으면 lazy 로 만든다. */
 @Service
@@ -67,12 +64,5 @@ class AdjustWalletBalanceService(
         ledger.save(entry)
         // 증액만 알린다 — 감액은 게임이 합칠 돈이 아니다.
         if (command.amount > 0) eventPublisher.publishEvent(WalletCredited(command.targetUserId))
-    }
-
-    private fun requireValidIdempotencyKey(key: String?): String {
-        if (key.isNullOrBlank() || key.codePointCount(0, key.length) > IDEMPOTENCY_KEY_MAX_LENGTH) {
-            throw IdempotencyKeyInvalidException("Idempotency-Key 가 유효하지 않음: key=$key")
-        }
-        return key
     }
 }

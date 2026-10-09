@@ -6,4 +6,4 @@ interface RequestDepositUseCase {
     fun request(command: RequestDepositCommand): DepositRequestId
 }
 
-data class RequestDepositCommand(val userId: Long, val amount: Long)
+data class RequestDepositCommand(val userId: Long, val amount: Long, val idempotencyKey: String?)

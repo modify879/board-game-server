@@ -12,4 +12,5 @@ data class RequestWithdrawalCommand(
     val bankName: String,
     val accountNumber: String,
     val accountHolder: String,
+    val idempotencyKey: String?,
 )

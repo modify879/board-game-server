@@ -101,6 +101,8 @@ class AdminWalletApiIntegrationTest {
         headers: Map<String, String> = emptyMap(),
     ): ResultActions {
         val builder = post(url).header("Authorization", "Bearer $accessToken")
+        // 충전·환전 요청은 Idempotency-Key 가 필수라, 헤더를 따로 주지 않으면 매번 새 키를 붙인다.
+        if (url.startsWith("/api/wallet/") && headers.isEmpty()) builder.header("Idempotency-Key", UUID.randomUUID().toString())
         headers.forEach { (name, value) -> builder.header(name, value) }
         if (body != null) builder.contentType(MediaType.APPLICATION_JSON).content(body)
         return mockMvc.perform(builder)

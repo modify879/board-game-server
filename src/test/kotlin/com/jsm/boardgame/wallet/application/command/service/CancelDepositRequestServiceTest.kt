@@ -25,6 +25,9 @@ private class CancelFakeDepositRequestRepository : DepositRequestRepository {
 
     override fun findById(id: DepositRequestId): DepositRequest? = stored[id.value]
 
+    override fun findByUserAndIdempotencyKey(userId: UserId, idempotencyKey: String): DepositRequest? =
+        stored.values.firstOrNull { it.userId == userId && it.idempotencyKey == idempotencyKey }
+
     override fun save(request: DepositRequest): DepositRequest {
         stored[request.id!!.value] = request
         return request
@@ -48,6 +51,7 @@ class CancelDepositRequestServiceTest {
             processedBy = null,
             processedAt = null,
             rejectionReason = null,
+            idempotencyKey = null,
         ).also { depositRequests.put(it) }
 
     @Test

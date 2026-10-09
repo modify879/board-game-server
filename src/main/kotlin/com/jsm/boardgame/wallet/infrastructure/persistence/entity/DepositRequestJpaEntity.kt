@@ -14,6 +14,7 @@ import jakarta.persistence.Id
 import jakarta.persistence.Index
 import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
+import jakarta.persistence.UniqueConstraint
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
@@ -28,6 +29,8 @@ import java.time.Instant
         Index(name = "idx_deposit_requests_user", columnList = "user_id, id"),
         Index(name = "idx_deposit_requests_status", columnList = "status, id"),
     ],
+    // idempotency_key 가 null 인 기존 행은 서로 충돌하지 않는다(Postgres 는 null 을 서로 다른 값으로 본다).
+    uniqueConstraints = [UniqueConstraint(name = "uk_deposit_requests_user_key", columnNames = ["user_id", "idempotency_key"])],
 )
 class DepositRequestJpaEntity(
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -56,6 +59,9 @@ class DepositRequestJpaEntity(
 
     @Column(name = "rejection_reason", columnDefinition = "text")
     var rejectionReason: String?,
+
+    @Column(name = "idempotency_key", columnDefinition = "text")
+    var idempotencyKey: String?,
 )
 
 interface DepositRequestJpaRepository :
@@ -70,6 +76,8 @@ interface DepositRequestJpaRepository :
     @Transactional
     @Query("select e from DepositRequestJpaEntity e where e.id = :id")
     fun findByIdForUpdate(@Param("id") id: Long): DepositRequestJpaEntity?
+
+    fun findByUserIdAndIdempotencyKey(userId: Long, idempotencyKey: String): DepositRequestJpaEntity?
 }
 
 fun DepositRequestJpaEntity.toDomain(): DepositRequest =
@@ -83,6 +91,7 @@ fun DepositRequestJpaEntity.toDomain(): DepositRequest =
         processedBy = processedBy?.let(::UserId),
         processedAt = processedAt,
         rejectionReason = rejectionReason,
+        idempotencyKey = idempotencyKey,
     )
 
 fun DepositRequest.toJpaEntity(): DepositRequestJpaEntity =
@@ -95,5 +104,5 @@ fun DepositRequest.toJpaEntity(): DepositRequestJpaEntity =
         creditedAmount = creditedAmount?.amount,
         processedBy = processedBy?.value,
         processedAt = processedAt,
-        rejectionReason = rejectionReason,
+        rejectionReason = rejectionReason,    idempotencyKey = idempotencyKey,
     )
