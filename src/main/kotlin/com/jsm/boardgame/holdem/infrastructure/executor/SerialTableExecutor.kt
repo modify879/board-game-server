@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.executor
 
+import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.TableId
 import jakarta.annotation.PreDestroy
@@ -12,6 +13,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.RejectedExecutionException
+import org.springframework.transaction.event.TransactionalEventListener
 
 /**
  * [TableExecutor] 의 인메모리 구현. 단일 인스턴스 배포를 전제한다(InMemoryJoinQueue·
@@ -64,8 +66,9 @@ class SerialTableExecutor : TableExecutor {
         })
     }
 
-    override fun remove(tableId: TableId) {
-        executors.remove(tableId.value)?.shutdown()
+    @TransactionalEventListener
+    fun onTableClosed(event: TableClosed) {
+        executors.remove(event.tableId.value)?.shutdown()
     }
 
     /** [remove] 직전에 옛 실행기를 쥔 호출자가 종료된 실행기에 제출하면 거부된다 — 새 실행기로 한 번만 다시 낸다. */

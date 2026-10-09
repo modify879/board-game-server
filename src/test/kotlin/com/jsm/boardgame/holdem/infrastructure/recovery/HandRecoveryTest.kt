@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.infrastructure.recovery
 
 import com.jsm.boardgame.common.error.ErrorCode
+import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionCommand
@@ -186,8 +187,6 @@ private class HandRecoveryFakePrincipal(private val id: Long) : Principal {
 private class HandRecoveryFakeTableExecutor : TableExecutor {
     override fun <T> call(tableId: TableId, task: () -> T): T = task()
     override fun post(tableId: TableId, task: () -> Unit) = task()
-
-    override fun remove(tableId: TableId) {}
 }
 
 class HandRecoveryTest {
@@ -562,7 +561,7 @@ class HandRecoveryTest {
     }
 
     @Test
-    fun `forget 은 복구 유예를 취소하고 낡은 타임아웃을 무시하게 만든다`() {
+    fun `테이블이 닫히면 복구 유예를 취소하고 낡은 타임아웃을 무시하게 만든다`() {
         val handStore = HandRecoveryFakeHandStore()
         val tables = HandRecoveryFakeTableRepository()
         val scheduler = HandRecoveryFakeTaskScheduler()
@@ -571,7 +570,7 @@ class HandRecoveryTest {
         handStore.put(TableId(1L), seatTableWithHand(tables, 1L, 1, 2))
         recovery.onApplicationReady()
 
-        recovery.forget(TableId(1L))
+        recovery.onTableClosed(TableClosed(TableId(1L)))
 
         assertTrue(scheduler.scheduledCalls[0].future.cancelled)
         scheduler.scheduledCalls[0].task.run()

@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.queue
 
+import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -91,5 +92,18 @@ class InMemoryJoinQueueTest {
 
         queue.removeByUserId(userId)
         assertFalse(queue.isQueued(userId))
+    }
+
+    @Test
+    fun `테이블이 닫히면 그 테이블의 대기열과 사용자 색인을 함께 치운다`() {
+        val queue = InMemoryJoinQueue()
+        queue.enqueue(TableId(1L), 100L, false)
+        queue.enqueue(TableId(2L), 200L, false)
+
+        queue.onTableClosed(TableClosed(TableId(1L)))
+
+        assertTrue(queue.entriesOf(TableId(1L)).isEmpty())
+        assertFalse(queue.isQueued(100L))
+        assertTrue(queue.isQueued(200L))
     }
 }
