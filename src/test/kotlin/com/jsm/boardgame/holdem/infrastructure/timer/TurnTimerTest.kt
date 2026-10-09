@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.timer
 
+import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
@@ -89,8 +90,6 @@ private class TurnTimerFakeCancelHandUseCase : CancelHandUseCase {
 private class TurnTimerFakeTableExecutor : TableExecutor {
     override fun <T> call(tableId: TableId, task: () -> T): T = task()
     override fun post(tableId: TableId, task: () -> Unit) = task()
-
-    override fun remove(tableId: TableId) {}
 }
 
 private fun TurnTimer.commit(event: HandBroadcastRequested) {
@@ -301,13 +300,13 @@ class TurnTimerTest {
     }
 
     @Test
-    fun `forget 은 걸린 예약을 취소하고 낡은 실행을 무시하게 만든다`() {
+    fun `테이블이 닫히면 걸린 예약을 취소하고 낡은 실행을 무시하게 만든다`() {
         val scheduler = TurnTimerFakeTaskScheduler()
         val useCase = TurnTimerFakeExpireTurnUseCase()
         val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase())
         timer.commit(event(handWithToAct(1 to 10_000L, 2 to 10_000L)))
 
-        timer.forget(TableId(1L))
+        timer.onTableClosed(TableClosed(TableId(1L)))
 
         assertTrue(scheduler.scheduledCalls[0].future.cancelled)
         assertNull(timer.remaining(TableId(1L)))

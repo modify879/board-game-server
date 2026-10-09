@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.executor
 
+import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.domain.model.TableId
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -117,12 +118,12 @@ class SerialTableExecutorTest {
     }
 
     @Test
-    fun `remove 한 테이블에 다시 call 하면 새 실행기에서 돈다`() {
+    fun `닫힌 테이블에 다시 call 하면 새 실행기에서 돈다`() {
         val executor = SerialTableExecutor()
         val tableId = TableId(1L)
         val before = executor.call(tableId) { Thread.currentThread() }
 
-        executor.remove(tableId)
+        executor.onTableClosed(TableClosed(tableId))
         val after = executor.call(tableId) { Thread.currentThread() }
 
         assertTrue(before !== after)
@@ -130,12 +131,12 @@ class SerialTableExecutorTest {
     }
 
     @Test
-    fun `remove 는 진행 중인 작업을 끊지 않는다`() {
+    fun `테이블 닫힘은 진행 중인 작업을 끊지 않는다`() {
         val executor = SerialTableExecutor()
         val tableId = TableId(1L)
 
         val result = executor.call(tableId) {
-            executor.remove(tableId)
+            executor.onTableClosed(TableClosed(tableId))
             42
         }
 

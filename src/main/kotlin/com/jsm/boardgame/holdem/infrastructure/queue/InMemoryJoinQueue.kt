@@ -1,10 +1,12 @@
 package com.jsm.boardgame.holdem.infrastructure.queue
 
+import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.model.TableId
 import org.springframework.stereotype.Component
+import org.springframework.transaction.event.TransactionalEventListener
 
 /**
  * [JoinQueue] 의 인메모리 구현. 단일 인스턴스 배포를 전제한다 — 여러 인스턴스면 각자 자기
@@ -51,8 +53,9 @@ class InMemoryJoinQueue : JoinQueue {
         tableQueues[tableId.value]?.map { it.toView() } ?: emptyList()
     }
 
-    override fun forget(tableId: TableId) = synchronized(lock) {
-        tableQueues.remove(tableId.value)?.forEach { userToTable.remove(it.userId) }
+    @TransactionalEventListener
+    fun onTableClosed(event: TableClosed) = synchronized(lock) {
+        tableQueues.remove(event.tableId.value)?.forEach { userToTable.remove(it.userId) }
         Unit
     }
 

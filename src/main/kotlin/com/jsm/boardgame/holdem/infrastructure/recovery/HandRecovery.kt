@@ -4,6 +4,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandUseCase
+import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.TableExecutor
@@ -17,6 +18,7 @@ import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
+import org.springframework.transaction.event.TransactionalEventListener
 import org.springframework.web.socket.messaging.SessionConnectedEvent
 import java.time.Clock
 import java.time.Duration
@@ -150,9 +152,10 @@ class HandRecovery(
     }
 
     /** 테이블이 닫히면 복구 유예와 토큰을 치운다. 토큰이 사라지면 이미 깨어난 타임아웃도 걸러진다. */
-    fun forget(tableId: TableId) {
-        pending.remove(tableId)?.future?.cancel(false)
-        tokens.remove(tableId)
+    @TransactionalEventListener
+    fun onTableClosed(event: TableClosed) {
+        pending.remove(event.tableId)?.future?.cancel(false)
+        tokens.remove(event.tableId)
     }
 
     @EventListener

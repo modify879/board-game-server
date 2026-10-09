@@ -46,7 +46,6 @@ private class IdleSweeperFakeCloseUseCase : CloseIdleTableUseCase {
 private class IdleSweeperFakeTableExecutor : TableExecutor {
     override fun <T> call(tableId: TableId, task: () -> T): T = task()
     override fun post(tableId: TableId, task: () -> Unit) = task()
-    override fun remove(tableId: TableId) {}
 }
 
 class IdleTableSweeperTest {

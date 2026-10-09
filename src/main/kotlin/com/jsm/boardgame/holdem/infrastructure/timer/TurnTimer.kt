@@ -5,6 +5,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
+import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.application.port.TurnCountdown
 import com.jsm.boardgame.holdem.domain.model.TableId
@@ -78,9 +79,10 @@ class TurnTimer(
     }
 
     /** 테이블이 닫히면 예약과 토큰을 치운다. 토큰이 사라지면 이미 깨어난 낡은 실행도 걸러진다. */
-    fun forget(tableId: TableId) {
-        scheduled.remove(tableId)?.future?.cancel(false)
-        tokens.remove(tableId)
+    @TransactionalEventListener
+    fun onTableClosed(event: TableClosed) {
+        scheduled.remove(event.tableId)?.future?.cancel(false)
+        tokens.remove(event.tableId)
     }
 
     override fun remaining(tableId: TableId): Duration? {

@@ -13,6 +13,7 @@ import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
+import com.jsm.boardgame.holdem.infrastructure.timer.NextHandTimer
 import com.jsm.boardgame.user.infrastructure.security.config.JwtProperties
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
@@ -96,6 +97,9 @@ class HoldemStompIntegrationTest {
 
     @Autowired
     private lateinit var tableExecutor: TableExecutor
+
+    @Autowired
+    private lateinit var nextHandTimer: NextHandTimer
 
     @LocalServerPort
     private var port: Int = 0
@@ -806,9 +810,13 @@ class HoldemStompIntegrationTest {
         session.subscribe(HoldemDestinations.publicTopicOf(tableId), publicHandler)
         assertThat(publicQueue.poll(5, TimeUnit.SECONDS)).isNotNull() // 구독 스냅샷
 
+        nextHandTimer.restart(TableId(tableId)) // 닫힘이 이 카운트다운을 치우는지 본다(리스너 배선 확인)
+        assertThat(nextHandTimer.remaining(TableId(tableId))).isNotNull()
+
         val closed = tableExecutor.call(TableId(tableId)) { closeIdleTableUseCase.close(CloseIdleTableCommand(tableId)) }
 
         assertThat(closed).isTrue()
+        assertThat(nextHandTimer.remaining(TableId(tableId))).isNull()
         val notice = publicQueue.poll(5, TimeUnit.SECONDS) ?: error("닫힘 알림을 받지 못했다")
         assertThat(JsonPath.read<String>(notice, "$.type")).isEqualTo("TABLE_CLOSED")
         assertThat(JsonPath.read<Int>(notice, "$.tableId").toLong()).isEqualTo(tableId)

@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.timer
 
+import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
@@ -139,8 +140,6 @@ private class ConnectionTimerFakeUserConnections : UserConnections {
 private class ConnectionTimerFakeTableExecutor : TableExecutor {
     override fun <T> call(tableId: TableId, task: () -> T): T = task()
     override fun post(tableId: TableId, task: () -> Unit) = task()
-
-    override fun remove(tableId: TableId) {}
 }
 
 private class ConnectionTimerFakeHoldemTableRepository : HoldemTableRepository {
@@ -618,7 +617,7 @@ class ConnectionTimerTest {
     }
 
     @Test
-    fun `forget 한 테이블의 퇴장 예약은 핸드가 끝나도 실행되지 않는다`() {
+    fun `닫힌 테이블의 퇴장 예약은 핸드가 끝나도 실행되지 않는다`() {
         val scheduler = ConnectionTimerFakeTaskScheduler()
         val tableId = TableId(7L)
         val standUpUseCase = ConnectionTimerFakeStandUpUseCase()
@@ -626,7 +625,7 @@ class ConnectionTimerTest {
         timer.onSessionDisconnect(disconnectEvent(42L))
         scheduler.scheduledCalls[0].task.run()
 
-        timer.forget(tableId)
+        timer.onTableClosed(TableClosed(tableId))
         timer.onHandBroadcastRequested(HandBroadcastRequested(tableId, HoldemTable.create("t"), finishedHand()))
 
         assertEquals(0, standUpUseCase.calls.size)

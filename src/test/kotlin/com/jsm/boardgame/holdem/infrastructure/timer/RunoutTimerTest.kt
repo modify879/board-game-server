@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.timer
 
+import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutCommand
 import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
@@ -94,8 +95,6 @@ private class RunoutTimerFakeCancelHandUseCase : CancelHandUseCase {
 private class RunoutTimerFakeTableExecutor : TableExecutor {
     override fun <T> call(tableId: TableId, task: () -> T): T = task()
     override fun post(tableId: TableId, task: () -> Unit) = task()
-
-    override fun remove(tableId: TableId) {}
 }
 
 class RunoutTimerTest {
@@ -247,10 +246,10 @@ class RunoutTimerTest {
     }
 
     @Test
-    fun `forget 은 걸린 예약을 취소하고 낡은 실행을 무시하게 만든다`() {
+    fun `테이블이 닫히면 걸린 예약을 취소하고 낡은 실행을 무시하게 만든다`() {
         timer.onHandBroadcastRequested(event(hand(allIn = true)))
 
-        timer.forget(tableId)
+        timer.onTableClosed(TableClosed(tableId))
 
         assertTrue(scheduler.scheduledCalls[0].future.cancelled)
         scheduler.scheduledCalls[0].task.run()

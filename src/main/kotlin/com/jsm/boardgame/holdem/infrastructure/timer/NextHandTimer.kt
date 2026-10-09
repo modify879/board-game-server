@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.infrastructure.timer
 
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
+import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.TableId
@@ -18,6 +19,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import org.springframework.transaction.event.TransactionalEventListener
 
 /**
  * 다음 핸드 자동 시작 타이머. [TurnTimer] 와 예약/토큰 패턴이 같다 — 테이블별 단조 증가 토큰으로
@@ -65,9 +67,10 @@ class NextHandTimer(
     }
 
     /** 테이블이 닫히면 예약과 토큰을 치운다. 토큰이 사라지면 이미 깨어난 낡은 실행도 걸러진다. */
-    fun forget(tableId: TableId) {
-        cancel(tableId)
-        tokens.remove(tableId)
+    @TransactionalEventListener
+    fun onTableClosed(event: TableClosed) {
+        cancel(event.tableId)
+        tokens.remove(event.tableId)
     }
 
     override fun remaining(tableId: TableId): Duration? {

@@ -20,9 +20,6 @@ interface JoinQueue {
     /** [tableId] 의 대기열을 순서대로. 1-based 순번은 호출자가 index+1 로 매긴다. */
     fun entriesOf(tableId: TableId): List<JoinQueueEntry>
 
-    /** 테이블이 닫혀 대기열 자체가 필요 없을 때 비운 목록을 치운다. 남은 항목이 있으면 함께 버린다. */
-    fun forget(tableId: TableId)
-
     fun isQueued(userId: Long): Boolean
 
     /** userId 가 대기 중인 테이블. 대기 중이 아니면 null. */
