@@ -7,7 +7,9 @@ import com.jsm.boardgame.wallet.domain.exception.WithdrawalRequestAlreadyProcess
 import java.time.Instant
 
 @JvmInline
-value class WithdrawalRequestId(val value: Long)
+value class WithdrawalRequestId(val value: Long) {
+    override fun toString(): String = value.toString()
+}
 
 enum class WithdrawalRequestStatus { PENDING, APPROVED, REJECTED, CANCELED }
 
