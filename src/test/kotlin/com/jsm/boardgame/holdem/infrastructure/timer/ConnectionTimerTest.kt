@@ -123,7 +123,9 @@ private class ConnectionTimerFakeJoinQueueNotifier : JoinQueueNotifier {
 private class ConnectionTimerFakeUserConnections : UserConnections {
     val hasOtherSessionUserIds = mutableSetOf<Long>()
 
-    override fun isConnected(userId: Long): Boolean = false
+    val connectedUserIds = mutableSetOf<Long>()
+
+    override fun isConnected(userId: Long): Boolean = userId in connectedUserIds
 
     override fun hasOtherSession(userId: Long, excludingSessionId: String): Boolean = userId in hasOtherSessionUserIds
 }
@@ -515,5 +517,29 @@ class ConnectionTimerTest {
         assertEquals(1, presenceUseCase.calls.size)
         assertEquals(2L, presenceUseCase.calls[0].userId)
         assertEquals(1, scheduler.scheduledCalls.size)
+    }
+
+    @Test
+    fun `부팅 시점에 이미 연결된 착석자는 감시하지 않고 연결 안 된 착석자만 감시한다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        val presenceUseCase = ConnectionTimerFakeUpdateSeatPresenceUseCase()
+        val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
+        val standUpUseCase = ConnectionTimerFakeStandUpUseCase()
+        val bootTables = ConnectionTimerFakeHoldemTableRepository().apply { seatedUserIds += listOf(42L, 99L) }
+        val joinQueue = InMemoryJoinQueue()
+        val notifier = ConnectionTimerFakeJoinQueueNotifier()
+        val userConnections = ConnectionTimerFakeUserConnections()
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, standUpUseCase, bootTables, joinQueue, notifier, userConnections, ConnectionTimerFakeTableExecutor())
+
+        // Ready 전에 재접속이 먼저 처리된 순서 - 연결 이벤트 다음에 부팅 시딩이 돈다.
+        userConnections.connectedUserIds += 42L
+        timer.onSessionConnected(connectedEvent(42L))
+        timer.onApplicationReady()
+
+        assertEquals(listOf(SeatPresence.SEATED.name, SeatPresence.DISCONNECTED.name), presenceUseCase.calls.map { it.presence })
+        assertEquals(listOf(42L, 99L), presenceUseCase.calls.map { it.userId })
+        assertEquals(1, scheduler.scheduledCalls.size)
+        scheduler.scheduledCalls[0].task.run()
+        assertEquals(listOf(99L), expireUseCase.calls.map { it.userId })
     }
 }
