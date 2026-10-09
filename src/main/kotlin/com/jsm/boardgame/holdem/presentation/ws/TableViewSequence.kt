@@ -1,7 +1,9 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
+import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.domain.model.TableId
 import org.springframework.stereotype.Component
+import org.springframework.transaction.event.TransactionalEventListener
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -13,18 +15,19 @@ import java.util.concurrent.atomic.AtomicLong
 @Component
 class TableViewSequence {
 
-    private val counters = ConcurrentHashMap<Long, AtomicLong>()
+    private val counters = ConcurrentHashMap<TableId, AtomicLong>()
 
     /** 증가 후 값을 돌려준다. */
     fun next(tableId: TableId): Long =
-        counters.computeIfAbsent(tableId.value) { AtomicLong(0) }.incrementAndGet()
+        counters.computeIfAbsent(tableId) { AtomicLong(0) }.incrementAndGet()
 
     /** 증가시키지 않고 현재 값을 읽는다. 아직 한 번도 next() 가 불린 적 없으면 0. */
     fun current(tableId: TableId): Long =
-        counters[tableId.value]?.get() ?: 0L
+        counters[tableId]?.get() ?: 0L
 
     /** 테이블이 닫히면 카운터를 치운다. */
-    fun remove(tableId: TableId) {
-        counters.remove(tableId.value)
+    @TransactionalEventListener
+    fun onTableClosed(event: TableClosed) {
+        counters.remove(event.tableId)
     }
 }

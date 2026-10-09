@@ -25,7 +25,7 @@ class InMemoryJoinQueue : JoinQueue {
     }
 
     private val lock = Any()
-    private val tableQueues = mutableMapOf<Long, MutableList<Entry>>()
+    private val tableQueues = mutableMapOf<TableId, MutableList<Entry>>()
     private val userToTable = mutableMapOf<Long, Long>()
 
     override fun enqueue(tableId: TableId, userId: Long, postBlindImmediately: Boolean): Int =
@@ -33,29 +33,30 @@ class InMemoryJoinQueue : JoinQueue {
             if (userId in userToTable) {
                 throw AlreadySeatedException("이미 대기열에 있는 사용자입니다: userId=$userId")
             }
-            val queue = tableQueues.getOrPut(tableId.value) { mutableListOf() }
+            val queue = tableQueues.getOrPut(tableId) { mutableListOf() }
             queue += Entry(userId, postBlindImmediately)
             userToTable[userId] = tableId.value
             queue.size
         }
 
     override fun peekHead(tableId: TableId): JoinQueueEntry? = synchronized(lock) {
-        tableQueues[tableId.value]?.firstOrNull()?.toView()
+        tableQueues[tableId]?.firstOrNull()?.toView()
     }
 
     override fun removeByUserId(userId: Long): TableId? = synchronized(lock) {
         val tableIdValue = userToTable.remove(userId) ?: return@synchronized null
-        tableQueues[tableIdValue]?.removeIf { it.userId == userId }
-        TableId(tableIdValue)
+        val tableId = TableId(tableIdValue)
+        tableQueues[tableId]?.removeIf { it.userId == userId }
+        tableId
     }
 
     override fun entriesOf(tableId: TableId): List<JoinQueueEntry> = synchronized(lock) {
-        tableQueues[tableId.value]?.map { it.toView() } ?: emptyList()
+        tableQueues[tableId]?.map { it.toView() } ?: emptyList()
     }
 
     @TransactionalEventListener
     fun onTableClosed(event: TableClosed) = synchronized(lock) {
-        tableQueues.remove(event.tableId.value)?.forEach { userToTable.remove(it.userId) }
+        tableQueues.remove(event.tableId)?.forEach { userToTable.remove(it.userId) }
         Unit
     }
 

@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.infrastructure.timer
 
 import com.jsm.boardgame.holdem.application.command.usecase.CloseIdleTableCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CloseIdleTableUseCase
+import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.application.query.port.HoldemTableQueryRepository
 import com.jsm.boardgame.holdem.domain.model.TableId
@@ -10,6 +11,7 @@ import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
+import org.springframework.transaction.event.TransactionalEventListener
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -38,7 +40,7 @@ class IdleTableSweeper(
     private val tableExecutor: TableExecutor,
     private val clock: Clock,
 ) {
-    private val emptySince = ConcurrentHashMap<Long, Instant>()
+    private val emptySince = ConcurrentHashMap<TableId, Instant>()
 
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
@@ -53,18 +55,24 @@ class IdleTableSweeper(
             log.error("idle table sweep: 후보 조회 실패", e)
             return
         }
-        emptySince.keys.retainAll(candidates.toSet())
+        emptySince.keys.retainAll(candidates.map { TableId(it) }.toSet())
         for (id in candidates) {
-            val since = emptySince.computeIfAbsent(id) { now }
+            val tableId = TableId(id)
+            val since = emptySince.computeIfAbsent(tableId) { now }
             if (Duration.between(since, now) < IDLE_TABLE_TTL) continue
-            tableExecutor.post(TableId(id)) {
+            tableExecutor.post(tableId) {
                 try {
-                    if (!closeIdleTableUseCase.close(CloseIdleTableCommand(id))) emptySince.remove(id)
+                    if (!closeIdleTableUseCase.close(CloseIdleTableCommand(id))) emptySince.remove(tableId)
                 } catch (e: Exception) {
                     log.error("idle table sweep: 테이블 닫기 실패 tableId={}", id, e)
                 }
             }
         }
+    }
+
+    @TransactionalEventListener
+    fun onTableClosed(event: TableClosed) {
+        emptySince.remove(event.tableId)
     }
 
     companion object {
