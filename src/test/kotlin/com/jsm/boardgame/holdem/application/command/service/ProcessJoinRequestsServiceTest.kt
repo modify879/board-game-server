@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.common.error.CommonErrorCode
 import com.jsm.boardgame.common.error.ErrorCode
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestCommand
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestResult
@@ -131,6 +132,34 @@ class ProcessJoinRequestsServiceTest {
         assertFalse(queue.isQueued(101L))
         assertEquals(
             listOf(ProcessJoinRequestsFakeJoinQueueNotifier.Dropped(tableId, 101L, HoldemErrorCode.BUY_IN_OUT_OF_RANGE)),
+            notifier.droppedCalls,
+        )
+        assertEquals(
+            listOf(ProcessJoinRequestsFakeJoinQueueNotifier.Seated(tableId, 102L, 1)),
+            notifier.seatedCalls,
+        )
+        assertNull(queue.peekHead(tableId))
+    }
+
+    @Test
+    fun `비즈니스 예외가 아닌 오류로 앞사람이 실패해도 버려지고 TEMPORARILY_UNAVAILABLE 로 알리며 다음 사람은 처리된다`() {
+        val queue = InMemoryJoinQueue()
+        queue.enqueue(tableId, 101L, false)
+        queue.enqueue(tableId, 102L, false)
+        val admit = ProcessJoinRequestsFakeAdmitUseCase(
+            mapOf(
+                101L to { throw RuntimeException("lock timeout simulation") },
+                102L to { AdmitJoinRequestResult.Seated(1) },
+            ),
+        )
+        val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
+        val service = ProcessJoinRequestsService(queue, admit, notifier)
+
+        service.process(ProcessJoinRequestsCommand(tableId.value))
+
+        assertFalse(queue.isQueued(101L))
+        assertEquals(
+            listOf(ProcessJoinRequestsFakeJoinQueueNotifier.Dropped(tableId, 101L, CommonErrorCode.TEMPORARILY_UNAVAILABLE)),
             notifier.droppedCalls,
         )
         assertEquals(

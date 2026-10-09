@@ -84,7 +84,7 @@ class SitDownServiceTest {
     private val userConnections = SitDownFakeUserConnections()
     private val walletBalance = SitDownFakeWalletBalance().apply { balances[1L] = 8_000; balances[2L] = 8_000 }
     private val eventPublisher = ApplicationEventPublisher { }
-    private val service = SitDownService(tables, handStore, joinQueue, userConnections, walletBalance, eventPublisher)
+    private val service = SitDownService(tables, SeatRequester(tables, handStore, joinQueue, userConnections, walletBalance, eventPublisher))
 
     private fun createTable(): TableId = tables.save(HoldemTable.create("테스트 테이블")).id!!
 

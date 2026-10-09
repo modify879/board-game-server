@@ -115,4 +115,30 @@ class SerialTableExecutorTest {
         assertEquals(1, done.count)
         assertTrue(done.await(5, TimeUnit.SECONDS))
     }
+
+    @Test
+    fun `remove 한 테이블에 다시 call 하면 새 실행기에서 돈다`() {
+        val executor = SerialTableExecutor()
+        val tableId = TableId(1L)
+        val before = executor.call(tableId) { Thread.currentThread() }
+
+        executor.remove(tableId)
+        val after = executor.call(tableId) { Thread.currentThread() }
+
+        assertTrue(before !== after)
+        assertEquals("holdem-table-1", after.name)
+    }
+
+    @Test
+    fun `remove 는 진행 중인 작업을 끊지 않는다`() {
+        val executor = SerialTableExecutor()
+        val tableId = TableId(1L)
+
+        val result = executor.call(tableId) {
+            executor.remove(tableId)
+            42
+        }
+
+        assertEquals(42, result)
+    }
 }

@@ -51,6 +51,11 @@ class InMemoryJoinQueue : JoinQueue {
         tableQueues[tableId.value]?.map { it.toView() } ?: emptyList()
     }
 
+    override fun forget(tableId: TableId) = synchronized(lock) {
+        tableQueues.remove(tableId.value)?.forEach { userToTable.remove(it.userId) }
+        Unit
+    }
+
     override fun isQueued(userId: Long): Boolean = synchronized(lock) { userId in userToTable }
 
     override fun tableOf(userId: Long): TableId? = synchronized(lock) {

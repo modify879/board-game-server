@@ -5,7 +5,9 @@ import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.InvalidTableNameException
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.exception.TableFullException
+import com.jsm.boardgame.holdem.domain.exception.TableNotEmptyException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
+import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -396,5 +398,26 @@ class HoldemTableTest {
         table.applyStacks(mapOf(2 to Chips.ZERO))
 
         assertEquals(setOf(1), table.candidateSeatNos())
+    }
+
+    @Test
+    fun `아무도 앉지 않은 테이블은 close 하면 closedAt 이 기록된다`() {
+        val table = newTable()
+        val at = Instant.parse("2026-01-01T00:00:00Z")
+
+        table.close(at)
+
+        assertEquals(at, table.closedAt)
+    }
+
+    @Test
+    fun `앉은 사용자가 있으면 close 는 TABLE_NOT_EMPTY 이고 닫히지 않는다`() {
+        val table = newTable()
+        table.sitDown(userId = 1L, buyIn = Chips.of(10_000))
+
+        val e = assertFailsWith<TableNotEmptyException> { table.close(Instant.now()) }
+
+        assertEquals(HoldemErrorCode.TABLE_NOT_EMPTY, e.errorCode)
+        assertNull(table.closedAt)
     }
 }

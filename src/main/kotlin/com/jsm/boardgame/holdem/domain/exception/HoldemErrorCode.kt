@@ -32,6 +32,7 @@ enum class HoldemErrorCode(override val kind: ErrorKind) : ErrorCode {
     BUY_IN_OUT_OF_RANGE(ErrorKind.INVALID),
     TABLE_NOT_FOUND(ErrorKind.NOT_FOUND),
     TABLE_FULL(ErrorKind.CONFLICT),
+    TABLE_NOT_EMPTY(ErrorKind.CONFLICT),
     HAND_IN_PROGRESS(ErrorKind.CONFLICT),
     HAND_NOT_FOUND(ErrorKind.NOT_FOUND),
     UNKNOWN_ACTION(ErrorKind.INVALID),
