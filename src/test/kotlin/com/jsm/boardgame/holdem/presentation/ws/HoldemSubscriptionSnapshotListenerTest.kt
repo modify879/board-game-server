@@ -92,6 +92,8 @@ class HoldemSubscriptionSnapshotListenerTest {
         }
     } as SimpUserRegistry
 
+    private var subscribeSessionId: String? = "sess-1"
+
     private fun subscribe(queue: FakeJoinQueue, query: FakeQuery) {
         val userName = user.value.toString()
         val listener = HoldemSubscriptionSnapshotListener(
@@ -109,7 +111,7 @@ class HoldemSubscriptionSnapshotListenerTest {
         )
         val accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE).apply {
             destination = HoldemDestinations.joinQueueDestination()
-            sessionId = "sess-1"
+            sessionId = subscribeSessionId
             this.user = Principal { userName }
         }
         val message: Message<ByteArray> = MessageBuilder.createMessage(ByteArray(0), accessor.messageHeaders)
@@ -143,6 +145,7 @@ class HoldemSubscriptionSnapshotListenerTest {
         executor.posted.single().second()
 
         assertThat(sent.single().payload).isEqualTo(JoinQueueView.Seated(3, 4))
+        assertThat(executor.posted).hasSize(1)
     }
 
     @Test
@@ -186,6 +189,48 @@ class HoldemSubscriptionSnapshotListenerTest {
         subscribe(FakeJoinQueue(QueuePosition(table, 1)), FakeQuery(null))
 
         sessionRegistered = false
+        executor.posted.single().second()
+
+        assertThat(sent).isEmpty()
+    }
+
+    @Test
+    fun `실행기 안에서 다시 읽었을 때 다른 테이블에 착석해 있으면 그 테이블로 다시 올리고 실행하면 SEATED 를 보낸다`() {
+        val queue = FakeJoinQueue(QueuePosition(table, 1))
+        val query = FakeQuery(null)
+        subscribe(queue, query)
+
+        queue.position = null
+        query.seat = SeatLocation(tableId = 9, seatNo = 2, stack = 1000)
+        executor.posted.single().second()
+
+        assertThat(sent).isEmpty()
+        assertThat(executor.posted.map { it.first }).containsExactly(table, TableId(9))
+
+        executor.posted.last().second()
+
+        assertThat(sent.single().payload).isEqualTo(JoinQueueView.Seated(9, 2))
+    }
+
+    @Test
+    fun `두 번째 올린 작업 안에서도 또 옮겨갔으면 더 올리지 않고 아무것도 보내지 않는다`() {
+        val queue = FakeJoinQueue(QueuePosition(table, 1))
+        subscribe(queue, FakeQuery(null))
+
+        queue.position = QueuePosition(TableId(9), 1)
+        executor.posted.single().second()
+        queue.position = QueuePosition(TableId(11), 1)
+        executor.posted.last().second()
+
+        assertThat(sent).isEmpty()
+        assertThat(executor.posted.map { it.first }).containsExactly(table, TableId(9))
+    }
+
+    @Test
+    fun `sessionId 가 없으면 보내지 않는다`() {
+        subscribeSessionId = null
+        subscribe(FakeJoinQueue(QueuePosition(table, 1)), FakeQuery(null))
+
         executor.posted.single().second()
 
         assertThat(sent).isEmpty()

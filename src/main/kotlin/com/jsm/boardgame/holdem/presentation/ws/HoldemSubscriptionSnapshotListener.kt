@@ -14,6 +14,7 @@ import com.jsm.boardgame.holdem.presentation.ws.payload.JoinQueueView
 import com.jsm.boardgame.holdem.presentation.ws.payload.TableClosedView
 import com.jsm.boardgame.holdem.presentation.ws.payload.privateViewOf
 import com.jsm.boardgame.holdem.presentation.ws.payload.publicViewOf
+import org.slf4j.LoggerFactory
 import org.springframework.context.annotation.Lazy
 import org.springframework.messaging.Message
 import org.springframework.messaging.MessageChannel
@@ -28,7 +29,6 @@ import org.springframework.messaging.simp.user.SimpUserRegistry
 import org.springframework.messaging.simp.user.UserDestinationMessageHandler
 import org.springframework.messaging.support.ExecutorChannelInterceptor
 import org.springframework.stereotype.Component
-import org.slf4j.LoggerFactory
 
 /**
  * 재접속(또는 최초 구독) 직후, 그 시점의 상태를 1회 밀어준다. 브로드캐스트는 상태가 바뀔 때마다
@@ -77,6 +77,7 @@ class HoldemSubscriptionSnapshotListener(
     private val joinQueue: JoinQueue,
     private val tableExecutor: TableExecutor,
     private val tableQuery: HoldemTableQueryRepository,
+    // messagingTemplate 와 같은 빈 순환 이유(위 주석)로 @Lazy.
     @Lazy private val userRegistry: SimpUserRegistry,
 ) : ExecutorChannelInterceptor {
 
@@ -152,20 +153,21 @@ class HoldemSubscriptionSnapshotListener(
      * 실행기 안에서 다시 읽어 다른 테이블로 옮겨졌으면 한 번만 그 테이블로 다시 올린다. 둘 다 아니면 보내지 않는다.
      */
     private fun sendJoinQueueSnapshot(userId: UserId, sessionId: String?, retry: Boolean = true) {
-        val table = joinQueue.positionOf(userId)?.tableId
-            ?: tableQuery.findSeatOf(userId.value)?.let { TableId(it.tableId) }
-            ?: return
+        val table = currentSnapshot(userId)?.first ?: return
         tableExecutor.post(table) {
-            val queued = joinQueue.positionOf(userId)
-            val seat = if (queued == null) tableQuery.findSeatOf(userId.value) else null
+            val (current, view) = currentSnapshot(userId) ?: return@post
             when {
-                queued != null && queued.tableId == table ->
-                    sendToSession(userId, sessionId, JoinQueueView.Position(queued.tableId.value, queued.position))
-                seat != null && seat.tableId == table.value ->
-                    sendToSession(userId, sessionId, JoinQueueView.Seated(seat.tableId, seat.seatNo))
-                (queued != null || seat != null) && retry -> sendJoinQueueSnapshot(userId, sessionId, retry = false)
+                current == table -> sendToSession(userId, sessionId, view)
+                retry -> sendJoinQueueSnapshot(userId, sessionId, retry = false)
+                else -> log.debug("스냅샷 대상이 다시 옮겨가 보내지 않는다 userId={}", userId.value)
             }
         }
+    }
+
+    /** 사용자가 지금 있는 테이블과 보낼 뷰. 대기 중이면 POSITION, 아니면 착석 중이면 SEATED, 둘 다 아니면 null. */
+    private fun currentSnapshot(userId: UserId): Pair<TableId, JoinQueueView>? {
+        joinQueue.positionOf(userId)?.let { return it.tableId to JoinQueueView.Position(it.tableId.value, it.position) }
+        return tableQuery.findSeatOf(userId.value)?.let { TableId(it.tableId) to JoinQueueView.Seated(it.tableId, it.seatNo) }
     }
 
     /**
@@ -176,7 +178,7 @@ class HoldemSubscriptionSnapshotListener(
     private fun sendToSession(userId: UserId, sessionId: String?, view: JoinQueueView) {
         val name = userId.value.toString()
         if (sessionId == null || userRegistry.getUser(name)?.getSession(sessionId) == null) {
-            log.debug("join-queue 스냅샷 생략: 구독 세션이 없다 userId={} sessionId={}", name, sessionId)
+            log.warn("join-queue 스냅샷 생략: 구독 세션이 없다 userId={} sessionId={}", name, sessionId)
             return
         }
         val headers = SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE).apply {
