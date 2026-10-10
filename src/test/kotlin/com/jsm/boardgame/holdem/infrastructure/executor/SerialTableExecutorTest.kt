@@ -8,6 +8,12 @@ import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
+import org.springframework.transaction.TransactionDefinition
+import org.springframework.transaction.support.AbstractPlatformTransactionManager
+import org.springframework.transaction.support.DefaultTransactionStatus
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
+import org.springframework.transaction.support.TransactionTemplate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -24,6 +30,14 @@ private class SerialExecutorFakeHoldemTableRepository : HoldemTableRepository {
     override fun findAllSeatedUserIds(): List<UserId> = emptyList()
     override fun findAllTableIds(): List<TableId> = emptyList()
     override fun save(table: HoldemTable): HoldemTable = table
+}
+
+// 실제 트랜잭션 생명주기(동기화 콜백 포함)만 돌리는 빈 트랜잭션 매니저 — 커넥션도 DB 도 없다.
+private class NoopTransactionManager : AbstractPlatformTransactionManager() {
+    override fun doGetTransaction(): Any = Any()
+    override fun doBegin(transaction: Any, definition: TransactionDefinition) {}
+    override fun doCommit(status: DefaultTransactionStatus) {}
+    override fun doRollback(status: DefaultTransactionStatus) {}
 }
 
 private class SerialTableExecutorTestException(message: String) : RuntimeException(message)
@@ -194,5 +208,54 @@ class SerialTableExecutorTest {
         }
 
         assertEquals(42, result)
+    }
+
+    @Test
+    fun `트랜잭션이 활성인 스레드에서 call 은 거부하고 post 는 그대로 동작한다`() {
+        val executor = SerialTableExecutor(SerialExecutorFakeHoldemTableRepository())
+        val tableId = TableId(1L)
+        val done = CountDownLatch(1)
+
+        TransactionSynchronizationManager.setActualTransactionActive(true)
+        try {
+            assertFailsWith<IllegalStateException> { executor.call(tableId) { 1 } }
+            executor.post(tableId) { done.countDown() }
+        } finally {
+            TransactionSynchronizationManager.setActualTransactionActive(false)
+        }
+        assertTrue(done.await(5, TimeUnit.SECONDS))
+    }
+
+    // 커밋 후 콜백에서도 트랜잭션이 활성으로 남아 있음을 실제 생명주기로 확인한다 — 가드가 이 단계들을 잡는다.
+    private fun callFromSynchronization(register: (() -> Unit) -> TransactionSynchronization): Throwable? {
+        val executor = SerialTableExecutor(SerialExecutorFakeHoldemTableRepository())
+        var caught: Throwable? = null
+        val sync = register {
+            caught = runCatching { executor.call(TableId(1L)) { 1 } }.exceptionOrNull()
+        }
+        TransactionTemplate(NoopTransactionManager()).executeWithoutResult {
+            TransactionSynchronizationManager.registerSynchronization(sync)
+        }
+        return caught
+    }
+
+    @Test
+    fun `커밋 후 afterCommit 콜백에서 call 은 거부된다`() {
+        val caught = callFromSynchronization { body ->
+            object : TransactionSynchronization {
+                override fun afterCommit() = body()
+            }
+        }
+        assertTrue(caught is IllegalStateException)
+    }
+
+    @Test
+    fun `afterCompletion 콜백에서 call 은 거부된다`() {
+        val caught = callFromSynchronization { body ->
+            object : TransactionSynchronization {
+                override fun afterCompletion(status: Int) = body()
+            }
+        }
+        assertTrue(caught is IllegalStateException)
     }
 }
