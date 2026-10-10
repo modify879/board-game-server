@@ -24,6 +24,8 @@ import org.springframework.messaging.simp.SimpMessageHeaderAccessor
 import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.messaging.simp.stomp.StompCommand
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor
+import org.springframework.messaging.simp.user.SimpSession
+import org.springframework.messaging.simp.user.SimpUser
 import org.springframework.messaging.simp.user.SimpUserRegistry
 import org.springframework.messaging.simp.user.DefaultUserDestinationResolver
 import org.springframework.messaging.simp.user.UserDestinationMessageHandler
@@ -77,6 +79,19 @@ class HoldemSubscriptionSnapshotListenerTest {
     private inline fun <reified T : Any> unused(): T =
         Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { _, _, _ -> error("unused") } as T
 
+    /** 세션 "sess-1" 이 등록돼 있는지를 흉내 낸다. */
+    private var sessionRegistered = true
+
+    private val userRegistry: SimpUserRegistry = Proxy.newProxyInstance(
+        SimpUserRegistry::class.java.classLoader, arrayOf(SimpUserRegistry::class.java),
+    ) { _, m, args ->
+        check(m.name == "getUser") { "unused" }
+        Proxy.newProxyInstance(SimpUser::class.java.classLoader, arrayOf(SimpUser::class.java)) { _, um, uargs ->
+            check(um.name == "getSession") { "unused" }
+            if (sessionRegistered && uargs[0] == "sess-1") unused<SimpSession>() else null
+        }
+    } as SimpUserRegistry
+
     private fun subscribe(queue: FakeJoinQueue, query: FakeQuery) {
         val userName = user.value.toString()
         val listener = HoldemSubscriptionSnapshotListener(
@@ -90,6 +105,7 @@ class HoldemSubscriptionSnapshotListenerTest {
             joinQueue = queue,
             tableExecutor = executor,
             tableQuery = query,
+            userRegistry = userRegistry,
         )
         val accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE).apply {
             destination = HoldemDestinations.joinQueueDestination()
@@ -130,10 +146,48 @@ class HoldemSubscriptionSnapshotListenerTest {
     }
 
     @Test
-    fun `대기 중이 아니고 착석 중이면 실행기를 거치지 않고 바로 SEATED 를 보낸다`() {
+    fun `대기 중이 아니고 착석 중이면 그 테이블 실행기에 올리고 실행하면 SEATED 를 보낸다`() {
         subscribe(FakeJoinQueue(null), FakeQuery(SeatLocation(3, 4, 1000)))
 
-        assertThat(executor.posted).isEmpty()
+        assertThat(sent).isEmpty()
+        assertThat(executor.posted.map { it.first }).containsExactly(table)
+
+        executor.posted.single().second()
+
         assertThat(sent.single().payload).isEqualTo(JoinQueueView.Seated(3, 4))
+    }
+
+    @Test
+    fun `대기도 착석도 아니면 아무것도 올리거나 보내지 않는다`() {
+        subscribe(FakeJoinQueue(null), FakeQuery(null))
+
+        assertThat(executor.posted).isEmpty()
+        assertThat(sent).isEmpty()
+    }
+
+    @Test
+    fun `실행기 안에서 다시 읽었을 때 다른 테이블 대기열에 있으면 그 테이블로 다시 올린다`() {
+        val queue = FakeJoinQueue(QueuePosition(table, 1))
+        subscribe(queue, FakeQuery(null))
+
+        queue.position = QueuePosition(TableId(9), 2)
+        executor.posted.single().second()
+
+        assertThat(sent).isEmpty()
+        assertThat(executor.posted.map { it.first }).containsExactly(table, TableId(9))
+
+        executor.posted.last().second()
+
+        assertThat(sent.single().payload).isEqualTo(JoinQueueView.Position(9, 2))
+    }
+
+    @Test
+    fun `구독한 세션이 더 이상 등록돼 있지 않으면 보내지 않는다`() {
+        subscribe(FakeJoinQueue(QueuePosition(table, 1)), FakeQuery(null))
+
+        sessionRegistered = false
+        executor.posted.single().second()
+
+        assertThat(sent).isEmpty()
     }
 }

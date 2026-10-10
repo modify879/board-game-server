@@ -24,9 +24,11 @@ import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.messaging.simp.broker.SimpleBrokerMessageHandler
 import org.springframework.messaging.simp.stomp.StompCommand
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor
+import org.springframework.messaging.simp.user.SimpUserRegistry
 import org.springframework.messaging.simp.user.UserDestinationMessageHandler
 import org.springframework.messaging.support.ExecutorChannelInterceptor
 import org.springframework.stereotype.Component
+import org.slf4j.LoggerFactory
 
 /**
  * 재접속(또는 최초 구독) 직후, 그 시점의 상태를 1회 밀어준다. 브로드캐스트는 상태가 바뀔 때마다
@@ -75,6 +77,7 @@ class HoldemSubscriptionSnapshotListener(
     private val joinQueue: JoinQueue,
     private val tableExecutor: TableExecutor,
     private val tableQuery: HoldemTableQueryRepository,
+    @Lazy private val userRegistry: SimpUserRegistry,
 ) : ExecutorChannelInterceptor {
 
     override fun afterMessageHandled(message: Message<*>, channel: MessageChannel, handler: MessageHandler, ex: Exception?) {
@@ -118,7 +121,7 @@ class HoldemSubscriptionSnapshotListener(
             return
         }
         val hand = handStore.find(tableId)
-        // 조회 포트(JDSL 프로젝션)가 아니라 저장소 포트로 읽는다 — handStore 를 이미 이렇게 읽으므로 의도적으로 받아들인 편차다.
+        // 테이블 토픽 스냅샷은 애그리거트가 필요해 저장소 포트로 읽는다(join-queue 스냅샷은 좌석 위치만 필요해 조회 포트를 쓴다).
         val lastResult = if (hand == null) lastHandResults.find(tableId) else null
 
         messagingTemplate.convertAndSend(
@@ -143,38 +146,47 @@ class HoldemSubscriptionSnapshotListener(
      * DROPPED 는 저장된 상태가 없어 재전송할 수 없다. 오래 안 오면 클라이언트가 `GET /api/holdem/me/seat`
      * (MySeatQueryService)로 확인한다.
      *
-     * 대기 중이면 읽기+전송을 그 테이블 실행기에서 한다 — 입장 처리(notifySeated)가 같은 스레드에서 돌아
-     * 오래된 POSITION 이 실시간 SEATED 뒤에 나가는 일이 없다. 인바운드 스레드는 막지 않는다(post).
-     * 대기 중이 아니면 착석 여부만 직접 확인한다 — 이미 착석한 사람의 SEATED 는 낡을 수 없다.
+     * 대기 중이든 착석 중이든 관련 테이블을 먼저 정하고, 읽기+전송을 그 테이블 실행기에서 한다 — 입장 처리
+     * (notifySeated)·StandUp 이 같은 스레드에서 돌아 오래된 POSITION/SEATED 가 실시간 상태 뒤에 나가거나
+     * 이미 일어난 SEATED 가 중복되는 일이 없다. 인바운드 스레드는 막지 않는다(post).
+     * 실행기 안에서 다시 읽어 다른 테이블로 옮겨졌으면 한 번만 그 테이블로 다시 올린다. 둘 다 아니면 보내지 않는다.
      */
-    private fun sendJoinQueueSnapshot(userId: UserId, sessionId: String?) {
-        val queued = joinQueue.positionOf(userId)
-        if (queued == null) {
-            sendSeatedIfSeated(userId, sessionId)
-            return
-        }
-        tableExecutor.post(queued.tableId) {
-            // 실행기 위에서 다시 읽는다 — 그 사이 입장 처리돼 대기열에서 빠졌으면 착석 쪽으로 내려간다.
-            val now = joinQueue.positionOf(userId)
-            if (now != null) {
-                sendToSession(userId, sessionId, JoinQueueView.Position(now.tableId.value, now.position))
-            } else {
-                sendSeatedIfSeated(userId, sessionId)
+    private fun sendJoinQueueSnapshot(userId: UserId, sessionId: String?, retry: Boolean = true) {
+        val table = joinQueue.positionOf(userId)?.tableId
+            ?: tableQuery.findSeatOf(userId.value)?.let { TableId(it.tableId) }
+            ?: return
+        tableExecutor.post(table) {
+            val queued = joinQueue.positionOf(userId)
+            val seat = if (queued == null) tableQuery.findSeatOf(userId.value) else null
+            when {
+                queued != null && queued.tableId == table ->
+                    sendToSession(userId, sessionId, JoinQueueView.Position(queued.tableId.value, queued.position))
+                seat != null && seat.tableId == table.value ->
+                    sendToSession(userId, sessionId, JoinQueueView.Seated(seat.tableId, seat.seatNo))
+                (queued != null || seat != null) && retry -> sendJoinQueueSnapshot(userId, sessionId, retry = false)
             }
         }
     }
 
-    private fun sendSeatedIfSeated(userId: UserId, sessionId: String?) {
-        val seat = tableQuery.findSeatOf(userId.value) ?: return
-        sendToSession(userId, sessionId, JoinQueueView.Seated(seat.tableId, seat.seatNo))
-    }
-
-    /** 구독한 세션에만 보낸다 — DefaultUserDestinationResolver 가 헤더의 sessionId 로 대상 세션을 좁힌다. */
+    /**
+     * 구독한 세션에만 보낸다 — DefaultUserDestinationResolver 가 헤더의 sessionId 로 대상 세션을 좁힌다.
+     * websocket.md 의 "WARN 후 그래도 보낸다" 와 달리 세션이 레지스트리에 없으면 보내지 않는다: 대상 세션이 없으면
+     * 리졸버가 그 사용자의 모든 세션으로 폴백해 다른 탭에 뿌리게 되고, 이 스냅샷은 구독자에게만 의미가 있다.
+     */
     private fun sendToSession(userId: UserId, sessionId: String?, view: JoinQueueView) {
+        val name = userId.value.toString()
+        if (sessionId == null || userRegistry.getUser(name)?.getSession(sessionId) == null) {
+            log.debug("join-queue 스냅샷 생략: 구독 세션이 없다 userId={} sessionId={}", name, sessionId)
+            return
+        }
         val headers = SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE).apply {
             this.sessionId = sessionId
             setLeaveMutable(true)
         }
-        messagingTemplate.convertAndSendToUser(userId.value.toString(), HoldemDestinations.joinQueueSendTargetOf(), view, headers.messageHeaders)
+        messagingTemplate.convertAndSendToUser(name, HoldemDestinations.joinQueueSendTargetOf(), view, headers.messageHeaders)
+    }
+
+    private companion object {
+        val log = LoggerFactory.getLogger(HoldemSubscriptionSnapshotListener::class.java)
     }
 }
