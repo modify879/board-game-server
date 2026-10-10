@@ -18,6 +18,8 @@ private class UserQueryFakeRepository(private val profiles: Map<Long, UserProfil
     override fun findProfileById(id: Long): UserProfile? = profiles[id]
     override fun existsById(id: Long): Boolean = id in profiles
 
+    override fun findSummaryById(id: Long): UserSummary? = null
+
     var lastSearchQuery: String? = "미호출"
     override fun search(query: String?, pageable: Pageable): Page<UserSummary> {
         lastSearchQuery = query
@@ -39,6 +41,13 @@ class UserQueryServiceTest {
     @Test
     fun `없는 사용자의 프로필 조회는 USER_NOT_FOUND`() {
         val e = assertFailsWith<UserNotFoundException> { service.findProfile(999L) }
+
+        assertEquals(UserErrorCode.USER_NOT_FOUND, e.errorCode)
+    }
+
+    @Test
+    fun `없는 사용자의 요약 조회는 USER_NOT_FOUND`() {
+        val e = assertFailsWith<UserNotFoundException> { service.findSummary(999L) }
 
         assertEquals(UserErrorCode.USER_NOT_FOUND, e.errorCode)
     }

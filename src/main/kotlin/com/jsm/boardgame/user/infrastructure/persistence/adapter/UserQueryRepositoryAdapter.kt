@@ -34,6 +34,18 @@ class UserQueryRepositoryAdapter(
                 .where(path(UserJpaEntity::id).eq(id))
         }.firstOrNull() != null
 
+    override fun findSummaryById(id: Long): UserSummary? =
+        jpa.findAll {
+            selectNew<UserSummary>(
+                path(UserJpaEntity::id),
+                path(UserJpaEntity::username),
+                path(UserJpaEntity::nickname),
+                path(UserJpaEntity::role),
+                path(UserJpaEntity::lockedAt),
+            ).from(entity(UserJpaEntity::class))
+                .where(path(UserJpaEntity::id).eq(id))
+        }.firstOrNull()
+
     // LIKE 의 와일드카드(% _)와 이스케이프 문자(\)는 사용자 입력이므로 리터럴로 만든다.
     override fun search(query: String?, pageable: Pageable): Page<UserSummary> {
         val pattern = query?.lowercase()?.replace(Regex("""[\\%_]""")) { "\\" + it.value }?.let { "%$it%" }

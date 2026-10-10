@@ -32,6 +32,10 @@ class AdminUserController(
     fun search(@RequestParam(required = false) query: String?, pageable: Pageable): Page<UserSummaryResponse> =
         userQueryService.search(query, pageable).map(UserSummaryResponse::from)
 
+    @GetMapping("/{id}")
+    fun get(@PathVariable id: Long): UserSummaryResponse =
+        UserSummaryResponse.from(userQueryService.findSummary(id))
+
     @PostMapping("/{id}/role")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun changeRole(@PathVariable id: Long, @RequestBody request: ChangeUserRoleRequest) {
