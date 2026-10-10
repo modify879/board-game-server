@@ -89,12 +89,13 @@ class HoldemJoinQueueStompIntegrationTest {
             .get(5, TimeUnit.SECONDS)
     }
 
-    /** join-queue 를 구독하고, [awaitRegistered] 면 서버 레지스트리에 구독이 올라올 때까지 기다린다. */
-    private fun subscribeJoinQueue(
-        session: StompSession,
-        userId: Long,
-        awaitRegistered: Boolean = true,
-    ): LinkedBlockingQueue<String> {
+    private fun joinQueueSubscriptionCount(userId: Long): Int =
+        userRegistry.getUser(userId.toString())?.sessions
+            ?.sumOf { s -> s.subscriptions.count { it.destination == HoldemDestinations.joinQueueDestination() } } ?: 0
+
+    /** join-queue 를 구독하고 서버 레지스트리의 구독 수가 늘 때까지 기다린다. */
+    private fun subscribeJoinQueue(session: StompSession, userId: Long): LinkedBlockingQueue<String> {
+        val before = joinQueueSubscriptionCount(userId)
         val frames = LinkedBlockingQueue<String>()
         session.subscribe(HoldemDestinations.joinQueueDestination(), object : StompFrameHandler {
             override fun getPayloadType(headers: StompHeaders): Type = ByteArray::class.java
@@ -102,17 +103,12 @@ class HoldemJoinQueueStompIntegrationTest {
                 frames.add(String(payload as ByteArray, Charsets.UTF_8))
             }
         })
-        if (awaitRegistered) {
-            val deadline = System.currentTimeMillis() + 5_000
-            while (System.currentTimeMillis() < deadline) {
-                val registered = userRegistry.getUser(userId.toString())?.sessions
-                    ?.any { s -> s.subscriptions.any { it.destination == HoldemDestinations.joinQueueDestination() } } == true
-                if (registered) return frames
-                Thread.sleep(10)
-            }
-            error("join-queue 구독이 레지스트리에 올라오지 않았다")
+        val deadline = System.currentTimeMillis() + 5_000
+        while (System.currentTimeMillis() < deadline) {
+            if (joinQueueSubscriptionCount(userId) > before) return frames
+            Thread.sleep(10)
         }
-        return frames
+        error("join-queue 구독이 레지스트리에 올라오지 않았다")
     }
 
     private fun postAuth(url: String, token: String, body: String) = mockMvc.perform(
@@ -125,15 +121,18 @@ class HoldemJoinQueueStompIntegrationTest {
         fundWallet(userId, 10_000)
         val tableId = holdemTableRepository.save(HoldemTable.create("t-" + UUID.randomUUID().toString().take(8))).id!!.value
         val session = connect(token)
-        val frames = subscribeJoinQueue(session, userId)
+        try {
+            val frames = subscribeJoinQueue(session, userId)
 
-        postAuth("/api/holdem/tables/$tableId/seats", token, "{}").andExpect(status().isAccepted)
+            postAuth("/api/holdem/tables/$tableId/seats", token, "{}").andExpect(status().isAccepted)
 
-        val seated = frames.poll(5, TimeUnit.SECONDS)
-        assertThat(seated).isNotNull()
-        assertThat(JsonPath.read<String>(seated, "$.type")).isEqualTo("SEATED")
-        assertThat(JsonPath.read<Number>(seated, "$.tableId").toLong()).isEqualTo(tableId)
-        session.disconnect()
+            val seated = frames.poll(5, TimeUnit.SECONDS)
+            assertThat(seated).isNotNull()
+            assertThat(JsonPath.read<String>(seated, "$.type")).isEqualTo("SEATED")
+            assertThat(JsonPath.read<Number>(seated, "$.tableId").toLong()).isEqualTo(tableId)
+        } finally {
+            session.disconnect()
+        }
     }
 
     @Test
@@ -141,16 +140,19 @@ class HoldemJoinQueueStompIntegrationTest {
         val (userId, token) = signUpAndLogin()
         fundWallet(userId, 10_000)
         val session = connect(token)
-        val frames = subscribeJoinQueue(session, userId)
+        try {
+            val frames = subscribeJoinQueue(session, userId)
 
-        val result = postAuth("/api/holdem/tables", token, """{"name":"새 테이블"}""").andExpect(status().isCreated).andReturn()
-        val tableId = JsonPath.read<Number>(result.response.contentAsString, "$.tableId").toLong()
+            val result = postAuth("/api/holdem/tables", token, """{"name":"새 테이블"}""").andExpect(status().isCreated).andReturn()
+            val tableId = JsonPath.read<Number>(result.response.contentAsString, "$.tableId").toLong()
 
-        val seated = frames.poll(5, TimeUnit.SECONDS)
-        assertThat(seated).isNotNull()
-        assertThat(JsonPath.read<String>(seated, "$.type")).isEqualTo("SEATED")
-        assertThat(JsonPath.read<Number>(seated, "$.tableId").toLong()).isEqualTo(tableId)
-        session.disconnect()
+            val seated = frames.poll(5, TimeUnit.SECONDS)
+            assertThat(seated).isNotNull()
+            assertThat(JsonPath.read<String>(seated, "$.type")).isEqualTo("SEATED")
+            assertThat(JsonPath.read<Number>(seated, "$.tableId").toLong()).isEqualTo(tableId)
+        } finally {
+            session.disconnect()
+        }
     }
 
     @Test
@@ -159,22 +161,26 @@ class HoldemJoinQueueStompIntegrationTest {
         fundWallet(userId, 10_000)
         // 착석이 끝난 뒤(첫 세션이 SEATED 를 받은 뒤) 새 세션으로 구독해 스냅샷만 받는다.
         val first = connect(token)
-        val firstFrames = subscribeJoinQueue(first, userId)
-        val result = postAuth("/api/holdem/tables", token, """{"name":"s-${UniqueNames.suffix()}"}""").andExpect(status().isCreated).andReturn()
-        val tableId = JsonPath.read<Number>(result.response.contentAsString, "$.tableId").toLong()
-        assertThat(firstFrames.poll(5, TimeUnit.SECONDS)).isNotNull()
-        val seatNo = holdemTableRepository.findByUserId(UserId(userId))!!.seatOf(UserId(userId))!!.seatNo
+        var session: StompSession? = null
+        try {
+            val firstFrames = subscribeJoinQueue(first, userId)
+            val result = postAuth("/api/holdem/tables", token, """{"name":"s-${UniqueNames.suffix()}"}""").andExpect(status().isCreated).andReturn()
+            val tableId = JsonPath.read<Number>(result.response.contentAsString, "$.tableId").toLong()
+            assertThat(firstFrames.poll(5, TimeUnit.SECONDS)).isNotNull()
+            val seatNo = holdemTableRepository.findByUserId(UserId(userId))!!.seatOf(UserId(userId))!!.seatNo
 
-        val session = connect(token)
-        val frames = subscribeJoinQueue(session, userId)
+            session = connect(token)
+            val frames = subscribeJoinQueue(session, userId)
 
-        val seated = frames.poll(5, TimeUnit.SECONDS)
-        assertThat(seated).isNotNull()
-        assertThat(JsonPath.read<String>(seated, "$.type")).isEqualTo("SEATED")
-        assertThat(JsonPath.read<Number>(seated, "$.tableId").toLong()).isEqualTo(tableId)
-        assertThat(JsonPath.read<Number>(seated, "$.seatNo").toInt()).isEqualTo(seatNo)
-        session.disconnect()
-        first.disconnect()
+            val seated = frames.poll(5, TimeUnit.SECONDS)
+            assertThat(seated).isNotNull()
+            assertThat(JsonPath.read<String>(seated, "$.type")).isEqualTo("SEATED")
+            assertThat(JsonPath.read<Number>(seated, "$.tableId").toLong()).isEqualTo(tableId)
+            assertThat(JsonPath.read<Number>(seated, "$.seatNo").toInt()).isEqualTo(seatNo)
+        } finally {
+            session?.disconnect()
+            first.disconnect()
+        }
     }
 
     @Test
@@ -183,24 +189,54 @@ class HoldemJoinQueueStompIntegrationTest {
         val tableId = holdemTableRepository.save(HoldemTable.create("t-" + UUID.randomUUID().toString().take(8))).id!!
         joinQueue.enqueue(tableId, UserId(userId), false)
         val session = connect(token)
-        val frames = subscribeJoinQueue(session, userId)
+        try {
+            val frames = subscribeJoinQueue(session, userId)
 
-        val position = frames.poll(5, TimeUnit.SECONDS)
-        assertThat(position).isNotNull()
-        assertThat(JsonPath.read<String>(position, "$.type")).isEqualTo("POSITION")
-        assertThat(JsonPath.read<Number>(position, "$.tableId").toLong()).isEqualTo(tableId.value)
-        assertThat(JsonPath.read<Number>(position, "$.position").toInt()).isEqualTo(1)
-        joinQueue.removeByUserId(UserId(userId))
-        session.disconnect()
+            val position = frames.poll(5, TimeUnit.SECONDS)
+            assertThat(position).isNotNull()
+            assertThat(JsonPath.read<String>(position, "$.type")).isEqualTo("POSITION")
+            assertThat(JsonPath.read<Number>(position, "$.tableId").toLong()).isEqualTo(tableId.value)
+            assertThat(JsonPath.read<Number>(position, "$.position").toInt()).isEqualTo(1)
+        } finally {
+            joinQueue.removeByUserId(UserId(userId))
+            session.disconnect()
+        }
     }
 
     @Test
     fun `착석도 대기도 아니면 구독해도 아무것도 받지 않는다`() {
         val (userId, token) = signUpAndLogin()
         val session = connect(token)
-        val frames = subscribeJoinQueue(session, userId)
+        try {
+            val frames = subscribeJoinQueue(session, userId)
 
-        assertThat(frames.poll(1, TimeUnit.SECONDS)).isNull()
-        session.disconnect()
+            assertThat(frames.poll(1, TimeUnit.SECONDS)).isNull()
+        } finally {
+            session.disconnect()
+        }
+    }
+
+    @Test
+    fun `같은 사용자의 두 번째 세션이 구독하면 스냅샷은 그 세션에만 간다`() {
+        val (userId, token) = signUpAndLogin()
+        val tableId = holdemTableRepository.save(HoldemTable.create("t-" + UUID.randomUUID().toString().take(8))).id!!
+        val first = connect(token)
+        var second: StompSession? = null
+        try {
+            val firstFrames = subscribeJoinQueue(first, userId)
+            joinQueue.enqueue(tableId, UserId(userId), false)
+
+            second = connect(token)
+            val secondFrames = subscribeJoinQueue(second, userId)
+
+            val position = secondFrames.poll(5, TimeUnit.SECONDS)
+            assertThat(position).isNotNull()
+            assertThat(JsonPath.read<String>(position, "$.type")).isEqualTo("POSITION")
+            assertThat(firstFrames.poll(1, TimeUnit.SECONDS)).isNull()
+        } finally {
+            joinQueue.removeByUserId(UserId(userId))
+            second?.disconnect()
+            first.disconnect()
+        }
     }
 }

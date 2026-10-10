@@ -4,6 +4,7 @@ import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
+import com.jsm.boardgame.holdem.application.port.QueuePosition
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.model.TableId
 import org.springframework.stereotype.Component
@@ -63,4 +64,10 @@ class InMemoryJoinQueue : JoinQueue {
     override fun isQueued(userId: UserId): Boolean = synchronized(lock) { userId in userToTable }
 
     override fun tableOf(userId: UserId): TableId? = synchronized(lock) { userToTable[userId] }
+
+    override fun positionOf(userId: UserId): QueuePosition? = synchronized(lock) {
+        val tableId = userToTable[userId] ?: return@synchronized null
+        val index = tableQueues[tableId]?.indexOfFirst { it.userId == userId } ?: -1
+        if (index < 0) null else QueuePosition(tableId, index + 1)
+    }
 }

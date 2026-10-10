@@ -5,6 +5,8 @@ import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
+import com.jsm.boardgame.holdem.application.port.TableExecutor
+import com.jsm.boardgame.holdem.application.query.port.HoldemTableQueryRepository
 import com.jsm.boardgame.holdem.application.port.TurnCountdown
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
@@ -16,6 +18,8 @@ import org.springframework.context.annotation.Lazy
 import org.springframework.messaging.Message
 import org.springframework.messaging.MessageChannel
 import org.springframework.messaging.MessageHandler
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor
+import org.springframework.messaging.simp.SimpMessageType
 import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.messaging.simp.broker.SimpleBrokerMessageHandler
 import org.springframework.messaging.simp.stomp.StompCommand
@@ -43,7 +47,9 @@ import org.springframework.stereotype.Component
  *    실행기를 설정하지 않아 실행기가 없다(`ExecutorSubscribableChannel` 생성자 인자 없음) — 그래서
  *    같은 스레드에서 동기로 `SimpleBrokerMessageHandler` 까지 이어져, `UserDestinationMessageHandler`
  *    의 `handleMessage` 가 반환하는 시점이면 등록도 이미 끝나 있다.
- * 두 destination 모두 아닌 핸들러(예: `/app` 을 보는 `SimpAnnotationMethodMessageHandler`)가
+ *  - join-queue(`/user/queue/holdem/join-queue`)도 개인 큐라 `UserDestinationMessageHandler` 가 등록을
+ *    끝낸 뒤에만 스냅샷을 보낸다. 같은 사용자의 다른 탭에는 보내지 않도록 구독한 세션에만 보낸다.
+ * 어느 것도 아닌 핸들러(예: `/app` 을 보는 `SimpAnnotationMethodMessageHandler`)가
  * 끝났을 때는 등록을 한 것이 아니므로 무시한다.
  *
  * 구독 인가는 HoldemSubscriptionInterceptor(SUBSCRIBE 프레임의 preSend 단계 ChannelInterceptor)가
@@ -67,6 +73,8 @@ class HoldemSubscriptionSnapshotListener(
     private val nextHandCountdown: NextHandCountdown,
     private val turnCountdown: TurnCountdown,
     private val joinQueue: JoinQueue,
+    private val tableExecutor: TableExecutor,
+    private val tableQuery: HoldemTableQueryRepository,
 ) : ExecutorChannelInterceptor {
 
     override fun afterMessageHandled(message: Message<*>, channel: MessageChannel, handler: MessageHandler, ex: Exception?) {
@@ -76,10 +84,10 @@ class HoldemSubscriptionSnapshotListener(
         if (accessor.command != StompCommand.SUBSCRIBE) return
 
         val destination = accessor.destination ?: return
+        val userId = accessor.user?.name?.toLongOrNull()?.let(::UserId) ?: return
         if (destination == HoldemDestinations.joinQueueDestination()) {
             if (handler !is UserDestinationMessageHandler) return
-            val userId = accessor.user?.name?.toLongOrNull()?.let(::UserId) ?: return
-            sendJoinQueueSnapshot(userId)
+            sendJoinQueueSnapshot(userId, accessor.sessionId)
             return
         }
         val rawTableId = HoldemDestinations.tableIdOf(destination) ?: return
@@ -94,7 +102,6 @@ class HoldemSubscriptionSnapshotListener(
         }
         if (!registeredThisDestination) return
 
-        val userId = accessor.user?.name?.toLongOrNull()?.let(::UserId) ?: return
         val tableId = TableId(rawTableId)
 
         // 상태를 읽기 전에 seq 를 먼저 읽는다(증가시키지 않는다) — 증가시키면, 지금 커밋
@@ -135,18 +142,39 @@ class HoldemSubscriptionSnapshotListener(
      * SUBSCRIBE 에 RECEIPT 를 주지 않아, 구독 전에 나간 POSITION/SEATED 는 유실된다 — 지금 상태를 다시 보낸다.
      * DROPPED 는 저장된 상태가 없어 재전송할 수 없다. 오래 안 오면 클라이언트가 `GET /api/holdem/me/seat`
      * (MySeatQueryService)로 확인한다.
+     *
+     * 대기 중이면 읽기+전송을 그 테이블 실행기에서 한다 — 입장 처리(notifySeated)가 같은 스레드에서 돌아
+     * 오래된 POSITION 이 실시간 SEATED 뒤에 나가는 일이 없다. 인바운드 스레드는 막지 않는다(post).
+     * 대기 중이 아니면 착석 여부만 직접 확인한다 — 이미 착석한 사람의 SEATED 는 낡을 수 없다.
      */
-    private fun sendJoinQueueSnapshot(userId: UserId) {
-        val queuedAt = joinQueue.tableOf(userId)
-        val view = if (queuedAt != null) {
-            val position = joinQueue.entriesOf(queuedAt).indexOfFirst { it.userId == userId } + 1
-            if (position == 0) return
-            JoinQueueView.Position(queuedAt.value, position)
-        } else {
-            val table = tables.findByUserId(userId) ?: return
-            val seat = table.seatOf(userId) ?: return
-            JoinQueueView.Seated(table.id!!.value, seat.seatNo)
+    private fun sendJoinQueueSnapshot(userId: UserId, sessionId: String?) {
+        val queued = joinQueue.positionOf(userId)
+        if (queued == null) {
+            sendSeatedIfSeated(userId, sessionId)
+            return
         }
-        messagingTemplate.convertAndSendToUser(userId.value.toString(), HoldemDestinations.joinQueueSendTargetOf(), view)
+        tableExecutor.post(queued.tableId) {
+            // 실행기 위에서 다시 읽는다 — 그 사이 입장 처리돼 대기열에서 빠졌으면 착석 쪽으로 내려간다.
+            val now = joinQueue.positionOf(userId)
+            if (now != null) {
+                sendToSession(userId, sessionId, JoinQueueView.Position(now.tableId.value, now.position))
+            } else {
+                sendSeatedIfSeated(userId, sessionId)
+            }
+        }
+    }
+
+    private fun sendSeatedIfSeated(userId: UserId, sessionId: String?) {
+        val seat = tableQuery.findSeatOf(userId.value) ?: return
+        sendToSession(userId, sessionId, JoinQueueView.Seated(seat.tableId, seat.seatNo))
+    }
+
+    /** 구독한 세션에만 보낸다 — DefaultUserDestinationResolver 가 헤더의 sessionId 로 대상 세션을 좁힌다. */
+    private fun sendToSession(userId: UserId, sessionId: String?, view: JoinQueueView) {
+        val headers = SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE).apply {
+            this.sessionId = sessionId
+            setLeaveMutable(true)
+        }
+        messagingTemplate.convertAndSendToUser(userId.value.toString(), HoldemDestinations.joinQueueSendTargetOf(), view, headers.messageHeaders)
     }
 }
