@@ -100,6 +100,7 @@ paths: ["**/holdem/**"]
   행을 지우지 않는다(지갑 원장이 테이블 id 를 참조한다). 닫힌 테이블은 `HoldemTableRepository.findById` 가 없는 것으로 돌려 명령·조회 모두 `TABLE_NOT_FOUND`.
   닫힐 때 공개 토픽에 `{"tableId","type":"TABLE_CLOSED"}` 를 보내고, 닫힌·없는 테이블을 재구독하면 스냅샷 대신 같은 알림을 다시 보낸다
   (ERROR 프레임으로 거부하지 않는다 — STOMP 세션 전체가 끊긴다)
+- join-queue 구독도 스냅샷(대기 순번 또는 착석)을 보낸다 — SUBSCRIBE 와 REST 요청의 도착 순서가 보장되지 않고 심플 브로커는 SUBSCRIBE 에 RECEIPT 를 주지 않으므로. DROPPED 는 재전송되지 않는다
 - **`SerialTableExecutor` 는 실행기를 새로 만들 때만 `existsOpen` 으로 확인한다.** 없거나 닫힌 테이블엔 실행기를 만들지 않고 호출자 스레드에서 돌린다 —
   임의 id 요청·닫힘 직후 타이머가 실행기를 되살려 쌓지 않게
 - **타이머 스케줄러는 가상 스레드 `SimpleAsyncTaskScheduler` 다.** 단 `scheduleWithFixedDelay` 작업은 모든 타이머를 깨우는 단일 스케줄러 스레드에서 돈다 —
