@@ -255,4 +255,22 @@ class RunoutTimerTest {
         scheduler.scheduledCalls[0].task.run()
         assertEquals(0, useCase.calls.size)
     }
+
+    @Test
+    fun `실행기 큐에서 기다리는 사이 토큰이 바뀌면 걸음을 진행하지 않는다`() {
+        lateinit var racing: RunoutTimer
+        val executor = object : TableExecutor {
+            override fun <T> call(tableId: TableId, task: () -> T): T {
+                racing.onHandBroadcastRequested(event(null)) // 큐에서 기다리는 사이 새 브로드캐스트가 끼어든다
+                return task()
+            }
+            override fun post(tableId: TableId, task: () -> Unit) = task()
+        }
+        racing = RunoutTimer(scheduler, clock, useCase, cancelUseCase, executor, stepDelay)
+        racing.onHandBroadcastRequested(event(hand(allIn = true)))
+
+        scheduler.scheduledCalls[0].task.run()
+
+        assertEquals(0, useCase.calls.size)
+    }
 }

@@ -205,7 +205,11 @@ class HandRecovery(
     @TransactionalEventListener
     fun onHandBroadcastRequested(event: HandBroadcastRequested) {
         try {
-            if (finishRecovery(event.tableId)) log.info("테이블 {} 복구 유예 중 핸드가 다시 진행되어 유예를 끝냅니다.", event.tableId.value)
+            val recovery = removePending(event.tableId) ?: return
+            log.info("테이블 {} 복구 유예 중 핸드가 다시 진행되어 유예를 끝냅니다.", event.tableId.value)
+            // 이 스레드는 아직 JDBC 커넥션을 쥐고 있다 - 감시 반영은 presence 갱신(tableExecutor.call)을 부르므로
+            // 인라인으로 돌면 커밋된 트랜잭션에 합류해 던진다. post 로 커넥션이 풀린 뒤 테이블 스레드에서 돈다.
+            tableExecutor.post(event.tableId) { applyWatch(recovery) }
         } catch (e: Exception) {
             log.error("복구 유예 종료 처리에 실패했습니다: tableId={}", event.tableId.value, e)
         }
@@ -213,17 +217,30 @@ class HandRecovery(
 
     /** 유예를 걷어내고 감시를 반영한다. 유예 중이 아니었으면 false. */
     private fun finishRecovery(tableId: TableId): Boolean {
-        val recovery = pending.remove(tableId) ?: return false
+        applyWatch(removePending(tableId) ?: return false)
+        return true
+    }
+
+    private fun removePending(tableId: TableId): PendingRecovery? {
+        val recovery = pending.remove(tableId) ?: return null
         recovery.future.cancel(false)
         tokens[tableId]?.incrementAndGet()
+        return recovery
+    }
 
+    private fun applyWatch(recovery: PendingRecovery) {
         // 돌아온 사람은 유예를 해제하고, 안 돌아온 사람은 지금부터 3분 연결 타이머를 새로 건다.
         // 돌아왔다가 유예 중에 다시 끊긴 사람(그 끊김은 무시됐다)도 연결이 없으니 감시를 새로 받는다.
-        (recovery.allUserIds - recovery.awaitingUserIds).forEach {
-            if (userConnections.isConnected(it)) connectionTimer.cancelWatch(it) else connectionTimer.beginWatch(it)
+        // 한 명의 실패가 나머지를 영영 유예 상태로 두면 안 된다 - 사용자별로 격리한다.
+        val returned = recovery.allUserIds - recovery.awaitingUserIds
+        for (userId in recovery.allUserIds) {
+            try {
+                if (userId in returned && userConnections.isConnected(userId)) connectionTimer.cancelWatch(userId)
+                else connectionTimer.beginWatch(userId)
+            } catch (e: Exception) {
+                log.error("복구 유예 종료 뒤 연결 감시를 반영하지 못했습니다: userId={}", userId, e)
+            }
         }
-        recovery.awaitingUserIds.forEach { connectionTimer.beginWatch(it) }
-        return true
     }
 
     // 재개가 안 되면 핸드가 DB 에 남은 채 멈춘다 — 다시 걸고, 그래도 안 되면 취소·환불한다(그것도 다시 건다).

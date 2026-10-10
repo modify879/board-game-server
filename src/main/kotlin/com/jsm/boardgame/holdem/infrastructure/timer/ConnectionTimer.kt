@@ -12,6 +12,7 @@ import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
 import com.jsm.boardgame.holdem.application.port.TableExecutor
+import com.jsm.boardgame.holdem.application.port.callForUser
 import com.jsm.boardgame.holdem.application.port.UserConnections
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
@@ -93,12 +94,10 @@ class ConnectionTimer(
 
     private val suspended = ConcurrentHashMap.newKeySet<UserId>()
 
-    /** 사용자가 앉은 테이블을 찾아 그 테이블의 실행기에서 [task] 를 돌린다 — 못 찾으면(미착석)
-     *  테이블 상태를 안 건드리므로 그 자리에서 바로 실행해도 안전하다. */
-    private fun <T> dispatchForUser(userId: UserId, task: () -> T): T {
-        val tableId = tables.findByUserId(userId)?.id
-        return if (tableId != null) tableExecutor.call(tableId, task) else task()
-    }
+    /** 사용자가 앉은 테이블의 실행기에서 [task] 를 돌린다. 앉아 있지 않으면 presence 갱신·만료 모두 할 일이 없는
+     *  no-op 이라 돌리지 않고 null 을 돌려준다 — 실행기 밖에서 쓰기를 하지 않는다. */
+    private fun <T> dispatchForUser(userId: UserId, task: () -> T): T? =
+        tableExecutor.callForUser<T?>(tables, userId, onNotSeated = { null }, task = task)
 
     /** HandRecovery.onApplicationReady(@Order(0)) 다음으로 실행되어야 한다 - 클래스 KDoc 참고. */
     @EventListener(ApplicationReadyEvent::class)
@@ -186,7 +185,10 @@ class ConnectionTimer(
     private fun onExpire(userId: UserId, token: Long) {
         if (tokens[userId]?.get() != token) return
         val reservedTableId = try {
-            dispatchForUser(userId) { expireConnectionUseCase.expire(ExpireConnectionCommand(userId.value)) }
+            dispatchForUser(userId) {
+                // 스케줄러 스레드의 토큰 검사는 실행기 큐를 기다리는 사이 낡을 수 있다 - 안에서 다시 본다.
+                if (tokens[userId]?.get() != token) null else expireConnectionUseCase.expire(ExpireConnectionCommand(userId.value))
+            }
         } catch (e: Exception) {
             log.error("연결 만료 처리에 실패했습니다: userId={}", userId, e)
             rearmWatch(userId, token)
@@ -214,6 +216,11 @@ class ConnectionTimer(
         // 이미 커밋된 트랜잭션에 합류해 쓰기가 사라진다. post 로 커넥션이 풀린 뒤 테이블 스레드에서 돈다.
         tableExecutor.post(event.tableId) {
             for (userId in userIds) {
+                // post 로 넘어간 사이 재접속했다면(cancelWatch 가 토큰을 올린다) 일으켜 세우면 안 된다.
+                if (tokens[userId]?.get() != tokensBefore[userId]) {
+                    log.info("예약된 퇴장 대상이 그 사이 재접속해 건너뜁니다: userId={}, tableId={}", userId, event.tableId.value)
+                    continue
+                }
                 try {
                     standUpUseCase.standUp(StandUpCommand(userId.value))
                     log.info("핸드 종료로 예약된 퇴장을 실행했습니다: userId={}, tableId={}", userId, event.tableId.value)

@@ -10,6 +10,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.ProcessJoinRequestsC
 import com.jsm.boardgame.holdem.application.exception.JoinRequestNotFoundException
 import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
 import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
+import com.jsm.boardgame.holdem.application.port.UserConnections
 import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -49,6 +50,11 @@ private class ProcessJoinRequestsFakeAdmitUseCase(
     }
 }
 
+private class ProcessJoinRequestsFakeUserConnections(private val disconnected: Set<Long> = emptySet()) : UserConnections {
+    override fun isConnected(userId: UserId): Boolean = userId.value !in disconnected
+    override fun hasOtherSession(userId: UserId, excludingSessionId: String): Boolean = false
+}
+
 private class ProcessJoinRequestsFakeJoinQueueNotifier : JoinQueueNotifier {
     data class Seated(val tableId: TableId, val userId: Long, val seatNo: Int)
     data class Dropped(val tableId: TableId, val userId: Long, val errorCode: ErrorCode)
@@ -75,6 +81,25 @@ class ProcessJoinRequestsServiceTest {
     private val tableId = TableId(1)
 
     @Test
+    fun `연결이 없는 대기열 항목은 앉히지 않고 NOT_CONNECTED 로 버린 뒤 다음 항목을 처리한다`() {
+        val queue = InMemoryJoinQueue()
+        queue.enqueue(tableId, UserId(101L), false)
+        queue.enqueue(tableId, UserId(102L), false)
+        val admit = ProcessJoinRequestsFakeAdmitUseCase(mapOf(102L to { AdmitJoinRequestResult.Seated(1) }))
+        val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
+        val service = ProcessJoinRequestsService(queue, admit, notifier, ProcessJoinRequestsFakeUserConnections(disconnected = setOf(101L)))
+
+        service.process(ProcessJoinRequestsCommand(tableId.value))
+
+        assertEquals(listOf(102L), admit.calls.map { it.userId })
+        assertFalse(queue.isQueued(UserId(101L)))
+        assertEquals(
+            listOf(ProcessJoinRequestsFakeJoinQueueNotifier.Dropped(tableId, 101L, HoldemErrorCode.NOT_CONNECTED)),
+            notifier.droppedCalls,
+        )
+    }
+
+    @Test
     fun `대기열 맨 앞부터 순서대로 좌석에 앉히고 완료되면 대기열이 빈다`() {
         val queue = InMemoryJoinQueue()
         queue.enqueue(tableId, UserId(101L), false)
@@ -88,7 +113,7 @@ class ProcessJoinRequestsServiceTest {
             ),
         )
         val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
-        val service = ProcessJoinRequestsService(queue, admit, notifier)
+        val service = ProcessJoinRequestsService(queue, admit, notifier, ProcessJoinRequestsFakeUserConnections())
 
         service.process(ProcessJoinRequestsCommand(tableId.value))
 
@@ -112,7 +137,7 @@ class ProcessJoinRequestsServiceTest {
         queue.enqueue(tableId, UserId(101L), false)
         val admit = ProcessJoinRequestsFakeAdmitUseCase(mapOf(101L to { AdmitJoinRequestResult.Blocked }))
         val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
-        val service = ProcessJoinRequestsService(queue, admit, notifier)
+        val service = ProcessJoinRequestsService(queue, admit, notifier, ProcessJoinRequestsFakeUserConnections())
 
         service.process(ProcessJoinRequestsCommand(tableId.value))
 
@@ -136,7 +161,7 @@ class ProcessJoinRequestsServiceTest {
             ),
         )
         val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
-        val service = ProcessJoinRequestsService(queue, admit, notifier)
+        val service = ProcessJoinRequestsService(queue, admit, notifier, ProcessJoinRequestsFakeUserConnections())
 
         service.process(ProcessJoinRequestsCommand(tableId.value))
 
@@ -164,7 +189,7 @@ class ProcessJoinRequestsServiceTest {
             ),
         )
         val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
-        val service = ProcessJoinRequestsService(queue, admit, notifier)
+        val service = ProcessJoinRequestsService(queue, admit, notifier, ProcessJoinRequestsFakeUserConnections())
 
         service.process(ProcessJoinRequestsCommand(tableId.value))
 
@@ -186,7 +211,7 @@ class ProcessJoinRequestsServiceTest {
         queue.enqueue(tableId, UserId(101L), false)
         val admit = ProcessJoinRequestsFakeAdmitUseCase(mapOf(101L to { throw InterruptedException("shutdown") }))
         val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
-        val service = ProcessJoinRequestsService(queue, admit, notifier)
+        val service = ProcessJoinRequestsService(queue, admit, notifier, ProcessJoinRequestsFakeUserConnections())
 
         try {
             service.process(ProcessJoinRequestsCommand(tableId.value))
@@ -215,7 +240,7 @@ class ProcessJoinRequestsServiceTest {
             ),
         )
         val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
-        val service = ProcessJoinRequestsService(queue, admit, notifier)
+        val service = ProcessJoinRequestsService(queue, admit, notifier, ProcessJoinRequestsFakeUserConnections())
         val cancelNotifier = ProcessJoinRequestsFakeJoinQueueNotifier()
         val tableExecutor = SerialTableExecutor(ProcessJoinRequestsFakeHoldemTableRepository())
         val cancelService = CancelJoinRequestService(queue, cancelNotifier, tableExecutor)

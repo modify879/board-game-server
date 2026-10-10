@@ -11,6 +11,8 @@ import com.jsm.boardgame.holdem.application.command.usecase.ProcessJoinRequestsC
 import com.jsm.boardgame.holdem.application.command.usecase.ProcessJoinRequestsUseCase
 import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
+import com.jsm.boardgame.holdem.application.port.UserConnections
+import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.TableId
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -30,12 +32,20 @@ class ProcessJoinRequestsService(
     private val joinQueue: JoinQueue,
     private val admitJoinRequestUseCase: AdmitJoinRequestUseCase,
     private val notifier: JoinQueueNotifier,
+    private val userConnections: UserConnections,
 ) : ProcessJoinRequestsUseCase {
 
     override fun process(command: ProcessJoinRequestsCommand) {
         val tableId = TableId(command.tableId)
         while (true) {
             val head = joinQueue.peekHead(tableId) ?: return
+
+            // 요청 시점에 연결을 확인했어도 그 뒤 끊김이 대기열 정리와 엇갈릴 수 있다 - 연결 없는 사람을 앉히면 감시 없는 좌석이 된다.
+            if (!userConnections.isConnected(head.userId)) {
+                log.info("연결이 없는 대기열 항목을 버립니다: tableId={}, userId={}", tableId.value, head.userId)
+                drop(tableId, head.userId, HoldemErrorCode.NOT_CONNECTED)
+                continue
+            }
 
             try {
                 when (

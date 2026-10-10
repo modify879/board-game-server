@@ -85,7 +85,12 @@ class RunoutTimer(
             "런아웃 진행 tableId=${tableId.value}", clock, base = stepDelay,
             isStale = isStale,
             onGiveUp = { cancelHand(tableId, isStale) },
-        ) { tableExecutor.call(tableId) { advanceRunoutUseCase.advance(AdvanceRunoutCommand(tableId.value)) } }
+        ) {
+            tableExecutor.call(tableId) {
+                // 큐에서 기다리는 사이 새 브로드캐스트가 토큰을 바꿨을 수 있다 - 그러면 이 걸음은 낡은 것이다.
+                if (!isStale()) advanceRunoutUseCase.advance(AdvanceRunoutCommand(tableId.value))
+            }
+        }
     }
 
     // 서버 버그라 사용자가 일으킬 수 없는 실패다 — 환불이 유일한 탈출구라 이것도 다시 건다. 그래도 안 되면 더 할 수 있는 게 없다.

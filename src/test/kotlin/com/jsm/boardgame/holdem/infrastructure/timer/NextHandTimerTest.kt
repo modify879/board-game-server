@@ -243,4 +243,32 @@ class NextHandTimerTest {
         scheduler.scheduledCalls[0].task.run()
         assertEquals(0, useCase.calls.size)
     }
+
+    @Test
+    fun `cancel 뒤에 이미 깨어난 예약은 핸드를 시작하지 않는다`() {
+        timer.restart(tableId)
+        val woken = scheduler.scheduledCalls[0]
+
+        timer.cancel(tableId)
+        woken.task.run()
+
+        assertEquals(0, useCase.calls.size)
+    }
+
+    @Test
+    fun `시작 유스케이스가 안에서 cancel 한 뒤 실패해도 카운트다운을 다시 건다`() {
+        var failing: NextHandTimer? = null
+        val cancelsThenFails = object : StartScheduledHandUseCase {
+            override fun start(command: StartScheduledHandCommand) {
+                failing!!.cancel(tableId) // HandStarter.start 가 하는 일이다
+                throw IllegalStateException("db down")
+            }
+        }
+        failing = NextHandTimer(scheduler, cancelsThenFails, NextHandTimerFakeTableExecutor(), clock, nextHandDelay)
+        failing.restart(tableId)
+
+        scheduler.scheduledCalls[0].task.run()
+
+        assertEquals(2, scheduler.scheduledCalls.size)
+    }
 }

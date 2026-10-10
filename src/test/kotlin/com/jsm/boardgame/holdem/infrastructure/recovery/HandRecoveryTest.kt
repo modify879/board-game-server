@@ -660,4 +660,51 @@ class HandRecoveryTest {
 
         assertEquals(setOf(1000L, 2000L), presenceUseCase.calls.map { it.userId }.toSet())
     }
+
+    @Test
+    fun `복구 유예 중 핸드 브로드캐스트의 감시 반영은 커밋 후 콜백에서 call 하지 않고 테이블 실행기에 post 된다`() {
+        val handStore = HandRecoveryFakeHandStore()
+        val tables = HandRecoveryFakeTableRepository()
+        val timerScheduler = HandRecoveryFakeTaskScheduler()
+        val posted = mutableListOf<() -> Unit>()
+        var inAfterCommit = false
+        val executor = object : TableExecutor {
+            override fun <T> call(tableId: TableId, task: () -> T): T =
+                if (inAfterCommit) throw AssertionError("afterCommit 에서 call 금지") else task()
+            override fun post(tableId: TableId, task: () -> Unit) { posted += task }
+        }
+        val connectionTimer = ConnectionTimer(timerScheduler, clock, HandRecoveryFakeUpdateSeatPresenceUseCase(), HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null), HandRecoveryFakeStandUpUseCase(), tables, InMemoryJoinQueue(), HandRecoveryFakeJoinQueueNotifier(), HandRecoveryFakeUserConnections(), executor)
+        val recovery = HandRecovery(handStore, tables, HandRecoveryFakeTaskScheduler(), clock, HandRecoveryFakeResumeHandUseCase(), HandRecoveryFakeCancelHandUseCase(), connectionTimer, nextHandTimer, executor, HandRecoveryFakeUserConnections())
+        val hand = seatTableWithHand(tables, 1L, 1, 2)
+        handStore.put(TableId(1L), hand)
+        recovery.onApplicationReady()
+
+        inAfterCommit = true
+        recovery.onHandBroadcastRequested(HandBroadcastRequested(TableId(1L), tables.findById(TableId(1L))!!, hand))
+        inAfterCommit = false
+
+        assertEquals(0, timerScheduler.scheduledCalls.size)
+        posted.single()()
+        assertEquals(2, timerScheduler.scheduledCalls.size)
+    }
+
+    @Test
+    fun `유예를 끝낼 때 한 사용자의 감시 반영이 실패해도 나머지 사용자는 감시를 받는다`() {
+        val handStore = HandRecoveryFakeHandStore()
+        val tables = HandRecoveryFakeTableRepository()
+        val timerScheduler = HandRecoveryFakeTaskScheduler()
+        var first = true
+        val failingFirst = object : UpdateSeatPresenceUseCase {
+            override fun update(command: UpdateSeatPresenceCommand) { if (first) { first = false; error("db down") } }
+        }
+        val connectionTimer = ConnectionTimer(timerScheduler, clock, failingFirst, HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null), HandRecoveryFakeStandUpUseCase(), tables, InMemoryJoinQueue(), HandRecoveryFakeJoinQueueNotifier(), HandRecoveryFakeUserConnections(), HandRecoveryFakeTableExecutor())
+        val recovery = HandRecovery(handStore, tables, HandRecoveryFakeTaskScheduler(), clock, HandRecoveryFakeResumeHandUseCase(), HandRecoveryFakeCancelHandUseCase(), connectionTimer, nextHandTimer, HandRecoveryFakeTableExecutor(), HandRecoveryFakeUserConnections())
+        val hand = seatTableWithHand(tables, 1L, 1, 2)
+        handStore.put(TableId(1L), hand)
+        recovery.onApplicationReady()
+
+        recovery.onHandBroadcastRequested(HandBroadcastRequested(TableId(1L), tables.findById(TableId(1L))!!, hand))
+
+        assertEquals(2, timerScheduler.scheduledCalls.size) // 먼저 처리된 사용자가 던져도 나머지의 감시가 걸린다
+    }
 }
