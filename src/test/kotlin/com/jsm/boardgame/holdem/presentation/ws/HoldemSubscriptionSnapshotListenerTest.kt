@@ -9,10 +9,13 @@ import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.application.port.TurnCountdown
 import com.jsm.boardgame.holdem.application.query.port.HoldemTableQueryRepository
 import com.jsm.boardgame.holdem.application.query.view.SeatLocation
+import com.jsm.boardgame.holdem.domain.model.Chips
+import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.presentation.ws.payload.JoinQueueView
+import com.jsm.boardgame.holdem.presentation.ws.payload.TablePublicView
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.data.domain.Page
@@ -24,6 +27,7 @@ import org.springframework.messaging.simp.SimpMessageHeaderAccessor
 import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.messaging.simp.stomp.StompCommand
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor
+import org.springframework.messaging.simp.broker.SimpleBrokerMessageHandler
 import org.springframework.messaging.simp.user.SimpSession
 import org.springframework.messaging.simp.user.SimpUser
 import org.springframework.messaging.simp.user.SimpUserRegistry
@@ -65,7 +69,12 @@ class HoldemSubscriptionSnapshotListenerTest {
     private class Sent(val user: String, val dest: String, val payload: Any, val headers: MessageHeaders?)
 
     private val sent = mutableListOf<Sent>()
+    private val publicSent = mutableListOf<Any>()
     private val template = object : SimpMessagingTemplate(MessageChannel { _, _ -> true }) {
+        override fun convertAndSend(destination: String, payload: Any) {
+            publicSent += payload
+        }
+
         override fun convertAndSendToUser(user: String, destination: String, payload: Any, headers: MutableMap<String, Any>?) {
             sent += Sent(user, destination, payload, headers as? MessageHeaders)
         }
@@ -235,4 +244,51 @@ class HoldemSubscriptionSnapshotListenerTest {
 
         assertThat(sent).isEmpty()
     }
+
+    @Test
+    fun `테이블 토픽 스냅샷은 인바운드 스레드에서 읽지 않고 실행기에서 seq 와 상태를 함께 읽는다`() {
+        val sequence = TableViewSequence()
+        sequence.next(table)
+        val stored = HoldemTable.create("t").apply { sitDown(user, Chips.of(1000)) }
+        var current: HoldemTable? = stored
+        val tables = Proxy.newProxyInstance(
+            HoldemTableRepository::class.java.classLoader, arrayOf(HoldemTableRepository::class.java),
+        ) { _, m, _ -> check(m.name.startsWith("findById")) { "unused" }; current } as HoldemTableRepository
+        val listener = HoldemSubscriptionSnapshotListener(
+            tables = tables,
+            handStore = nullStub<HandStore>(),
+            lastHandResults = nullStub<LastHandResultStore>(),
+            messagingTemplate = template,
+            sequence = sequence,
+            nextHandCountdown = nullStub<NextHandCountdown>(),
+            turnCountdown = nullStub<TurnCountdown>(),
+            joinQueue = unused<JoinQueue>(),
+            tableExecutor = executor,
+            tableQuery = unused<HoldemTableQueryRepository>(),
+            userRegistry = userRegistry,
+        )
+        val userName = user.value.toString()
+        val accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE).apply {
+            destination = HoldemDestinations.publicTopicOf(table.value)
+            sessionId = "sess-1"
+            this.user = Principal { userName }
+        }
+        val broker = SimpleBrokerMessageHandler(
+            ExecutorSubscribableChannel(), ExecutorSubscribableChannel(), ExecutorSubscribableChannel(), listOf("/topic"),
+        )
+        listener.afterMessageHandled(MessageBuilder.createMessage(ByteArray(0), accessor.messageHeaders), MessageChannel { _, _ -> true }, broker, null)
+
+        // 대기 중에 일어난 일어서기: seq 는 오르고 상태는 바뀐다. 스냅샷은 그 뒤의 둘을 함께 읽어야 한다.
+        assertThat(publicSent).isEmpty()
+        sequence.next(table)
+        stored.standUp(user)
+        executor.posted.single().second()
+
+        val view = publicSent.single() as TablePublicView
+        assertThat(view.seq).isEqualTo(2)
+        assertThat(view.seats).isEmpty()
+    }
+
+    private inline fun <reified T : Any> nullStub(): T =
+        Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { _, _, _ -> null } as T
 }
