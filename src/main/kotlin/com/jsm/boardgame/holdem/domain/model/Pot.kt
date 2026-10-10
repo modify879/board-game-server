@@ -41,9 +41,21 @@ object Pot {
             prevLevel = level
         }
 
+        // 자격자가 없는 층(폴드한 좌석만 채운 구간 — 체크 가능할 때의 폴드로 생긴다)은 아래 층에 합친다.
+        // 그 돈은 아래 층의 자격자가 가져간다. 맨 아래 층이 비는 경우는 폴드 안 한 좌석이 없을 때뿐이라 다루지 않는다.
+        val compacted = mutableListOf<SidePot>()
+        for (pot in rawPots) {
+            val last = compacted.lastOrNull()
+            if (pot.eligibleSeats.isEmpty() && last != null) {
+                compacted[compacted.lastIndex] = last.copy(amount = last.amount + pot.amount)
+            } else {
+                compacted += pot
+            }
+        }
+
         // 자격자 집합이 같은 인접 층은 하나로 합친다 — 폴드 때문에 쓸데없이 쪼개진 층을 정리한다.
         val merged = mutableListOf<SidePot>()
-        for (pot in rawPots) {
+        for (pot in compacted) {
             val last = merged.lastOrNull()
             if (last != null && last.eligibleSeats == pot.eligibleSeats) {
                 merged[merged.lastIndex] = last.copy(amount = last.amount + pot.amount)

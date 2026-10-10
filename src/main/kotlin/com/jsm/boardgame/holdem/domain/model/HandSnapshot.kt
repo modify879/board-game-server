@@ -46,7 +46,6 @@ data class HandSnapshot(
         val seats: List<BettingSeatSnapshot>,
         val currentBet: Chips,
         val lastRaiseSize: Chips,
-        val lastFullLevel: Chips,
         /**
          * 이번 레벨에서 이미 행동한 좌석. 없으면 복구 후 BB 옵션이 사라지고, 이미 행동한 사람이
          * 다시 레이즈할 수 있게 된다.

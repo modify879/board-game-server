@@ -14,6 +14,11 @@ spring:
       data-source-properties:
         options: "-c lock_timeout=3s -c statement_timeout=10s -c idle_in_transaction_session_timeout=30s"
 
+  jackson:
+    deserialization:
+      # 300.7 같은 소수를 정수 필드(칩·금액)에 조용히 잘라 넣지 않고 거부한다.
+      accept-float-as-int: false
+
   data:
     web:
       pageable:

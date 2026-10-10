@@ -555,4 +555,13 @@ class HoldemApiIntegrationTest {
             .andExpect(status().isUnauthorized)
             .andExpect(jsonPath("$.errorCode").value("AUTHENTICATION_REQUIRED"))
     }
+
+    @Test
+    fun `레이즈 금액에 소수점 숫자를 보내면 400과 REQUEST_INVALID 를 응답한다`() {
+        val ctx = seatedWithHandInProgress()
+
+        authPost("/api/holdem/tables/${ctx.tableId}/hands/actions", ctx.accessToken, """{"action":"RAISE_TO","raiseToAmount":300.7}""")
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("REQUEST_INVALID"))
+    }
 }
