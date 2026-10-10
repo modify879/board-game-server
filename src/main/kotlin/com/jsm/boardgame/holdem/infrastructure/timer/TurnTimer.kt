@@ -111,7 +111,12 @@ class TurnTimer(
             "차례 만료 tableId=${tableId.value}", clock,
             isStale = isStale,
             onGiveUp = { cancelRetrying(tableId, isStale) },
-        ) { tableExecutor.call(tableId) { expireTurnUseCase.expire(ExpireTurnCommand(tableId.value, seatNo)) } }
+        ) {
+            tableExecutor.call(tableId) {
+                // 큐에서 기다리는 사이 새 이벤트가 토큰을 바꿨을 수 있다 - 그러면 이 만료는 낡은 것이다.
+                if (!isStale()) expireTurnUseCase.expire(ExpireTurnCommand(tableId.value, seatNo))
+            }
+        }
     }
 
     private fun cancelRetrying(tableId: TableId, isStale: () -> Boolean) = taskScheduler.runRetrying(

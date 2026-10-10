@@ -208,6 +208,29 @@ class TurnTimerTest {
     }
 
     @Test
+    fun `실행기 큐에서 기다리는 사이 토큰이 바뀌면 만료 유스케이스를 부르지 않는다`() {
+        val scheduler = TurnTimerFakeTaskScheduler()
+        val useCase = TurnTimerFakeExpireTurnUseCase()
+        val tableId = TableId(1L)
+        val hand = handWithToAct(1 to 10_000L, 2 to 10_000L)
+        lateinit var timer: TurnTimer
+        // 토큰 검사는 통과했지만 실행기 큐에서 기다리는 사이 새 이벤트가 들어온 상황을 흉내낸다.
+        val executor = object : TableExecutor {
+            override fun <T> call(tableId: TableId, task: () -> T): T {
+                timer.commit(event(hand, tableId))
+                return task()
+            }
+            override fun post(tableId: TableId, task: () -> Unit) = task()
+        }
+        timer = TurnTimer(scheduler, clock, useCase, executor, TurnTimerFakeCancelHandUseCase())
+        timer.commit(event(hand, tableId))
+
+        scheduler.scheduledCalls[0].task.run()
+
+        assertEquals(0, useCase.calls.size)
+    }
+
+    @Test
     fun `만료가 계속 실패하면 백오프로 다시 시도하다 5번째 실패에 핸드를 취소한다`() {
         val scheduler = TurnTimerFakeTaskScheduler()
         val failing = object : ExpireTurnUseCase {
