@@ -15,6 +15,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.RejectedExecutionException
 import org.springframework.transaction.event.TransactionalEventListener
+import org.springframework.transaction.support.TransactionSynchronizationManager
 
 /**
  * [TableExecutor] 의 인메모리 구현. 단일 인스턴스 배포를 전제한다(InMemoryJoinQueue·
@@ -35,7 +36,12 @@ class SerialTableExecutor(
     private val executors = ConcurrentHashMap<TableId, ExecutorService?>()
     private val currentTableId = ThreadLocal<TableId?>()
 
+    // 트랜잭션 안·커밋 후 콜백(AFTER_COMMIT 에서도 활성 상태가 남아 있다)에서의 call 은 금지 — 커넥션을 쥔 채 기다리거나
+    // 이미 커밋된 트랜잭션에 합류해 쓰기가 사라진다. transactions.md 규칙을 런타임에 강제한다.
     override fun <T> call(tableId: TableId, task: () -> T): T {
+        check(!TransactionSynchronizationManager.isActualTransactionActive()) {
+            "트랜잭션 안·커밋 후 콜백에서 TableExecutor.call 은 금지입니다 — post 를 쓰세요: tableId=${tableId.value}"
+        }
         if (currentTableId.get() == tableId) {
             return task()
         }
