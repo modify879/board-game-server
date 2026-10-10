@@ -199,6 +199,9 @@ class HoldemTable private constructor(
      * 직전 핸드가 헤즈업이었으면(버튼==SB, [smallBlindSeatNo] 로 판별) 새 SB 는 직전 BB 고, 새 버튼은
      * "직전 SB" 가 아니라 새 SB 바로 앞(좌석 번호 오름차순 기준 직전) 참가 좌석이다 — 헤즈업에서는
      * 버튼이 곧 SB 였으므로 그 값을 그대로 쓰면 새로 정해진 BB 와 좌석이 겹칠 수 있다.
+     *
+     * 직전 SB 와 새 BB 가 같은 좌석이면(그 사이 좌석들이 새로 차고 직전 BB 가 나가 BB 가 한 바퀴 돌아 직전 SB 로
+     * 온 경우) dead button 을 유지할 수 없어, 헤즈업 뒤와 같은 규칙으로 새 버튼을 새 SB(직전 BB) 바로 앞 참가 좌석으로 정한다.
      */
     private fun fullRingPositions(sorted: List<Int>): Triple<Int, Int, Int> {
         val prevBigBlind = bigBlindSeatNo
@@ -213,6 +216,10 @@ class HoldemTable private constructor(
         }
 
         val prevSmallBlind = smallBlindSeatNo ?: sorted.last()
+        if (prevSmallBlind == newBigBlind) {
+            val newButton = sorted.lastOrNull { it < prevBigBlind } ?: sorted.last()
+            return Triple(newButton, prevBigBlind, newBigBlind)
+        }
         return Triple(prevSmallBlind, prevBigBlind, newBigBlind)
     }
 

@@ -487,6 +487,33 @@ class HandStarterTest {
     }
 
     @Test
+    fun `직전 SB 좌석이 새 BB 로 돌아와도 핸드가 시작되고 버튼이 BB 와 겹치지 않는다`() {
+        // sitDown 은 가장 낮은 빈 좌석에 앉히므로, 7석을 채운 뒤 2·3·5·6 을 비워 1·4·7 만 남긴다
+        val tableId = tableWithSeats(*(1..7).map { it to 10_000L }.toTypedArray())
+        val seated = tables.findById(tableId)!!
+        listOf(2L, 3L, 5L, 6L).forEach { seated.standUp(UserId(it)) }
+        tables.save(seated)
+        start(tableId) // 1핸드: BB=1
+        handStore.remove(tableId)
+        start(tableId) // 2핸드: 버튼 7, SB 1, BB 4
+        handStore.remove(tableId)
+
+        val table = tables.findById(tableId)!!
+        table.standUp(UserId(4L))
+        table.standUp(UserId(7L))
+        tables.save(table)
+        sitDownChoosing(tableId, seatNo = 2, buyIn = 10_000L, postBlindImmediately = false)
+        sitDownChoosing(tableId, seatNo = 3, buyIn = 10_000L, postBlindImmediately = false)
+
+        start(tableId) // 3핸드: 후보 {1,2,3} 은 완화 규칙으로 모두 딜인
+
+        val saved = tables.findById(tableId)!!
+        assertEquals(1, saved.bigBlindSeatNo)
+        assertEquals(3, saved.buttonSeatNo)
+        assertNotNull(handStore.find(tableId))
+    }
+
+    @Test
     fun `기립 후 즉시 포스팅으로 재입장한 좌석은 명목 SB·버튼을 지나야 딜인된다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L, 4 to 10_000L)
         start(tableId) // 1핸드: BB=1
