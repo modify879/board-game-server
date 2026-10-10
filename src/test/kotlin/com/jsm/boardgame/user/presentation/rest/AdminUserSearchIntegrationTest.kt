@@ -18,8 +18,9 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import java.time.Instant
 
-/** 관리자의 회원 목록·검색 API(`GET /api/admin/users`) 통합 테스트. */
+/** 관리자의 회원 목록·검색·단건 API(`GET /api/admin/users`, `GET /api/admin/users/{id}`) 통합 테스트. */
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
@@ -134,6 +135,53 @@ class AdminUserSearchIntegrationTest {
         signUp(username, "n" + UniqueNames.suffix())
 
         search(login(username))
+            .andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"))
+    }
+
+    private fun getOne(token: String, id: Long): ResultActions =
+        mockMvc.perform(get("/api/admin/users/$id").header("Authorization", "Bearer $token"))
+
+    @Test
+    fun `단건 조회는 목록 항목과 같은 모양을 돌려준다`() {
+        val token = adminToken()
+        val username = "u" + UniqueNames.suffix()
+        val id = signUp(username, "n" + UniqueNames.suffix())
+
+        getOne(token, id)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.id").value(id))
+            .andExpect(jsonPath("$.username").value(username))
+            .andExpect(jsonPath("$.role").value("USER"))
+            .andExpect(jsonPath("$.locked").value(false))
+    }
+
+    @Test
+    fun `잠긴 회원은 locked 가 true 다`() {
+        val token = adminToken()
+        val id = signUp("u" + UniqueNames.suffix(), "n" + UniqueNames.suffix())
+        val user = userRepository.findById(UserId(id))!!
+        user.lock(Instant.now())
+        userRepository.save(user)
+
+        getOne(token, id)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.locked").value(true))
+    }
+
+    @Test
+    fun `없는 회원 단건 조회는 404 USER_NOT_FOUND 다`() {
+        getOne(adminToken(), 999_999_999L)
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.errorCode").value("USER_NOT_FOUND"))
+    }
+
+    @Test
+    fun `관리자가 아니면 단건 조회는 403 ACCESS_DENIED 다`() {
+        val username = "u" + UniqueNames.suffix()
+        val id = signUp(username, "n" + UniqueNames.suffix())
+
+        getOne(login(username), id)
             .andExpect(status().isForbidden)
             .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"))
     }
