@@ -284,6 +284,46 @@ class HoldemTableTest {
     }
 
     @Test
+    fun `직전 SB 좌석이 새 BB 로 돌아와도 버튼이 BB 와 겹치지 않는다`() {
+        val table = HoldemTable.reconstitute(
+            id = TableId(1L),
+            name = "t",
+            smallBlind = HoldemTable.SMALL_BLIND,
+            bigBlind = HoldemTable.BIG_BLIND,
+            buttonSeatNo = 7,
+            seats = emptyMap(),
+            smallBlindSeatNo = 1,
+            bigBlindSeatNo = 4, // 직전 BB(4)·버튼(7)은 나가고 2·3 이 새로 앉았다
+        )
+
+        val positions = table.advanceBlinds(setOf(1, 2, 3))
+
+        assertEquals(1, positions.bigBlindSeatNo)
+        assertEquals(3, positions.buttonSeatNo)        // 새 SB(4) 바로 앞 참가 좌석
+        assertEquals(null, positions.smallBlindSeatNo) // 직전 BB(4) 가 없어 dead small blind
+    }
+
+    @Test
+    fun `직전 BB 만 남고 새 좌석이 끼어들어도 버튼이 BB 와 겹치지 않는다`() {
+        val table = HoldemTable.reconstitute(
+            id = TableId(1L),
+            name = "t",
+            smallBlind = HoldemTable.SMALL_BLIND,
+            bigBlind = HoldemTable.BIG_BLIND,
+            buttonSeatNo = 7,
+            seats = emptyMap(),
+            smallBlindSeatNo = 1,
+            bigBlindSeatNo = 4, // 버튼(7)이 나가고 2 가 새로 앉았다
+        )
+
+        val positions = table.advanceBlinds(setOf(1, 2, 4))
+
+        assertEquals(1, positions.bigBlindSeatNo)
+        assertEquals(2, positions.buttonSeatNo)
+        assertEquals(4, positions.smallBlindSeatNo)
+    }
+
+    @Test
     fun `직전 BB 좌석이 비면 아무도 SB 를 내지 않는 dead small blind 다`() {
         val table = HoldemTable.reconstitute(
             id = TableId(1L),
