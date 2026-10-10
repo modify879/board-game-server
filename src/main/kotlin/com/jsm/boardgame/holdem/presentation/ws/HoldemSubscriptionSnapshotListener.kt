@@ -108,9 +108,14 @@ class HoldemSubscriptionSnapshotListener(
 
         val tableId = TableId(rawTableId)
 
-        // 상태를 읽기 전에 seq 를 먼저 읽는다(증가시키지 않는다) — 증가시키면, 지금 커밋
-        // 직전인 트랜잭션이 곧 내보낼 더 새로운 상태가 여기서 먼저 딴 더 낮은 seq 로 나가버려
-        // 클라이언트가 그 갱신을 old 로 오판해 버린다.
+        // seq·상태 읽기와 전송을 테이블 실행기에서 한다. HandBroadcaster 는 BEFORE_COMMIT 에서 seq 를 따므로
+        // 인바운드 스레드에서 읽으면 seq 는 올랐는데 상태는 아직 커밋 전인 틈을 읽어, 같은 seq 에 다른 상태가
+        // 나갈 수 있다. 상태를 바꾸는 쓰기(커밋 포함)는 전부 이 실행기에서 돌아 읽는 순간 그 틈에 낀 트랜잭션이
+        // 없다 — 같은 seq 는 같은 상태다. 인바운드 스레드는 막지 않는다(post).
+        tableExecutor.post(tableId) { sendTableSnapshot(tableId, rawTableId, destination, userId) }
+    }
+
+    private fun sendTableSnapshot(tableId: TableId, rawTableId: Long, destination: String, userId: UserId) {
         val seq = sequence.current(tableId)
         val table = tables.findById(tableId) ?: run {
             // 닫혔거나 없는 테이블이다. 닫힘 알림을 놓친 클라이언트가 재구독하면 빈 화면에 영원히
