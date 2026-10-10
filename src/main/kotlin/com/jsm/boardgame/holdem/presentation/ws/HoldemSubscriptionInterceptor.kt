@@ -24,7 +24,8 @@ import org.springframework.stereotype.Component
  * 없다.
  *
  * 개인 큐(/user/queue/tables/{id})는 여전히 좌석에 묶인다 — SeatPrivateView 는 자기 홀카드를
- * 담으므로, 그 테이블에 앉은 사용자만 구독할 수 있어야 한다.
+ * 담으므로, 그 테이블에 앉은 사용자만 구독할 수 있어야 한다. 착석자가 아니면 ERROR 없이 SUBSCRIBE 를
+ * 조용히 버린다(null) — 연결은 유지되고 구독만 성립하지 않는다.
  *
  * 착석 대기열 채널(/user/queue/holdem/join-queue)은 좌석 검사가 없다 — 공개 토픽과 인가 강도는
  * 같지만(인증만 있으면 됨), convertAndSendToUser 로 사용자별로 배달된다는 점이 다르다. 아직
@@ -40,7 +41,7 @@ class HoldemSubscriptionInterceptor(
     private val holdemTableQueryRepository: HoldemTableQueryRepository,
 ) : ChannelInterceptor {
 
-    override fun preSend(message: Message<*>, channel: MessageChannel): Message<*> {
+    override fun preSend(message: Message<*>, channel: MessageChannel): Message<*>? {
         val accessor = StompHeaderAccessor.wrap(message)
         if (accessor.command != StompCommand.SUBSCRIBE) return message
 
@@ -74,8 +75,10 @@ class HoldemSubscriptionInterceptor(
 
         val seat = holdemTableQueryRepository.findSeatOf(userId)
         if (seat == null || seat.tableId != tableId) {
+            // 구독 직후 바로 일어서는 클라이언트는 이 검사와 경합한다 — 그걸로 연결 전체(공개 토픽·대기열
+            // 구독까지)를 끊는 건 과하다. 버려도 개인 데이터는 나가지 않으니 fail-closed 는 유지된다.
             log.warn("subscribe rejected: userId={} is not seated at tableId={}", userId, tableId)
-            throw PermissionDeniedException("앉지 않은 테이블은 구독할 수 없다")
+            return null
         }
 
         return message
