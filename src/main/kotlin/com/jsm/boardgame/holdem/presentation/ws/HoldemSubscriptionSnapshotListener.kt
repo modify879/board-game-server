@@ -2,11 +2,13 @@ package com.jsm.boardgame.holdem.presentation.ws
 
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.TurnCountdown
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
+import com.jsm.boardgame.holdem.presentation.ws.payload.JoinQueueView
 import com.jsm.boardgame.holdem.presentation.ws.payload.TableClosedView
 import com.jsm.boardgame.holdem.presentation.ws.payload.privateViewOf
 import com.jsm.boardgame.holdem.presentation.ws.payload.publicViewOf
@@ -64,6 +66,7 @@ class HoldemSubscriptionSnapshotListener(
     private val sequence: TableViewSequence,
     private val nextHandCountdown: NextHandCountdown,
     private val turnCountdown: TurnCountdown,
+    private val joinQueue: JoinQueue,
 ) : ExecutorChannelInterceptor {
 
     override fun afterMessageHandled(message: Message<*>, channel: MessageChannel, handler: MessageHandler, ex: Exception?) {
@@ -73,6 +76,12 @@ class HoldemSubscriptionSnapshotListener(
         if (accessor.command != StompCommand.SUBSCRIBE) return
 
         val destination = accessor.destination ?: return
+        if (destination == HoldemDestinations.joinQueueDestination()) {
+            if (handler !is UserDestinationMessageHandler) return
+            val userId = accessor.user?.name?.toLongOrNull()?.let(::UserId) ?: return
+            sendJoinQueueSnapshot(userId)
+            return
+        }
         val rawTableId = HoldemDestinations.tableIdOf(destination) ?: return
 
         // 이 핸들러가 방금 처리를 "끝냈다" 는 게 실제로 그 destination 의 구독을 등록한
@@ -119,5 +128,25 @@ class HoldemSubscriptionSnapshotListener(
                 privateViewOf(tableId, seat.seatNo, hand, seq),
             )
         }
+    }
+
+    /**
+     * join-queue 채널 스냅샷. SUBSCRIBE 와 착석 REST 요청의 도착 순서가 보장되지 않고 심플 브로커는
+     * SUBSCRIBE 에 RECEIPT 를 주지 않아, 구독 전에 나간 POSITION/SEATED 는 유실된다 — 지금 상태를 다시 보낸다.
+     * DROPPED 는 저장된 상태가 없어 재전송할 수 없다. 오래 안 오면 클라이언트가 `GET /api/holdem/me/seat`
+     * (MySeatQueryService)로 확인한다.
+     */
+    private fun sendJoinQueueSnapshot(userId: UserId) {
+        val queuedAt = joinQueue.tableOf(userId)
+        val view = if (queuedAt != null) {
+            val position = joinQueue.entriesOf(queuedAt).indexOfFirst { it.userId == userId } + 1
+            if (position == 0) return
+            JoinQueueView.Position(queuedAt.value, position)
+        } else {
+            val table = tables.findByUserId(userId) ?: return
+            val seat = table.seatOf(userId) ?: return
+            JoinQueueView.Seated(table.id!!.value, seat.seatNo)
+        }
+        messagingTemplate.convertAndSendToUser(userId.value.toString(), HoldemDestinations.joinQueueSendTargetOf(), view)
     }
 }
