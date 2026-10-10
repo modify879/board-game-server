@@ -55,7 +55,7 @@ class BettingRoundTest {
     }
 
     @Test
-    fun `짧은 올인이 쌓여 풀 레이즈 이상이 되면 다시 열린다`() {
+    fun `짧은 올인이 쌓여도 이미 행동한 좌석은 자기 기준 풀 레이즈 미만이면 레이즈할 수 없고 아직 행동하지 않은 좌석은 레이즈할 수 있다`() {
         val round = BettingRound.preflop(
             seats = listOf(seat(1, 100_000), seat(2, 100_000), seat(3, 300), seat(4, 100_000), seat(5, 400)),
             smallBlind = chips(100),
@@ -65,15 +65,73 @@ class BettingRoundTest {
             firstToActSeatNo = 3,
         )
 
-        round.act(3, BettingAction.RaiseTo(chips(300))) // 짧은 올인, 증분 100 < 200, 안 열림
+        round.act(3, BettingAction.RaiseTo(chips(300))) // 짧은 올인, 증분 100 < 200
         round.act(4, BettingAction.Call)
-        assertFalse(round.canRaise(4))
-
-        round.act(5, BettingAction.RaiseTo(chips(400))) // 400 - 200(lastFullLevel) = 200 >= 200 -> 재오픈
+        round.act(5, BettingAction.RaiseTo(chips(400))) // 짧은 올인, 4번은 100 만 마주한다
 
         assertEquals(chips(400), round.currentBet)
-        assertEquals(chips(600), round.minRaiseTo) // 400 + 200
-        assertTrue(round.canRaise(4))
+        assertEquals(chips(600), round.minRaiseTo) // 400 + 200 (lastRaiseSize 는 그대로)
+        assertTrue(round.canRaise(1))
+        assertTrue(round.canRaise(2))
+        assertEquals(1, round.toActSeatNo)
+        round.act(1, BettingAction.Call)
+        round.act(2, BettingAction.Call)
+        assertEquals(4, round.toActSeatNo)
+        assertFalse(round.canRaise(4)) // 300 에서 행동 후 400 까지 100 < 200
+        assertNull(round.availableActionsFor(4)!!.minRaiseTo)
+        val e = assertFailsWith<IllegalBettingActionException> { round.act(4, BettingAction.RaiseTo(chips(600))) }
+        assertEquals(HoldemErrorCode.RAISE_NOT_ALLOWED, e.errorCode)
+    }
+
+    @Test
+    fun `짧은 올인 두 개로 이미 행동한 좌석이 자기 기준 풀 레이즈 이상을 마주하면 다시 레이즈할 수 있다`() {
+        val round = BettingRound.open(
+            seats = listOf(seat(1, 100_000), seat(2, 300), seat(3, 400), seat(4, 100_000)),
+            bigBlind = chips(200),
+            firstToActSeatNo = 1,
+        )
+
+        round.act(1, BettingAction.RaiseTo(chips(200))) // 풀 베팅 200
+        round.act(2, BettingAction.RaiseTo(chips(300))) // 짧은 올인
+        round.act(3, BettingAction.RaiseTo(chips(400))) // 짧은 올인
+        round.act(4, BettingAction.Call)
+
+        assertEquals(1, round.toActSeatNo)
+        assertTrue(round.canRaise(1)) // 400 - 200 = 200 >= 200
+        assertEquals(chips(600), round.minRaiseTo)
+        assertEquals(chips(600), round.availableActionsFor(1)!!.minRaiseTo)
+    }
+
+    @Test
+    fun `나머지가 전부 올인이고 유일한 ACTIVE 좌석이 이미 콜 이상이면 라운드는 시작부터 끝나 있다`() {
+        val round = BettingRound.preflop(
+            seats = listOf(seat(1, 100), seat(2, 10_000)),
+            smallBlind = chips(100),
+            bigBlind = chips(200),
+            sbSeatNo = 1,
+            bbSeatNo = 2,
+            firstToActSeatNo = 1,
+        )
+
+        assertTrue(round.isComplete)
+        assertNull(round.toActSeatNo)
+    }
+
+    @Test
+    fun `다른 ACTIVE 좌석이 없으면 베팅을 마주한 좌석은 콜과 폴드만 할 수 있다`() {
+        val round = BettingRound.open(
+            seats = listOf(seat(1, 10_000), seat(2, 500)),
+            bigBlind = chips(200),
+            firstToActSeatNo = 2,
+        )
+        round.act(2, BettingAction.RaiseTo(chips(500))) // 올인
+
+        assertEquals(1, round.toActSeatNo)
+        val actions = round.availableActionsFor(1)!!
+        assertEquals(chips(500), actions.callAmount)
+        assertNull(actions.minRaiseTo)
+        val e = assertFailsWith<IllegalBettingActionException> { round.act(1, BettingAction.RaiseTo(chips(1_000))) }
+        assertEquals(HoldemErrorCode.RAISE_NOT_ALLOWED, e.errorCode)
     }
 
     @Test

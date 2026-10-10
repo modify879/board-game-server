@@ -357,6 +357,35 @@ class HandTest {
     }
 
     @Test
+    fun `헤즈업에서 SB 가 블라인드로 올인하고 BB 가 이미 콜 이상이면 BB 차례 없이 런아웃으로 간다`() {
+        val hand = Hand.start(stacksOf(1 to 100, 2 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, chips(100), chips(200), identityShuffler)
+
+        assertTrue(hand.isRunningOut)
+        assertEquals(null, hand.toActSeatNo)
+        while (hand.isRunningOut) hand.advanceRunout()
+        assertTrue(hand.isFinished)
+        assertEquals(chips(10_100), sumStacks(listOf(1, 2), hand))
+    }
+
+    @Test
+    fun `올인 두 명과 남은 둘 중 한 명이 폴드해 한 명만 남으면 그 좌석 차례 없이 런아웃으로 가고 칩이 보존된다`() {
+        // 버튼=2, SB=3, BB=4, UTG=1. 시드: 1=100, 2=300, 3=5000, 4=5000
+        val hand = Hand.start(stacksOf(1 to 100, 2 to 300, 3 to 5_000, 4 to 5_000), buttonSeatNo = 2, smallBlindSeatNo = 3, bigBlindSeatNo = 4, chips(100), chips(200), identityShuffler)
+
+        hand.act(1, BettingAction.Call) // 100 올인
+        hand.act(2, BettingAction.RaiseTo(chips(300))) // 짧은 올인
+        hand.act(3, BettingAction.RaiseTo(chips(1_000)))
+        hand.act(4, BettingAction.Call)
+        assertEquals(Street.FLOP, hand.street)
+        hand.act(3, BettingAction.Fold) // 체크 가능한 폴드
+
+        assertTrue(hand.isRunningOut)
+        while (hand.isRunningOut) hand.advanceRunout()
+        assertTrue(hand.isFinished)
+        assertEquals(chips(10_400), sumStacks(listOf(1, 2, 3, 4), hand))
+    }
+
+    @Test
     fun `dead small blind 핸드는 아무도 SB 를 내지 않고 BB 는 정상 포스팅되며 currentBet 이 풀 빅블라인드다`() {
         val hand = Hand.start(
             stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000),

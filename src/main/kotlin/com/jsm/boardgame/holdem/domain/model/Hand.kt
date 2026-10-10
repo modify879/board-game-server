@@ -377,7 +377,6 @@ class Hand private constructor(
                     seats = round.seats.map { BettingSeat(it.seatNo, it.stack, it.committed, it.status) },
                     currentBet = round.currentBet,
                     lastRaiseSize = round.lastRaiseSize,
-                    lastFullLevel = round.lastFullLevel,
                     actedSinceLastFullRaise = round.actedSinceLastFullRaise,
                     toActSeatNo = round.toActSeatNo,
                     lastAggressorSeatNo = round.lastAggressorSeatNo,

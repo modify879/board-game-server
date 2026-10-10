@@ -3,6 +3,7 @@ package com.jsm.boardgame.holdem.domain.model
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class PotTest {
 
@@ -143,5 +144,18 @@ class PotTest {
         assertEquals(c(600), result[4]) // 3번째 사이드팟 승자
         assertNull(result[3])
         assertEquals(layout.totalPotAmount(), result.total())
+    }
+
+    @Test
+    fun `폴드한 좌석만 채운 최상위 층은 아래 층의 자격자 팟에 합쳐져 자격자가 빈 팟이 없다`() {
+        val contributions = mapOf(1 to c(100), 2 to c(300), 3 to c(1000), 4 to c(1000))
+        val layout = Pot.layout(contributions, folded = setOf(3, 4))
+
+        assertEquals(c(2400), layout.totalPotAmount())
+        assertTrue(layout.pots.all { it.eligibleSeats.isNotEmpty() })
+        assertEquals(SidePot(c(2000), setOf(2)), layout.pots.last())
+
+        val result = Pot.distribute(layout.pots, mapOf(1 to rank(HandCategory.PAIR, 5), 2 to rank(HandCategory.HIGH_CARD, 9)), listOf(1, 2, 3, 4))
+        assertEquals(c(2400), result.total())
     }
 }

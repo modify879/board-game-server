@@ -59,17 +59,13 @@ class BettingRound private constructor(
     val seats: List<BettingSeat>,
     currentBet: Chips,
     lastRaiseSize: Chips,
-    lastFullLevel: Chips,
     firstToActSeatNo: Int,
 ) {
     var currentBet: Chips = currentBet
         private set
 
-    /** 마지막 풀 레이즈(또는 재오픈한 짧은 올인)의 증분. 다음 최소 레이즈 = currentBet + 이 값. */
+    /** 이 라운드의 가장 큰 풀 베팅/레이즈 증분(짧은 올인은 바꾸지 않는다, TDA 43). 다음 최소 레이즈 = currentBet + 이 값. */
     private var lastRaiseSize: Chips = lastRaiseSize
-
-    /** 마지막으로 액션이 열린(풀 레이즈 또는 재오픈) 시점의 currentBet. 짧은 올인 누적분 재오픈 판정 기준선. */
-    private var lastFullLevel: Chips = lastFullLevel
 
     /** 이 집합에 있으면 그 좌석은 지금 레벨에서 이미 행동했다 — 다시 레이즈할 수 없다. */
     private val actedSinceLastFullRaise = mutableSetOf<Int>()
@@ -96,11 +92,10 @@ class BettingRound private constructor(
         seats: List<BettingSeat>,
         currentBet: Chips,
         lastRaiseSize: Chips,
-        lastFullLevel: Chips,
         actedSinceLastFullRaise: Set<Int>,
         toAct: Int?,
         lastAggressorSeatNo: Int?,
-    ) : this(seats, currentBet, lastRaiseSize, lastFullLevel, toAct ?: seats.firstOrNull()?.seatNo ?: 0) {
+    ) : this(seats, currentBet, lastRaiseSize, toAct ?: seats.firstOrNull()?.seatNo ?: 0) {
         this.actedSinceLastFullRaise.clear()
         this.actedSinceLastFullRaise.addAll(actedSinceLastFullRaise)
         this.toAct = toAct
@@ -111,7 +106,16 @@ class BettingRound private constructor(
     val toActSeatNo: Int? get() = toAct
     val isComplete: Boolean get() = toAct == null
 
-    fun canRaise(seatNo: Int): Boolean = seatNo !in actedSinceLastFullRaise
+    /**
+     * 이미 행동한 좌석은 자기 마지막 행동 이후 풀 레이즈 이상을 마주해야 다시 레이즈할 수 있다(TDA 43).
+     * 짧은 올인이 여럿 쌓여도 table-wide 로 재오픈하지 않고 좌석별 격차로만 판정한다.
+     * 차례를 받을 수 있는 다른 ACTIVE 좌석이 없으면 레이즈는 의미가 없어 콜/폴드만 가능하다.
+     */
+    fun canRaise(seatNo: Int): Boolean {
+        val seat = seatOf(seatNo)
+        if (seats.none { it.status == SeatStatus.ACTIVE && it.seatNo != seatNo }) return false
+        return seatNo !in actedSinceLastFullRaise || currentBet - seat.committed >= lastRaiseSize
+    }
 
     /** 차례인 좌석이 지금 할 수 있는 것. 차례가 아니면 null. 판정은 act() 의 검증과 정확히 같아야 한다. */
     fun availableActionsFor(seatNo: Int): AvailableActions? {
@@ -137,7 +141,6 @@ class BettingRound private constructor(
         seats = seats.map { HandSnapshot.BettingSeatSnapshot(it.seatNo, it.stack, it.committed, it.status) },
         currentBet = currentBet,
         lastRaiseSize = lastRaiseSize,
-        lastFullLevel = lastFullLevel,
         actedSinceLastFullRaise = actedSinceLastFullRaise.toSet(),
         toActSeatNo = toAct,
         lastAggressorSeatNo = lastAggressorSeatNo,
@@ -198,20 +201,12 @@ class BettingRound private constructor(
             // 자발적 풀 레이즈 — 액션을 완전히 새로 연다.
             lastRaiseSize = amount - currentBet
             currentBet = amount
-            lastFullLevel = amount
             actedSinceLastFullRaise.clear()
             actedSinceLastFullRaise.add(seat.seatNo)
         } else {
-            // 풀 레이즈에 못 미치는 올인. 짧은 올인이 누적되어 lastFullLevel 대비 풀 레이즈 이상 쌓이면 재오픈된다.
+            // 풀 레이즈에 못 미치는 올인 — 레벨만 올리고 lastRaiseSize 는 그대로 둔다. 재오픈은 canRaise 가 좌석별로 판정한다.
             currentBet = amount
-            if (amount - lastFullLevel >= lastRaiseSize) {
-                lastRaiseSize = amount - lastFullLevel
-                lastFullLevel = amount
-                actedSinceLastFullRaise.clear()
-                actedSinceLastFullRaise.add(seat.seatNo)
-            } else {
-                actedSinceLastFullRaise.add(seat.seatNo)
-            }
+            actedSinceLastFullRaise.add(seat.seatNo)
         }
     }
 
@@ -220,6 +215,8 @@ class BettingRound private constructor(
         if (contenders.size <= 1) return true
         val activeSeats = seats.filter { it.status == SeatStatus.ACTIVE }
         if (activeSeats.isEmpty()) return true
+        // 나머지가 전부 올인/폴드이고 유일한 ACTIVE 좌석이 이미 콜 이상이면 응답할 사람이 없다.
+        if (activeSeats.size == 1 && activeSeats[0].committed >= currentBet) return true
         return activeSeats.all { it.committed == currentBet && it.seatNo in actedSinceLastFullRaise }
     }
 
@@ -247,7 +244,6 @@ class BettingRound private constructor(
                 seats = seats.sortedBy { it.seatNo },
                 currentBet = Chips.ZERO,
                 lastRaiseSize = bigBlind,
-                lastFullLevel = Chips.ZERO,
                 firstToActSeatNo = firstToActSeatNo,
             )
 
@@ -289,7 +285,6 @@ class BettingRound private constructor(
                 seats = sorted,
                 currentBet = bigBlind,
                 lastRaiseSize = bigBlind,
-                lastFullLevel = bigBlind,
                 firstToActSeatNo = firstToActSeatNo,
             )
         }
@@ -301,7 +296,6 @@ class BettingRound private constructor(
             seats: List<BettingSeat>,
             currentBet: Chips,
             lastRaiseSize: Chips,
-            lastFullLevel: Chips,
             actedSinceLastFullRaise: Set<Int>,
             toActSeatNo: Int?,
             lastAggressorSeatNo: Int?,
@@ -309,7 +303,6 @@ class BettingRound private constructor(
             seats.sortedBy { it.seatNo },
             currentBet,
             lastRaiseSize,
-            lastFullLevel,
             actedSinceLastFullRaise,
             toActSeatNo,
             lastAggressorSeatNo,
