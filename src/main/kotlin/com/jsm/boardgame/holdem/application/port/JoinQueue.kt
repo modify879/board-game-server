@@ -25,6 +25,11 @@ interface JoinQueue {
 
     /** userId 가 대기 중인 테이블. 대기 중이 아니면 null. */
     fun tableOf(userId: UserId): TableId?
+
+    /** userId 의 대기 테이블과 1-based 순번을 단일 락으로 한 번에 읽는다. 대기 중이 아니면 null. */
+    fun positionOf(userId: UserId): QueuePosition?
 }
+
+data class QueuePosition(val tableId: TableId, val position: Int)
 
 data class JoinQueueEntry(val userId: UserId, val postBlindImmediately: Boolean)

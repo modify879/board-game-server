@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.infrastructure.queue
 
 import com.jsm.boardgame.holdem.application.event.TableClosed
+import com.jsm.boardgame.holdem.application.port.QueuePosition
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.TableId
@@ -105,5 +106,18 @@ class InMemoryJoinQueueTest {
         assertTrue(queue.entriesOf(TableId(1L)).isEmpty())
         assertFalse(queue.isQueued(UserId(100L)))
         assertTrue(queue.isQueued(UserId(200L)))
+    }
+
+    @Test
+    fun `positionOf 는 테이블과 1-based 순번을 한 번에 돌려주고 제거 후에는 null 이다`() {
+        val queue = InMemoryJoinQueue()
+        queue.enqueue(TableId(1L), UserId(100L), false)
+        queue.enqueue(TableId(1L), UserId(200L), false)
+
+        assertEquals(QueuePosition(TableId(1L), 2), queue.positionOf(UserId(200L)))
+        queue.removeByUserId(UserId(100L))
+        assertEquals(QueuePosition(TableId(1L), 1), queue.positionOf(UserId(200L)))
+        queue.removeByUserId(UserId(200L))
+        assertNull(queue.positionOf(UserId(200L)))
     }
 }
