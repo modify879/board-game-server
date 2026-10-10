@@ -63,6 +63,8 @@ class NextHandTimer(
     }
 
     override fun cancel(tableId: TableId) {
+        // 토큰도 올린다 - 실패 경로의 restart 가 취소 뒤에 카운트다운을 되살리지 못하게 한다.
+        tokens[tableId]?.incrementAndGet()
         scheduled.remove(tableId)?.future?.cancel(false)
     }
 
@@ -82,12 +84,22 @@ class NextHandTimer(
     // scheduled 항목은 시작 시도 직전에 치우므로 시도 중에 카운트다운이 남아 보이지 않는다.
     // 실패하면 이 시작을 대신할 이벤트가 없어 테이블이 영영 논다 — 일반 카운트다운을 다시 걸어
     // (cancel()/remaining() 도 그대로 동작) 카운트다운 주기로 계속 재시도한다.
+    // 다시 거는 판단은 실행기 안에서 한다 - 스케줄러 스레드에서 하면 그 사이 끼어든 cancel() 을 못 본다.
+    // 시작 유스케이스가 자기 안에서 cancel() 로 토큰을 올리므로(HandStarter) 토큰이 아니라 "예약이 비었는가" 로 본다 -
+    // 직렬 실행이라 이 구간에 남이 끼어들지 못하고, 시작 중 다른 곳이 다시 걸었다면 예약이 남아 있다.
     private fun onFire(tableId: TableId, token: Long) {
         try {
             tableExecutor.call(tableId) {
                 if (tokens[tableId]?.get() != token) return@call
                 scheduled.remove(tableId)
-                startScheduledHandUseCase.start(StartScheduledHandCommand(tableId.value))
+                try {
+                    startScheduledHandUseCase.start(StartScheduledHandCommand(tableId.value))
+                } catch (e: InterruptedException) {
+                    throw e
+                } catch (e: Exception) {
+                    log.error("다음 핸드 시작에 실패해 카운트다운을 다시 겁니다: tableId={}", tableId.value, e)
+                    if (scheduled[tableId] == null) rearm(tableId)
+                }
             }
         } catch (e: InterruptedException) {
             // 종료 중 스케줄러가 인터럽트한 것이다 — 다시 걸지 않는다
@@ -95,12 +107,16 @@ class NextHandTimer(
         } catch (e: Exception) {
             log.error("다음 핸드 시작에 실패해 카운트다운을 다시 겁니다: tableId={}", tableId.value, e)
             if (tokens[tableId]?.get() != token) return
-            try {
-                restart(tableId)
-            } catch (r: TaskRejectedException) {
-                // 컨텍스트 종료 중에는 다시 걸 이유가 없고, 이를 ERROR로 두면 진짜 ERROR가 묻힌다
-                log.debug("컨텍스트 종료 중이라 다음 핸드 예약을 걸지 못했습니다: tableId={}", tableId.value)
-            }
+            rearm(tableId)
+        }
+    }
+
+    private fun rearm(tableId: TableId) {
+        try {
+            restart(tableId)
+        } catch (r: TaskRejectedException) {
+            // 컨텍스트 종료 중에는 다시 걸 이유가 없고, 이를 ERROR로 두면 진짜 ERROR가 묻힌다
+            log.debug("컨텍스트 종료 중이라 다음 핸드 예약을 걸지 못했습니다: tableId={}", tableId.value)
         }
     }
 

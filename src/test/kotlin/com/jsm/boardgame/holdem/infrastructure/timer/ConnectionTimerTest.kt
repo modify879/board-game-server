@@ -146,8 +146,13 @@ private class ConnectionTimerFakeTableExecutor : TableExecutor {
 private class ConnectionTimerFakeHoldemTableRepository : HoldemTableRepository {
     val seatedUserIds = mutableListOf<UserId>()
 
+    /** 사용자별로 앉은 테이블 id 를 돌려준다. 기본은 모두 테이블 1 에 앉아 있다 - null 을 돌려주게 하면 미착석이다. */
+    var tableIdOf: (UserId) -> TableId? = { TableId(1L) }
+
     override fun findById(id: TableId): HoldemTable? = null
-    override fun findByUserId(userId: UserId): HoldemTable? = null
+    override fun findByUserId(userId: UserId): HoldemTable? = tableIdOf(userId)?.let {
+        HoldemTable.reconstitute(id = it, name = "t", smallBlind = Chips.of(100), bigBlind = Chips.of(200), buttonSeatNo = null, seats = emptyMap())
+    }
 
     override fun save(table: HoldemTable): HoldemTable = table
     override fun findAllSeatedUserIds(): List<UserId> = seatedUserIds
@@ -704,15 +709,19 @@ class ConnectionTimerTest {
         val tableId = TableId(7L)
         val standUp = ConnectionTimerFakeStandUpUseCase()
         val posted = mutableListOf<() -> Unit>()
+        var inAfterCommit = false
         val executor = object : TableExecutor {
-            override fun <T> call(tableId: TableId, task: () -> T): T = throw AssertionError("afterCommit 에서 call 금지")
+            override fun <T> call(tableId: TableId, task: () -> T): T =
+                if (inAfterCommit) throw AssertionError("afterCommit 에서 call 금지") else task()
             override fun post(tableId: TableId, task: () -> Unit) { posted += task }
         }
         val timer = newTimer(scheduler, ConnectionTimerFakeUpdateSeatPresenceUseCase(), ConnectionTimerFakeExpireConnectionUseCase(tableId), standUp, executor = executor)
         timer.onSessionDisconnect(disconnectEvent(42L))
         scheduler.scheduledCalls[0].task.run()
 
+        inAfterCommit = true
         timer.onHandBroadcastRequested(HandBroadcastRequested(tableId, HoldemTable.create("t"), finishedHand()))
+        inAfterCommit = false
 
         assertEquals(0, standUp.calls.size)
         assertEquals(1, posted.size)
@@ -735,5 +744,78 @@ class ConnectionTimerTest {
         timer.onHandBroadcastRequested(HandBroadcastRequested(tableId, HoldemTable.create("t"), finishedHand()))
 
         assertEquals(scheduledBefore, scheduler.scheduledCalls.size)
+    }
+
+    @Test
+    fun `post 로 넘어간 사이 재접속한 사용자는 예약된 퇴장에서 빠진다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        val tableId = TableId(7L)
+        val standUp = ConnectionTimerFakeStandUpUseCase()
+        val posted = mutableListOf<() -> Unit>()
+        val executor = object : TableExecutor {
+            override fun <T> call(tableId: TableId, task: () -> T): T = task()
+            override fun post(tableId: TableId, task: () -> Unit) { posted += task }
+        }
+        val timer = newTimer(scheduler, ConnectionTimerFakeUpdateSeatPresenceUseCase(), ConnectionTimerFakeExpireConnectionUseCase(tableId), standUp, executor = executor)
+        timer.onSessionDisconnect(disconnectEvent(42L))
+        scheduler.scheduledCalls[0].task.run()
+        timer.onHandBroadcastRequested(HandBroadcastRequested(tableId, HoldemTable.create("t"), finishedHand()))
+
+        timer.onSessionConnected(connectedEvent(42L)) // post 한 작업이 돌기 전에 재접속한다
+        posted.single()()
+
+        assertEquals(0, standUp.calls.size)
+    }
+
+    @Test
+    fun `실행기 큐에서 기다리는 사이 재접속하면 만료 처리를 하지 않는다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        val expire = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
+        lateinit var timer: ConnectionTimer
+        var expiring = false
+        val executor = object : TableExecutor {
+            override fun <T> call(tableId: TableId, task: () -> T): T {
+                if (expiring) timer.cancelWatch(UserId(42L)) // 큐에서 기다리는 사이 재접속이 끼어든다
+                return task()
+            }
+            override fun post(tableId: TableId, task: () -> Unit) = task()
+        }
+        timer = newTimer(scheduler, ConnectionTimerFakeUpdateSeatPresenceUseCase(), expire, ConnectionTimerFakeStandUpUseCase(), executor = executor)
+        timer.onSessionDisconnect(disconnectEvent(42L))
+
+        expiring = true
+        scheduler.scheduledCalls[0].task.run()
+
+        assertEquals(0, expire.calls.size)
+    }
+
+    @Test
+    fun `테이블을 찾은 뒤 다른 테이블로 옮겨 갔으면 실행기 안에서 다시 찾아 그 테이블의 실행기에서 돈다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        val presence = ConnectionTimerFakeUpdateSeatPresenceUseCase()
+        val called = mutableListOf<TableId>()
+        var lookups = 0
+        tables.tableIdOf = { if (lookups++ < 1) TableId(1L) else TableId(2L) } // 첫 조회 뒤 2번 테이블로 옮겨 간다
+        val executor = object : TableExecutor {
+            override fun <T> call(tableId: TableId, task: () -> T): T { called += tableId; return task() }
+            override fun post(tableId: TableId, task: () -> Unit) = task()
+        }
+        val timer = newTimer(scheduler, presence, ConnectionTimerFakeExpireConnectionUseCase(null), ConnectionTimerFakeStandUpUseCase(), executor = executor)
+
+        timer.onSessionConnected(connectedEvent(42L))
+
+        assertEquals(listOf(TableId(1L), TableId(2L)), called)
+        assertEquals(1, presence.calls.size)
+    }
+
+    @Test
+    fun `앉아 있지 않은 사용자의 presence 갱신은 실행기 밖에서도 돌지 않는다`() {
+        val presence = ConnectionTimerFakeUpdateSeatPresenceUseCase()
+        tables.tableIdOf = { null }
+        val timer = newTimer(ConnectionTimerFakeTaskScheduler(), presence, ConnectionTimerFakeExpireConnectionUseCase(null), ConnectionTimerFakeStandUpUseCase())
+
+        timer.onSessionConnected(connectedEvent(42L))
+
+        assertEquals(0, presence.calls.size)
     }
 }

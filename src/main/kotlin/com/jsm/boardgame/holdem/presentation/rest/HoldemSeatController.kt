@@ -5,6 +5,8 @@ import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpUseCase
 import com.jsm.boardgame.holdem.application.port.TableExecutor
+import com.jsm.boardgame.holdem.application.port.callForUser
+import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.application.query.service.MySeatQueryService
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.presentation.rest.response.MySeatResponse
@@ -20,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController
 
 // 한 사람은 한 자리이므로 기립은 tableId 없이 유저로 유일하게 찾힌다. path variable 이 없어
 // tableId 를 직접 찾아야 하므로(HoldemTableRepository 를 여기서 직접 읽는다 - 전례:
-// HoldemSubscriptionSnapshotListener) 앉아 있지 않은 경우엔 실행기를 거칠 테이블이 없다.
+// HoldemSubscriptionSnapshotListener) 앉아 있지 않은 경우엔 실행기를 거칠 테이블이 없어 NotSeatedException 을 바로 던진다.
 @RestController
 @RequestMapping("/api/holdem")
 class HoldemSeatController(
@@ -34,12 +36,11 @@ class HoldemSeatController(
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun standUp(@AuthenticationPrincipal jwt: Jwt) {
         val userId = jwt.requireUserId()
-        val tableId = tables.findByUserId(UserId(userId))?.id
-        if (tableId != null) {
-            tableExecutor.call(tableId) { standUpUseCase.standUp(StandUpCommand(userId)) }
-        } else {
-            standUpUseCase.standUp(StandUpCommand(userId))
-        }
+        // 앉아 있지 않은 사용자의 기립은 NotSeatedException 뿐이다(StandUpService) — 실행기 밖에서 유스케이스를 돌리지 않고 같은 오류를 던진다.
+        tableExecutor.callForUser(
+            tables, UserId(userId),
+            onNotSeated = { throw NotSeatedException("어느 테이블에도 앉아 있지 않은 사용자입니다: userId=$userId") },
+        ) { standUpUseCase.standUp(StandUpCommand(userId)) }
     }
 
     // 이 조회는 언제나 허용된다 (MySeatQueryService KDoc 참고) — 여기에 차단 로직을 얹지 않는다.
