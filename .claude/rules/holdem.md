@@ -33,7 +33,7 @@ paths: ["**/holdem/**"]
   오지 않아 턴 타이머로는 못 치운다
 - **관전은 공개 토픽 구독이다. 서버에 관전자 상태를 두지 않는다.** `/topic/tables/{id}` 는 인증된
   사용자면 누구나 구독할 수 있고, `/user/queue/tables/{id}` 는 **그 테이블 착석자만** 구독할 수
-  있다. 공개 토픽을 여는 것이 안전한 이유는 `TablePublicView` 에 홀카드를 담을 필드가 (`ShownHandView`·`RevealedHandView`
+  있다(착석자가 아니면 SUBSCRIBE 를 조용히 버린다 — WARN 로그, ERROR 없음, 연결 유지). 공개 토픽을 여는 것이 안전한 이유는 `TablePublicView` 에 홀카드를 담을 필드가 (`ShownHandView`·`RevealedHandView`
   둘을 빼면) 없기 때문이다 — 그래서 **그 예외 밖에서 카드 성격의 필드를 추가하는 순간 관전이 곧
   정보 유출이 된다**
 - **올인으로 더 베팅할 수 없으면 남은 보드를 한 번에 깔지 않는다.** `RunoutTimer` 가 `runout-step-delay` 간격으로 한 스트리트씩

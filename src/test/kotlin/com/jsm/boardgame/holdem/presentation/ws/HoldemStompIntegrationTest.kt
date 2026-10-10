@@ -210,7 +210,7 @@ class HoldemStompIntegrationTest {
     /** 착석 처리(ProcessJoinRequestsService)는 이제 TableExecutor.post 로 비동기 디스패치된다
      *  (JoinRequestsProcessor) — 202 응답이 돌아온 시점에 아직 안 끝났을 수 있어, 실제 착석을
      *  기다린다. 개인 큐 구독 인가는 실제로 앉아 있어야 통과하므로 이 대기가 없으면 간헐적으로
-     *  ACCESS_DENIED 로 실패할 수 있다. */
+     *  구독이 조용히 버려질 수 있다. */
     private fun awaitSeated(userId: Long, timeoutMs: Long = 5_000) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
@@ -471,7 +471,7 @@ class HoldemStompIntegrationTest {
     }
 
     @Test
-    fun `관전자는 개인 큐를 구독할 수 없고 ACCESS_DENIED 를 응답한다`() {
+    fun `관전자의 개인 큐 구독은 조용히 무시되고 연결은 유지된다`() {
         val target = seatNewUser()
         val (_, spectatorToken) = signUpAndLogin()
         val (session, handler) = tryConnect(spectatorToken)
@@ -479,8 +479,12 @@ class HoldemStompIntegrationTest {
 
         session.subscribe(HoldemDestinations.privateQueueOf(target.tableId), noOpFrameHandler())
 
-        val errorHeaders = handler.errorFrames.poll(5, TimeUnit.SECONDS)
-        assertThat(errorHeaders?.getFirst("errorCode")).isEqualTo("ACCESS_DENIED")
+        assertThat(handler.errorFrames.poll(300, TimeUnit.MILLISECONDS)).isNull()
+        assertThat(session.isConnected).isTrue()
+        // 연결이 살아 있어 같은 테이블의 공개 토픽은 계속 구독된다.
+        val (publicHandler, publicQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.publicTopicOf(target.tableId), publicHandler)
+        assertThat(publicQueue.poll(5, TimeUnit.SECONDS)).isNotNull()
     }
 
     @Test
@@ -508,16 +512,22 @@ class HoldemStompIntegrationTest {
     }
 
     @Test
-    fun `남의 개인 큐를 구독하면 거부되고 ACCESS_DENIED 를 응답한다`() {
+    fun `남의 개인 큐 구독은 조용히 무시되고 연결은 유지된다`() {
         val target = seatNewUser()
         val other = seatNewUser()
         val (session, handler) = tryConnect(other.accessToken)
         checkNotNull(session)
 
-        session.subscribe(HoldemDestinations.privateQueueOf(target.tableId), noOpFrameHandler())
+        val (privateHandler, privateQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.privateQueueOf(target.tableId), privateHandler)
 
-        val errorHeaders = handler.errorFrames.poll(5, TimeUnit.SECONDS)
-        assertThat(errorHeaders?.getFirst("errorCode")).isEqualTo("ACCESS_DENIED")
+        assertThat(handler.errorFrames.poll(300, TimeUnit.MILLISECONDS)).isNull()
+        assertThat(session.isConnected).isTrue()
+        val (publicHandler, publicQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.publicTopicOf(target.tableId), publicHandler)
+        assertThat(publicQueue.poll(5, TimeUnit.SECONDS)).isNotNull()
+        // 공개 스냅샷까지 처리된 뒤에도 버려진 개인 구독으로는 아무것도 오지 않는다.
+        assertThat(privateQueue.poll(300, TimeUnit.MILLISECONDS)).isNull()
     }
 
     @Test

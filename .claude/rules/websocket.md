@@ -11,6 +11,8 @@ paths:
      열어두면 세션 id 만 알아도 남의 개인 큐를 엿본다
    - 구독 인가 인터셉터는 목적지를 해석하지 못하면 거부한다(fail-closed). 통과시키면 형식만 비튼 목적지로
      인가를 건너뛴다
+   - 인가 실패 중 경합으로 생길 수 있는 것(개인 큐 착석 검사)은 ERROR 대신 SUBSCRIBE 를 버린다(null) — ERROR 는
+     연결을 끊는다. 형식 오류는 그대로 ERROR
    - **CONNECT 프레임에서 `StompHeaderAccessor.wrap(message)` 로 `setUser` 하지 않는다.** `wrap` 은 새 인스턴스를
      만들어 `StompSubProtocolHandler` 가 건 `setUserChangeCallback` 이 없다 — 세션에 반영되지 않아 이후 모든
      프레임에서 principal 이 null 이다. `MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor::class.java)`
