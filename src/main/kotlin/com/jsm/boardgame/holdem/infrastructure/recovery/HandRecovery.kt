@@ -9,6 +9,8 @@ import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.TableExecutor
+import com.jsm.boardgame.holdem.application.port.UserConnections
+import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.infrastructure.timer.ConnectionTimer
@@ -80,6 +82,7 @@ class HandRecovery(
     private val connectionTimer: ConnectionTimer,
     private val nextHandCountdown: NextHandCountdown,
     private val tableExecutor: TableExecutor,
+    private val userConnections: UserConnections,
 ) {
     private class PendingRecovery(
         val allUserIds: Set<UserId>,
@@ -136,6 +139,14 @@ class HandRecovery(
             return
         }
 
+        // Tomcat 은 Ready 전에 접속을 받는다 - 이미 연결된 사람은 SessionConnectedEvent 가 다시 오지 않으므로 기다리면 안 된다.
+        val awaiting = allUserIds.filterNot { userConnections.isConnected(it) }
+        if (awaiting.isEmpty()) {
+            log.info("테이블 {} 복구 대상 전원이 이미 연결돼 있어 바로 재개합니다.", tableId.value)
+            resumeOrCancel(tableId)
+            return
+        }
+
         connectionTimer.suspendWatch(allUserIds)
 
         pending.remove(tableId)?.future?.cancel(false)
@@ -146,7 +157,7 @@ class HandRecovery(
         )
         pending[tableId] = PendingRecovery(
             allUserIds = allUserIds,
-            awaitingUserIds = ConcurrentHashMap.newKeySet<UserId>().apply { addAll(allUserIds) },
+            awaitingUserIds = ConcurrentHashMap.newKeySet<UserId>().apply { addAll(awaiting) },
             future = future,
         )
         log.info("테이블 {} 복구 유예(3분)를 시작합니다: 대기 사용자={}", tableId.value, allUserIds)
@@ -175,14 +186,7 @@ class HandRecovery(
     }
 
     private fun completeRecovery(tableId: TableId, resume: Boolean) {
-        val recovery = pending.remove(tableId) ?: return
-        recovery.future.cancel(false)
-
-        // 돌아온 사람은 유예를 해제하고, 유예 시간 안에 안 돌아온 사람은 지금부터 3분 연결
-        // 타이머를 새로 건다 - 재개든 취소든 이 규칙 하나로 충분하다(재개면 awaitingUserIds 가
-        // 이미 비어 있어 전원이 해제만 되고, 취소면 그 남은 사람들이 감시를 새로 받는다).
-        (recovery.allUserIds - recovery.awaitingUserIds).forEach { connectionTimer.cancelWatch(it) }
-        recovery.awaitingUserIds.forEach { connectionTimer.beginWatch(it) }
+        if (!finishRecovery(tableId)) return
 
         if (resume) {
             log.info("테이블 {} 전원 재접속을 확인해 핸드를 재개합니다.", tableId.value)
@@ -191,6 +195,35 @@ class HandRecovery(
             log.info("테이블 {} 복구 유예 시간 안에 전원이 돌아오지 않아 핸드를 취소합니다.", tableId.value)
             cancelRetrying(tableId)
         }
+    }
+
+    /**
+     * 유예 중에 핸드가 다시 살아났다(플레이어가 액션해 [HandBroadcastRequested] 가 났다) - 3분 뒤 타임아웃이
+     * 그 뒤의 핸드를 취소하면 안 되므로 재개·취소 없이 유예만 끝낸다. 재개 유스케이스가 내는 이벤트는
+     * [completeRecovery] 가 pending 을 먼저 지운 뒤라 여기서 아무것도 못 찾는다. 커밋 후 콜백이라 던지지 않는다.
+     */
+    @TransactionalEventListener
+    fun onHandBroadcastRequested(event: HandBroadcastRequested) {
+        try {
+            if (finishRecovery(event.tableId)) log.info("테이블 {} 복구 유예 중 핸드가 다시 진행되어 유예를 끝냅니다.", event.tableId.value)
+        } catch (e: Exception) {
+            log.error("복구 유예 종료 처리에 실패했습니다: tableId={}", event.tableId.value, e)
+        }
+    }
+
+    /** 유예를 걷어내고 감시를 반영한다. 유예 중이 아니었으면 false. */
+    private fun finishRecovery(tableId: TableId): Boolean {
+        val recovery = pending.remove(tableId) ?: return false
+        recovery.future.cancel(false)
+        tokens[tableId]?.incrementAndGet()
+
+        // 돌아온 사람은 유예를 해제하고, 안 돌아온 사람은 지금부터 3분 연결 타이머를 새로 건다.
+        // 돌아왔다가 유예 중에 다시 끊긴 사람(그 끊김은 무시됐다)도 연결이 없으니 감시를 새로 받는다.
+        (recovery.allUserIds - recovery.awaitingUserIds).forEach {
+            if (userConnections.isConnected(it)) connectionTimer.cancelWatch(it) else connectionTimer.beginWatch(it)
+        }
+        recovery.awaitingUserIds.forEach { connectionTimer.beginWatch(it) }
+        return true
     }
 
     // 재개가 안 되면 핸드가 DB 에 남은 채 멈춘다 — 다시 걸고, 그래도 안 되면 취소·환불한다(그것도 다시 건다).

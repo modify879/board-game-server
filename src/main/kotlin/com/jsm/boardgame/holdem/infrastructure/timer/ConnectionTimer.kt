@@ -13,6 +13,7 @@ import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.application.port.UserConnections
+import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
@@ -112,7 +113,8 @@ class ConnectionTimer(
     fun onSessionDisconnect(event: SessionDisconnectEvent) {
         val userId = event.user?.name?.toLongOrNull()?.let(::UserId) ?: return
 
-        if (!userConnections.hasOtherSession(userId, event.sessionId)) {
+        val hasOtherSession = userConnections.hasOtherSession(userId, event.sessionId)
+        if (!hasOtherSession) {
             val queuedTableId = joinQueue.tableOf(userId)
             if (queuedTableId != null) {
                 tableExecutor.call(queuedTableId) {
@@ -122,6 +124,8 @@ class ConnectionTimer(
             }
         }
 
+        // 다른 탭·기기가 살아 있으면 연결이 끊긴 게 아니다 - DISCONNECTED 표시도 3분 퇴장 타이머도 걸지 않는다.
+        if (hasOtherSession) return
         // 복구 유예 중에는 이 타이머가 돌지 않는다 - 서버 다운타임은 플레이어 책임이 아니다.
         if (userId in suspended) return
         beginWatch(userId)
@@ -188,7 +192,8 @@ class ConnectionTimer(
             rearmWatch(userId, token)
             return
         }
-        if (reservedTableId != null) {
+        // 만료 트랜잭션이 도는 사이 재접속했다면 토큰이 바뀌고 예약도 이미 지워졌다 - 다시 넣지 않는다.
+        if (reservedTableId != null && tokens[userId]?.get() == token) {
             pendingStandUps.computeIfAbsent(reservedTableId) { ConcurrentHashMap.newKeySet() }.add(userId)
         }
     }
@@ -205,11 +210,16 @@ class ConnectionTimer(
         val userIds = pendingStandUps.remove(event.tableId) ?: return
         // 퇴장을 시도하기 전의 토큰을 잡아둔다 — 시도 중에 감시가 바뀌었는지 rearmWatch 가 비교할 기준이다.
         val tokensBefore = userIds.associateWith { tokens[it]?.get() }
-        tableExecutor.call(event.tableId) {
+        // 커밋 직후 콜백이라 이 스레드는 아직 JDBC 커넥션을 쥐고 있다 - call 로 인라인 실행하면 StandUpService 가
+        // 이미 커밋된 트랜잭션에 합류해 쓰기가 사라진다. post 로 커넥션이 풀린 뒤 테이블 스레드에서 돈다.
+        tableExecutor.post(event.tableId) {
             for (userId in userIds) {
                 try {
                     standUpUseCase.standUp(StandUpCommand(userId.value))
                     log.info("핸드 종료로 예약된 퇴장을 실행했습니다: userId={}, tableId={}", userId, event.tableId.value)
+                } catch (e: NotSeatedException) {
+                    // 이미 치워졌다(예: 차례 만료 폴드 뒤 퇴장) - 할 일이 끝난 것이라 실패가 아니다.
+                    log.info("예약된 퇴장 대상이 이미 앉아 있지 않습니다: userId={}, tableId={}", userId, event.tableId.value)
                 } catch (e: Exception) {
                     // 한 명의 실패가 나머지 퇴장을 버리면 안 된다 — 일반 3분 감시로 되돌려 자가 치유한다.
                     log.error("예약된 퇴장에 실패했습니다: userId={}, tableId={}", userId, event.tableId.value, e)
