@@ -394,6 +394,18 @@ class HoldemApiIntegrationTest {
     }
 
     @Test
+    fun `마지막 사람이 일어서면 스윕을 기다리지 않고 테이블이 바로 닫힌다`() {
+        val ctx = seatedWithoutHand()
+
+        authDelete("/api/holdem/seat", ctx.accessToken)
+            .andExpect(status().isNoContent)
+
+        val deadline = System.currentTimeMillis() + 5_000
+        while (holdemTableRepository.findById(TableId(ctx.tableId)) != null && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        assertThat(holdemTableRepository.findById(TableId(ctx.tableId))).isNull()
+    }
+
+    @Test
     fun `미착석 사용자의 기립은 404와 NOT_SEATED 를 응답한다`() {
         val (_, accessToken) = signUpAndLogin()
 
@@ -585,6 +597,11 @@ class HoldemApiIntegrationTest {
     @Test
     fun `떠난 직후의 바이인 조회는 가져간 금액으로 올라간 하한과 의무 만료 시각을 응답한다`() {
         val ctx = seatedWithoutHand()
+        // 마지막 사람이 떠나면 테이블이 닫혀 404 가 되므로 다른 사람을 남겨 둔다
+        val (otherId, otherToken) = signUpAndLogin()
+        fundWallet(otherId, 10_000)
+        sitDown(otherToken, ctx.tableId).andExpect(status().isAccepted)
+        awaitSeated(otherId)
         authDelete("/api/holdem/seat", ctx.accessToken).andExpect(status().isNoContent)
 
         authGet("/api/holdem/tables/${ctx.tableId}/buy-in", ctx.accessToken)
