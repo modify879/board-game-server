@@ -6,6 +6,7 @@ import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
 import com.jsm.boardgame.holdem.application.port.JoinQueue
+import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -403,6 +404,23 @@ class HoldemApiIntegrationTest {
         val deadline = System.currentTimeMillis() + 5_000
         while (holdemTableRepository.findById(TableId(ctx.tableId)) != null && System.currentTimeMillis() < deadline) Thread.sleep(20)
         assertThat(holdemTableRepository.findById(TableId(ctx.tableId))).isNull()
+    }
+
+    @Test
+    fun `마지막 사람이 일어설 때 대기열에 사람이 있으면 그 사람이 앉고 테이블은 닫히지 않는다`() {
+        val ctx = seatedWithoutHand()
+        val (waiterId, waiterToken) = signUpAndLogin()
+        fundWallet(waiterId, 10_000)
+        connectStomp(waiterToken)
+        // 실전에선 핸드 중에만 대기열이 차므로, 이벤트 없이 포트로 직접 넣는다
+        joinQueue.enqueue(TableId(ctx.tableId), UserId(waiterId), postBlindImmediately = false, buyIn = Chips.of(10_000))
+
+        authDelete("/api/holdem/seat", ctx.accessToken)
+            .andExpect(status().isNoContent)
+
+        awaitSeated(waiterId)
+        assertThat(holdemTableRepository.findById(TableId(ctx.tableId))).isNotNull()
+        assertThat(holdemTableRepository.findByUserId(UserId(waiterId))?.id).isEqualTo(TableId(ctx.tableId))
     }
 
     @Test
