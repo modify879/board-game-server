@@ -11,7 +11,7 @@ import org.springframework.transaction.annotation.Transactional
 
 /**
  * 좌석은 고르지 않는다 — 모든 착석 요청은 대기열에 들어가고(FIFO), ProcessJoinRequestsService
- * 가 커밋 후 트리거를 받아 가장 낮은 빈 좌석에 순서대로 앉힌다. 바이인(지갑 잔액 전부) 이체는 좌석 배정
+ * 가 커밋 후 트리거를 받아 가장 낮은 빈 좌석에 순서대로 앉힌다. 바이인(사용자가 고른 금액) 이체는 좌석 배정
  * 시점(AdmitJoinRequestService)에만 일어난다 — 사전 조건 검사와 삽입은 [SeatRequester] 가 한다(테이블 생성과 공유).
  *
  * @Transactional 은 DB 를 쓰지 않아도 유지한다 — 커밋 시점이 있어야 `JoinRequestsDue` 를
@@ -32,6 +32,6 @@ class SitDownService(
     override fun sitDown(command: SitDownCommand): Int {
         val table = tables.findById(TableId(command.tableId))
             ?: throw TableNotFoundException("존재하지 않는 테이블입니다: tableId=${command.tableId}")
-        return seatRequester.request(table, UserId(command.userId), command.postBlindImmediately)
+        return seatRequester.request(table, UserId(command.userId), command.postBlindImmediately, command.buyIn)
     }
 }

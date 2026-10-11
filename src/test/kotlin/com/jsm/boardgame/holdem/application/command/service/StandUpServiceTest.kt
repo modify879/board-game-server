@@ -3,6 +3,7 @@ package com.jsm.boardgame.holdem.application.command.service
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
+import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
@@ -73,8 +74,8 @@ private class StandUpFakeWalletTransfer : WalletTransfer {
 
     val fromGameCalls = mutableListOf<FromGameCall>()
 
-    override fun allToGame(userId: UserId, tableId: TableId, memo: String?): Long {
-        error("StandUp 는 allToGame 을 부르지 않는다")
+    override fun toGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) {
+        error("StandUp 는 toGame 을 부르지 않는다")
     }
 
     override fun fromGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) {
@@ -98,7 +99,8 @@ class StandUpServiceTest {
     private val eventPublisher = StandUpFakeEventPublisher()
     private val countdown = StandUpFakeNextHandCountdown()
     private val handStarter = HandStarter(tables, handStore, StandUpServiceFakeLastHandResultStore(), Shuffler { it }, eventPublisher, countdown)
-    private val service = StandUpService(tables, handStore, walletTransfer, handStarter, eventPublisher)
+    private val departures = FakeRecentDepartures()
+    private val service = StandUpService(tables, handStore, walletTransfer, handStarter, departures, eventPublisher)
 
     @Test
     fun `기립하면 좌석이 비고 스택이 지갑으로 돌아간다`() {
@@ -113,6 +115,7 @@ class StandUpServiceTest {
         assertEquals(1L, call.userId)
         assertEquals(8_000L, call.amount)
         assertEquals(saved.id, call.tableId)
+        assertEquals(listOf(UserId(1) to Chips.of(8_000)), departures.recorded)
         assertTrue(eventPublisher.events.any { it is JoinRequestsDue && it.tableId == saved.id })
     }
 

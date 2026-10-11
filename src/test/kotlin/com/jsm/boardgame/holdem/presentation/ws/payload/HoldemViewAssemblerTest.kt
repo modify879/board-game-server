@@ -648,7 +648,7 @@ class HoldemViewAssemblerTest {
             table.bigBlind,
             identityShuffler,
         )
-        table.topUp(2, Chips.of(5_000)) // 지갑 입금분이 좌석에 합쳐진 상태
+        table.addChips(2, Chips.of(5_000)) // 칩 추가가 반영된 상태
         val running = publicViewOf(TableId(1), table, hand, null, 1L, null, null)
         assertEquals(10_000L - 200L, running.seats.single { it.seatNo == 2 }.stack)
 

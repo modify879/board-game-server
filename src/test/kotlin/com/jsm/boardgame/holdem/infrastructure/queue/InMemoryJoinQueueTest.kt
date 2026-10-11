@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.queue
 
+import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.port.QueuePosition
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
@@ -20,9 +21,9 @@ class InMemoryJoinQueueTest {
         val queue = InMemoryJoinQueue()
         val tableId = TableId(1L)
 
-        val position1 = queue.enqueue(tableId, UserId(100L), false)
-        val position2 = queue.enqueue(tableId, UserId(200L), false)
-        val position3 = queue.enqueue(tableId, UserId(300L), false)
+        val position1 = queue.enqueue(tableId, UserId(100L), false, Chips.of(8_000))
+        val position2 = queue.enqueue(tableId, UserId(200L), false, Chips.of(8_000))
+        val position3 = queue.enqueue(tableId, UserId(300L), false, Chips.of(8_000))
 
         assertEquals(1, position1)
         assertEquals(2, position2)
@@ -37,10 +38,10 @@ class InMemoryJoinQueueTest {
         val tableB = TableId(2L)
         val userId = UserId(100L)
 
-        queue.enqueue(tableA, userId, false)
+        queue.enqueue(tableA, userId, false, Chips.of(8_000))
 
         val exception = assertFailsWith<AlreadySeatedException> {
-            queue.enqueue(tableB, userId, false)
+            queue.enqueue(tableB, userId, false, Chips.of(8_000))
         }
         assertEquals(HoldemErrorCode.ALREADY_SEATED, exception.errorCode)
     }
@@ -53,9 +54,9 @@ class InMemoryJoinQueueTest {
         val userB = UserId(200L)
         val userC = UserId(300L)
 
-        queue.enqueue(tableId, userA, false)
-        queue.enqueue(tableId, userB, false)
-        queue.enqueue(tableId, userC, false)
+        queue.enqueue(tableId, userA, false, Chips.of(8_000))
+        queue.enqueue(tableId, userB, false, Chips.of(8_000))
+        queue.enqueue(tableId, userC, false, Chips.of(8_000))
 
         val removedTableId = queue.removeByUserId(userA)
 
@@ -72,8 +73,8 @@ class InMemoryJoinQueueTest {
 
         assertNull(queue.peekHead(neverUsedTableId))
 
-        queue.enqueue(tableId, UserId(100L), false)
-        queue.enqueue(tableId, UserId(200L), false)
+        queue.enqueue(tableId, UserId(100L), false, Chips.of(8_000))
+        queue.enqueue(tableId, UserId(200L), false, Chips.of(8_000))
 
         assertEquals(UserId(100L), queue.peekHead(tableId)?.userId)
     }
@@ -87,7 +88,7 @@ class InMemoryJoinQueueTest {
 
         assertFalse(queue.isQueued(userId))
 
-        queue.enqueue(tableId, userId, false)
+        queue.enqueue(tableId, userId, false, Chips.of(8_000))
         assertTrue(queue.isQueued(userId))
         assertFalse(queue.isQueued(neverQueuedUserId))
 
@@ -98,8 +99,8 @@ class InMemoryJoinQueueTest {
     @Test
     fun `테이블이 닫히면 그 테이블의 대기열과 사용자 색인을 함께 치운다`() {
         val queue = InMemoryJoinQueue()
-        queue.enqueue(TableId(1L), UserId(100L), false)
-        queue.enqueue(TableId(2L), UserId(200L), false)
+        queue.enqueue(TableId(1L), UserId(100L), false, Chips.of(8_000))
+        queue.enqueue(TableId(2L), UserId(200L), false, Chips.of(8_000))
 
         queue.onTableClosed(TableClosed(TableId(1L)))
 
@@ -111,8 +112,8 @@ class InMemoryJoinQueueTest {
     @Test
     fun `positionOf 는 테이블과 1-based 순번을 한 번에 돌려주고 제거 후에는 null 이다`() {
         val queue = InMemoryJoinQueue()
-        queue.enqueue(TableId(1L), UserId(100L), false)
-        queue.enqueue(TableId(1L), UserId(200L), false)
+        queue.enqueue(TableId(1L), UserId(100L), false, Chips.of(8_000))
+        queue.enqueue(TableId(1L), UserId(200L), false, Chips.of(8_000))
 
         assertEquals(QueuePosition(TableId(1L), 2), queue.positionOf(UserId(200L)))
         queue.removeByUserId(UserId(100L))

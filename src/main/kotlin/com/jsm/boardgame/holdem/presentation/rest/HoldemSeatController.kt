@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.presentation.rest
 
 import com.jsm.boardgame.common.error.AuthenticationRequiredException
 import com.jsm.boardgame.holdem.domain.model.UserId
+import com.jsm.boardgame.holdem.application.command.usecase.AddChipsUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpUseCase
 import com.jsm.boardgame.holdem.application.port.TableExecutor
@@ -9,6 +10,7 @@ import com.jsm.boardgame.holdem.application.port.callForUser
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.application.query.service.MySeatQueryService
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
+import com.jsm.boardgame.holdem.presentation.rest.request.AddChipsRequest
 import com.jsm.boardgame.holdem.presentation.rest.response.MySeatResponse
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -16,6 +18,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
@@ -27,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/holdem")
 class HoldemSeatController(
     private val standUpUseCase: StandUpUseCase,
+    private val addChipsUseCase: AddChipsUseCase,
     private val mySeatQueryService: MySeatQueryService,
     private val tableExecutor: TableExecutor,
     private val tables: HoldemTableRepository,
@@ -41,6 +46,17 @@ class HoldemSeatController(
             tables, UserId(userId),
             onNotSeated = { throw NotSeatedException("어느 테이블에도 앉아 있지 않은 사용자입니다: userId=$userId") },
         ) { standUpUseCase.standUp(StandUpCommand(userId)) }
+    }
+
+    // 칩 추가도 기립처럼 tableId 없이 유저로 테이블을 찾아 그 실행기에서 돌린다(앉아 있지 않으면 NotSeatedException).
+    @PostMapping("/seat/chips")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun addChips(@AuthenticationPrincipal jwt: Jwt, @RequestBody request: AddChipsRequest) {
+        val userId = jwt.requireUserId()
+        tableExecutor.callForUser(
+            tables, UserId(userId),
+            onNotSeated = { throw NotSeatedException("어느 테이블에도 앉아 있지 않은 사용자입니다: userId=$userId") },
+        ) { addChipsUseCase.addChips(request.toCommand(userId)) }
     }
 
     // 이 조회는 언제나 허용된다 (MySeatQueryService KDoc 참고) — 여기에 차단 로직을 얹지 않는다.

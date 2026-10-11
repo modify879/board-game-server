@@ -30,6 +30,7 @@ enum class HoldemErrorCode(override val kind: ErrorKind) : ErrorCode {
     NOT_SEATED(ErrorKind.NOT_FOUND),
     JOIN_REQUEST_NOT_FOUND(ErrorKind.NOT_FOUND),
     BUY_IN_OUT_OF_RANGE(ErrorKind.INVALID),
+    CHIP_ADD_OUT_OF_RANGE(ErrorKind.INVALID),
     TABLE_NOT_FOUND(ErrorKind.NOT_FOUND),
     TABLE_FULL(ErrorKind.CONFLICT),
     TABLE_NOT_EMPTY(ErrorKind.CONFLICT),
@@ -37,6 +38,8 @@ enum class HoldemErrorCode(override val kind: ErrorKind) : ErrorCode {
     HAND_NOT_FOUND(ErrorKind.NOT_FOUND),
     UNKNOWN_ACTION(ErrorKind.INVALID),
     NOT_CONNECTED(ErrorKind.CONFLICT),
+    // wallet 의 INSUFFICIENT_BALANCE 와 코드 문자열이 같다 — 클라이언트가 하나만 처리하도록 일부러 맞춘다.
+    INSUFFICIENT_BALANCE(ErrorKind.CONFLICT),
     ;
 
     override val code: String get() = name

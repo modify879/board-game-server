@@ -112,7 +112,7 @@ class CloseIdleTableServiceTest {
     @Test
     fun `대기열이 비어 있지 않으면 아무것도 하지 않는다`() {
         val id = emptyTable()
-        joinQueue.enqueue(id, userId = UserId(1L), postBlindImmediately = false)
+        joinQueue.enqueue(id, userId = UserId(1L), postBlindImmediately = false, buyIn = Chips.of(8_000))
 
         assertFalse(service.close(CloseIdleTableCommand(id.value)))
 

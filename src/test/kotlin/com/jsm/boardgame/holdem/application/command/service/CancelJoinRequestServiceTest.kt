@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.common.error.ErrorCode
 import com.jsm.boardgame.holdem.application.command.usecase.CancelJoinRequestCommand
 import com.jsm.boardgame.holdem.application.exception.JoinRequestNotFoundException
@@ -41,8 +42,8 @@ class CancelJoinRequestServiceTest {
         val notifier = CancelJoinRequestFakeJoinQueueNotifier()
         val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
         val tableId = TableId(1L)
-        queue.enqueue(tableId, userId = UserId(1L), postBlindImmediately = false)
-        queue.enqueue(tableId, userId = UserId(2L), postBlindImmediately = false)
+        queue.enqueue(tableId, userId = UserId(1L), postBlindImmediately = false, buyIn = Chips.of(8_000))
+        queue.enqueue(tableId, userId = UserId(2L), postBlindImmediately = false, buyIn = Chips.of(8_000))
 
         service.cancel(CancelJoinRequestCommand(tableId.value, userId = 1L))
 
@@ -68,8 +69,8 @@ class CancelJoinRequestServiceTest {
         val notifier = CancelJoinRequestFakeJoinQueueNotifier()
         val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
         val tableId = TableId(1L)
-        queue.enqueue(tableId, userId = UserId(1L), postBlindImmediately = false)
-        queue.enqueue(tableId, userId = UserId(2L), postBlindImmediately = false)
+        queue.enqueue(tableId, userId = UserId(1L), postBlindImmediately = false, buyIn = Chips.of(8_000))
+        queue.enqueue(tableId, userId = UserId(2L), postBlindImmediately = false, buyIn = Chips.of(8_000))
 
         service.cancel(CancelJoinRequestCommand(tableId.value, userId = 2L))
 
@@ -83,7 +84,7 @@ class CancelJoinRequestServiceTest {
         val notifier = CancelJoinRequestFakeJoinQueueNotifier()
         val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
         val tableId = TableId(1L)
-        queue.enqueue(tableId, userId = UserId(1L), postBlindImmediately = false)
+        queue.enqueue(tableId, userId = UserId(1L), postBlindImmediately = false, buyIn = Chips.of(8_000))
         queue.removeByUserId(UserId(1L))
 
         val e = assertFailsWith<JoinRequestNotFoundException> {

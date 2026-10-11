@@ -51,7 +51,7 @@ class HoldemSubscriptionSnapshotListenerTest {
     }
 
     private class FakeJoinQueue(var position: QueuePosition?) : JoinQueue {
-        override fun enqueue(tableId: TableId, userId: UserId, postBlindImmediately: Boolean): Int = error("unused")
+        override fun enqueue(tableId: TableId, userId: UserId, postBlindImmediately: Boolean, buyIn: Chips): Int = error("unused")
         override fun peekHead(tableId: TableId) = error("unused")
         override fun removeByUserId(userId: UserId): TableId? = error("unused")
         override fun entriesOf(tableId: TableId) = error("unused")
@@ -249,7 +249,7 @@ class HoldemSubscriptionSnapshotListenerTest {
     fun `테이블 토픽 스냅샷은 인바운드 스레드에서 읽지 않고 실행기에서 seq 와 상태를 함께 읽는다`() {
         val sequence = TableViewSequence()
         sequence.next(table)
-        val stored = HoldemTable.create("t").apply { sitDown(user, Chips.of(1000)) }
+        val stored = HoldemTable.create("t").apply { sitDown(user, Chips.of(10_000)) }
         var current: HoldemTable? = stored
         val tables = Proxy.newProxyInstance(
             HoldemTableRepository::class.java.classLoader, arrayOf(HoldemTableRepository::class.java),

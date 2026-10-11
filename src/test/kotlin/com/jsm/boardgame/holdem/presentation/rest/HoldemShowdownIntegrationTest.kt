@@ -185,9 +185,9 @@ class HoldemShowdownIntegrationTest {
     }
 
     /** 좌석은 고를 수 없다(항상 대기열, FIFO) — POST 전에 STOMP 로 먼저 연결한다. */
-    private fun sitDown(accessToken: String, tableId: Long): ResultActions {
+    private fun sitDown(accessToken: String, tableId: Long, buyIn: Long = 10_000): ResultActions {
         connectStomp(accessToken)
-        return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{}""")
+        return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{"buyIn":$buyIn}""")
     }
 
     /** 착석 처리(ProcessJoinRequestsService)는 이제 TableExecutor.post 로 비동기 디스패치된다
@@ -277,11 +277,11 @@ class HoldemShowdownIntegrationTest {
         val (userIdA, tokenA) = signUpAndLogin() // 버튼-SB, 빅스택
         val (userIdB, tokenB) = signUpAndLogin() // BB, 숏스택
         fundWallet(userIdA, 20_000)
-        fundWallet(userIdB, 1_000)
+        fundWallet(userIdB, 4_000)
         val tableId = createTable(tokenA)
-        sitDown(tokenA, tableId).andExpect(status().isAccepted)
+        sitDown(tokenA, tableId, buyIn = 20_000).andExpect(status().isAccepted)
         awaitSeated(userIdA)
-        sitDown(tokenB, tableId).andExpect(status().isAccepted)
+        sitDown(tokenB, tableId, buyIn = 4_000).andExpect(status().isAccepted)
         awaitSeated(userIdB)
 
         // 좌석2(BB, 숏스택)가 킹 페어로 이기게, 좌석1(버튼, 빅스택)은 하이카드로 지게 고정한다.
@@ -302,20 +302,20 @@ class HoldemShowdownIntegrationTest {
         playCheckCallToShowdown(tableId, mapOf(1 to tokenA, 2 to tokenB))
 
         val settledTable = holdemTableRepository.findById(TableId(tableId))!!
-        // 좌석1 은 자기 올인(20,000) 중 좌석2 가 실제로 콜한 1,000 만 걸렸고 나머지 19,000 은
+        // 좌석1 은 자기 올인(20,000) 중 좌석2 가 실제로 콜한 4,000 만 걸렸고 나머지 16,000 은
         // 아무도 콜하지 않아 그대로 돌아온다(Pot.layout 의 uncalledSeatNo/uncalledAmount).
-        assertThat(settledTable.seatAt(1)?.stack?.amount).isEqualTo(19_000L)
-        assertThat(settledTable.seatAt(2)?.stack?.amount).isEqualTo(2_000L)
+        assertThat(settledTable.seatAt(1)?.stack?.amount).isEqualTo(16_000L)
+        assertThat(settledTable.seatAt(2)?.stack?.amount).isEqualTo(8_000L)
         assertThat(balanceOf(userIdA)).isEqualTo(0L)
         assertThat(balanceOf(userIdB)).isEqualTo(0L)
 
         authDelete("/api/holdem/seat", tokenA).andExpect(status().isNoContent)
         authDelete("/api/holdem/seat", tokenB).andExpect(status().isNoContent)
 
-        assertThat(balanceOf(userIdA)).isEqualTo(19_000L)
-        assertThat(balanceOf(userIdB)).isEqualTo(2_000L)
-        // 칩 보존 — 큰 스택이 순손실 1,000, 숏스택이 순이익 1,000 이고 총합은 그대로다.
-        assertThat(balanceOf(userIdA) + balanceOf(userIdB)).isEqualTo(21_000L)
+        assertThat(balanceOf(userIdA)).isEqualTo(16_000L)
+        assertThat(balanceOf(userIdB)).isEqualTo(8_000L)
+        // 칩 보존 — 큰 스택이 순손실 4,000, 숏스택이 순이익 4,000 이고 총합은 그대로다.
+        assertThat(balanceOf(userIdA) + balanceOf(userIdB)).isEqualTo(24_000L)
     }
 
     private fun capturingFrameHandler(): Pair<StompFrameHandler, LinkedBlockingQueue<String>> {

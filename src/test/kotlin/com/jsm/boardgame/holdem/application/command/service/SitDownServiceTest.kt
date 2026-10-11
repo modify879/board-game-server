@@ -4,12 +4,16 @@ import com.jsm.boardgame.holdem.application.command.usecase.SitDownCommand
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
 import com.jsm.boardgame.holdem.application.exception.NotConnectedException
 import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
+import com.jsm.boardgame.holdem.application.exception.InsufficientBalanceException
+import com.jsm.boardgame.holdem.application.port.Departure
+import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.UserConnections
 import com.jsm.boardgame.holdem.application.port.WalletBalance
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
+import com.jsm.boardgame.holdem.domain.exception.InvalidChipsException
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -22,6 +26,7 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionSynchronizationUtils
+import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -88,7 +93,8 @@ class SitDownServiceTest {
     private val userConnections = SitDownFakeUserConnections()
     private val walletBalance = SitDownFakeWalletBalance().apply { balances[1L] = 8_000; balances[2L] = 8_000 }
     private val eventPublisher = ApplicationEventPublisher { }
-    private val service = SitDownService(tables, SeatRequester(tables, handStore, joinQueue, userConnections, walletBalance, eventPublisher))
+    private val departures = FakeRecentDepartures()
+    private val service = SitDownService(tables, SeatRequester(tables, handStore, joinQueue, userConnections, walletBalance, departures, eventPublisher))
 
     private fun createTable(): TableId = tables.save(HoldemTable.create("테스트 테이블")).id!!
 
@@ -97,7 +103,7 @@ class SitDownServiceTest {
         userConnections.connect(1)
 
         val e = assertFailsWith<TableNotFoundException> {
-            service.sitDown(SitDownCommand(tableId = 999, userId = 1))
+            service.sitDown(SitDownCommand(tableId = 999, userId = 1, buyIn = 8_000))
         }
         assertEquals(HoldemErrorCode.TABLE_NOT_FOUND, e.errorCode)
     }
@@ -111,7 +117,7 @@ class SitDownServiceTest {
         userConnections.connect(1)
 
         val e = assertFailsWith<AlreadySeatedException> {
-            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1))
+            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000))
         }
         assertEquals(HoldemErrorCode.ALREADY_SEATED, e.errorCode)
     }
@@ -129,7 +135,7 @@ class SitDownServiceTest {
         userConnections.connect(1)
 
         val e = assertFailsWith<HandInProgressException> {
-            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1))
+            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000))
         }
         assertEquals(HoldemErrorCode.HAND_IN_PROGRESS, e.errorCode)
     }
@@ -137,26 +143,83 @@ class SitDownServiceTest {
     @Test
     fun `이미 다른 테이블 대기열에 있으면 ALREADY_SEATED`() {
         val otherTableId = createTable()
-        joinQueue.enqueue(otherTableId, UserId(1), false)
+        joinQueue.enqueue(otherTableId, UserId(1), false, Chips.of(8_000))
         val tableId = createTable()
         userConnections.connect(1)
 
         val e = assertFailsWith<AlreadySeatedException> {
-            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1))
+            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000))
         }
         assertEquals(HoldemErrorCode.ALREADY_SEATED, e.errorCode)
     }
 
-    @Test
-    fun `지갑 잔액이 빅블라인드 미만이면 BUY_IN_OUT_OF_RANGE`() {
+    private fun sitDownAs(buyIn: Long): Int {
         val tableId = createTable()
         userConnections.connect(1)
-        walletBalance.balances[1L] = 100
+        return service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = buyIn))
+    }
 
-        val e = assertFailsWith<BuyInOutOfRangeException> {
-            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1))
-        }
+    private fun assertBuyInRejected(buyIn: Long) {
+        val e = assertFailsWith<BuyInOutOfRangeException> { sitDownAs(buyIn) }
         assertEquals(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, e.errorCode)
+        assertFalse(joinQueue.isQueued(UserId(1)))
+    }
+
+    @Test
+    fun `바이인이 20BB 미만이면 BUY_IN_OUT_OF_RANGE`() {
+        walletBalance.balances[1L] = 100_000
+        assertBuyInRejected(3_800)
+    }
+
+    @Test
+    fun `바이인이 100BB 를 넘으면 의무가 없을 때 BUY_IN_OUT_OF_RANGE`() {
+        walletBalance.balances[1L] = 100_000
+        assertBuyInRejected(20_100)
+    }
+
+    @Test
+    fun `바이인 경계값 20BB 와 100BB 는 허용된다`() {
+        walletBalance.balances[1L] = 100_000
+        assertEquals(1, sitDownAs(4_000))
+        joinQueue.removeByUserId(UserId(1))
+        assertEquals(1, sitDownAs(20_000))
+    }
+
+    @Test
+    fun `바이인이 칩 단위가 아니면 CHIPS_NOT_UNIT`() {
+        walletBalance.balances[1L] = 100_000
+        val e = assertFailsWith<InvalidChipsException> { sitDownAs(5_050) }
+        assertEquals(HoldemErrorCode.CHIPS_NOT_UNIT, e.errorCode)
+    }
+
+    @Test
+    fun `지갑 잔액이 바이인보다 적으면 INSUFFICIENT_BALANCE 이고 대기열에 들어가지 않는다`() {
+        walletBalance.balances[1L] = 5_900
+        val e = assertFailsWith<InsufficientBalanceException> { sitDownAs(6_000) }
+        assertEquals(HoldemErrorCode.INSUFFICIENT_BALANCE, e.errorCode)
+        assertFalse(joinQueue.isQueued(UserId(1)))
+    }
+
+    @Test
+    fun `재착석 의무가 100BB 를 넘으면 그 금액 이상으로 앉을 수 있다`() {
+        walletBalance.balances[1L] = 100_000
+        departures.put(UserId(1), Departure(Chips.of(30_000), Instant.MAX))
+        assertEquals(1, sitDownAs(30_000))
+        assertEquals(Chips.of(30_000), joinQueue.entriesOf(TableId(1)).single().buyIn)
+    }
+
+    @Test
+    fun `재착석 의무보다 적게는 앉을 수 없다`() {
+        walletBalance.balances[1L] = 100_000
+        departures.put(UserId(1), Departure(Chips.of(15_000), Instant.MAX))
+        assertBuyInRejected(14_900)
+    }
+
+    @Test
+    fun `재착석 의무가 지갑 잔액보다 크면 INSUFFICIENT_BALANCE`() {
+        walletBalance.balances[1L] = 9_000
+        departures.put(UserId(1), Departure(Chips.of(15_000), Instant.MAX))
+        assertFailsWith<InsufficientBalanceException> { sitDownAs(15_000) }
     }
 
     @Test
@@ -164,7 +227,7 @@ class SitDownServiceTest {
         val tableId = createTable()
 
         val e = assertFailsWith<NotConnectedException> {
-            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1))
+            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000))
         }
         assertEquals(HoldemErrorCode.NOT_CONNECTED, e.errorCode)
         assertFalse(joinQueue.isQueued(UserId(1)))
@@ -175,11 +238,12 @@ class SitDownServiceTest {
         val tableId = createTable()
         userConnections.connect(1)
 
-        val position = service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, postBlindImmediately = true))
+        val position = service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000, postBlindImmediately = true))
 
         assertEquals(1, position)
         val entry = joinQueue.entriesOf(tableId).single()
         assertEquals(UserId(1L), entry.userId)
+        assertEquals(Chips.of(8_000), entry.buyIn)
         assertTrue(entry.postBlindImmediately)
     }
 
@@ -189,8 +253,8 @@ class SitDownServiceTest {
         userConnections.connect(1)
         userConnections.connect(2)
 
-        service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1))
-        val position = service.sitDown(SitDownCommand(tableId = tableId.value, userId = 2))
+        service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000))
+        val position = service.sitDown(SitDownCommand(tableId = tableId.value, userId = 2, buyIn = 8_000))
 
         assertEquals(2, position)
         val entries = joinQueue.entriesOf(tableId)
@@ -202,7 +266,7 @@ class SitDownServiceTest {
         val tableId = createTable()
         userConnections.connect(1)
 
-        service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1))
+        service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000))
 
         assertFalse(joinQueue.entriesOf(tableId).single().postBlindImmediately)
     }
@@ -214,7 +278,7 @@ class SitDownServiceTest {
 
         TransactionSynchronizationManager.initSynchronization()
         try {
-            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, postBlindImmediately = true))
+            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000, postBlindImmediately = true))
             assertTrue(joinQueue.isQueued(UserId(1)))
             TransactionSynchronizationUtils.invokeAfterCompletion(
                 TransactionSynchronizationManager.getSynchronizations(), TransactionSynchronization.STATUS_ROLLED_BACK,
@@ -224,7 +288,7 @@ class SitDownServiceTest {
         }
 
         assertFalse(joinQueue.isQueued(UserId(1)))
-        assertEquals(1, service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, postBlindImmediately = true)))
+        assertEquals(1, service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000, postBlindImmediately = true)))
     }
 
     @Test
@@ -234,7 +298,7 @@ class SitDownServiceTest {
 
         TransactionSynchronizationManager.initSynchronization()
         try {
-            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, postBlindImmediately = true))
+            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000, postBlindImmediately = true))
             TransactionSynchronizationUtils.invokeAfterCompletion(
                 TransactionSynchronizationManager.getSynchronizations(), TransactionSynchronization.STATUS_COMMITTED,
             )
