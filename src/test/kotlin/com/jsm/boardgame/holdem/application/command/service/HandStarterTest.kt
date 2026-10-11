@@ -1,5 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
+import com.jsm.boardgame.holdem.application.port.FoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
@@ -77,10 +79,11 @@ class HandStarterTest {
     private val tables = HandStarterFakeTableRepository()
     private val handStore = HandStarterFakeHandStore()
     private val lastHandResults = HandStarterFakeLastHandResultStore()
+    private val foldWinnerCards = FakeFoldWinnerCards()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
     private val countdown = HandStarterFakeNextHandCountdown()
-    private val handStarter = HandStarter(tables, handStore, lastHandResults, identityShuffler, eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, lastHandResults, foldWinnerCards, identityShuffler, eventPublisher, countdown)
 
     private fun start(tableId: TableId) {
         val table = tables.findById(tableId)!!
@@ -112,6 +115,16 @@ class HandStarterTest {
         start(tableId)
 
         assertNull(lastHandResults.find(tableId))
+    }
+
+    @Test
+    fun `새 핸드가 시작되면 폴드 승자 카드를 지운다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        foldWinnerCards.save(tableId, FoldWinnerCards.FoldWinner(1, UserId(1), listOf("As", "Ah")))
+
+        start(tableId)
+
+        assertNull(foldWinnerCards.find(tableId))
     }
 
     @Test

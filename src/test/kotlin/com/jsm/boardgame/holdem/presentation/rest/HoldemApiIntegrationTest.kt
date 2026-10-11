@@ -461,6 +461,28 @@ class HoldemApiIntegrationTest {
     }
 
     @Test
+    fun `폴드 승자만 핸드 뒤에 한 번 보여 줄 수 있다`() {
+        val (userIdA, tokenA) = signUpAndLogin()
+        val (userIdB, tokenB) = signUpAndLogin()
+        fundWallet(userIdA, 10_000)
+        fundWallet(userIdB, 10_000)
+        val tableId = createTable(tokenA)
+        sitDown(tokenA, tableId).andExpect(status().isAccepted)
+        awaitSeated(userIdA)
+        sitDown(tokenB, tableId).andExpect(status().isAccepted)
+        awaitSeated(userIdB)
+        startHand(tableId)
+        val showUrl = "/api/holdem/tables/$tableId/hands/show"
+
+        authPost(showUrl, tokenB).andExpect(status().isConflict).andExpect(jsonPath("$.errorCode").value("HAND_IN_PROGRESS"))
+        authPost("/api/holdem/tables/$tableId/hands/actions", tokenA, """{"action":"FOLD"}""").andExpect(status().isNoContent)
+
+        authPost(showUrl, tokenA).andExpect(status().isConflict).andExpect(jsonPath("$.errorCode").value("SHOW_NOT_ALLOWED"))
+        authPost(showUrl, tokenB).andExpect(status().isNoContent)
+        authPost(showUrl, tokenB).andExpect(status().isConflict).andExpect(jsonPath("$.errorCode").value("SHOW_NOT_ALLOWED"))
+    }
+
+    @Test
     fun `핸드 도중 잔액 부족한 참가 요청이 있어도 폴드로 핸드는 정산된다`() {
         val ctx = seatedWithHandInProgress()
         val (spectatorId, spectatorToken) = signUpAndLogin()

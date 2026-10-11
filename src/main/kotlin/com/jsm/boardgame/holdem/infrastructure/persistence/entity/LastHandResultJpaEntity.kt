@@ -53,7 +53,7 @@ data class LastHandResultJson(
     val shownHands: List<ShownHandJson>,
 ) {
     data class PayoutJson(val seatNo: Int, val userId: Long, val amount: Long)
-    data class ShownHandJson(val seatNo: Int, val userId: Long, val holeCards: List<String>, val category: String)
+    data class ShownHandJson(val seatNo: Int, val userId: Long, val holeCards: List<String>, val category: String?)
 }
 
 fun LastHandResult.toJson() = LastHandResultJson(

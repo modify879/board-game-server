@@ -9,7 +9,7 @@ paths: ["**/holdem/**"]
 ## 이 컨텍스트에서만 지킬 것
 
 - **브로드캐스트 페이로드 타입에 홀카드를 담을 필드를 두지 않는다.** 예외는 둘뿐이다 — `ShownHandView` 는
-  끝난 핸드의 `HandResult.shownSeatNos` 로만, `RevealedHandView` 는 올인 런아웃 중(TDA) `Hand.revealedSeatNos` 로만 만든다. `/topic/tables/{id}` 에는 `TablePublicView` 만,
+  끝난 핸드의 `HandResult.shownSeatNos` 와 폴드 승자의 보여 주기(`ShowHandService`)로만, `RevealedHandView` 는 올인 런아웃 중(TDA) `Hand.revealedSeatNos` 로만 만든다. `/topic/tables/{id}` 에는 `TablePublicView` 만,
   `/user/queue/...` 에는 `SeatPrivateView` 만 흐르게 해 규칙 6을 "좌석마다 루프 돌 것을 기억하라" 가 아니라
   **컴파일러**로 보장한다. 한 타입에 nullable 홀카드 필드를 두고 마스킹으로 비우는 방식은 쓰지 않는다 —
   빠뜨리면 패가 새고, 빠뜨렸는지는 런타임에만 드러난다
@@ -23,6 +23,8 @@ paths: ["**/holdem/**"]
   정상 경로와 다른 코드를 하나 더 만드는데, 거기서 틀리면 복구 시 돈이 틀어지고
   그 오류는 서버가 죽었을 때만 드러난다. 단 직전 핸드의 공개 결과 1행(`holdem_last_hand_result`)만 둔다 —
   재구독 스냅샷이 결과를 다시 보여주기 위함이고 새 핸드가 시작되면 지운다
+- **보여 주기(하우스 룰 10)의 폴드 승자 카드는 `LastHandResult` 에 두지 않는다.** 그건 공개 결과의 출처라 비공개 카드가 섞이면 재구독 스냅샷으로 샌다.
+  `FoldWinnerCards` 포트(인메모리, 재시작하면 사라짐)에 정산 때 담고, 새 핸드·쇼다운 정산 때 지운다. `ShowHandService` 가 승자 본인·핸드 없음을 확인하고 한 번만 `shownHands` 에 붙인다(보드 3장 미만이면 `category` 는 null)
 - **개인 큐 유실은 돈 문제다.** "당신 차례" 가 증발하면 타임아웃 자동 폴드로 칩이 날아간다 —
   `convertAndSendToUser` 경고 규칙(CLAUDE.md 규칙 6)을 여기서 특히 지킨다
 - **진행 중 핸드 스냅샷에 덱을 담지 않는다.** 담으면 DB 를 읽을 수 있는 사람이 미래 카드를 안다.

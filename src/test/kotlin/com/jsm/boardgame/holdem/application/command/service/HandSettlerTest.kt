@@ -2,7 +2,9 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
+import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
+import com.jsm.boardgame.holdem.application.port.FoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
@@ -98,7 +100,8 @@ class HandSettlerTest {
     private val eventPublisher = HandSettlerFakeEventPublisher()
     private val countdown = HandSettlerFakeNextHandCountdown()
     private val departures = FakeRecentDepartures()
-    private val settler = HandSettler(tables, handStore, lastHandResults, eventPublisher, countdown, departures)
+    private val foldWinnerCards = FakeFoldWinnerCards()
+    private val settler = HandSettler(tables, handStore, lastHandResults, foldWinnerCards, eventPublisher, countdown, departures)
 
     private fun seatedTable(vararg stacks: Pair<Int, Long>): HoldemTable {
         val seats = stacks.associate { (seatNo, stack) ->
@@ -129,6 +132,37 @@ class HandSettlerTest {
         assertNotNull(saved)
         assertEquals(listOf(LastHandResult.Payout(2, UserId(2000L), 300)), saved.payouts)
         assertEquals(emptyList(), saved.shownHands)
+    }
+
+    @Test
+    fun `폴드로 끝나면 남은 좌석의 홀카드를 폴드 승자 포트에 담는다`() {
+        val table = seatedTable(1 to 10_000L, 2 to 10_000L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
+        hand.act(1, BettingAction.Fold)
+
+        settler.settle(tableId, table, hand)
+
+        assertEquals(
+            FoldWinnerCards.FoldWinner(2, UserId(2000L), hand.holeCardsOf(2).map { it.toString() }),
+            foldWinnerCards.find(tableId),
+        )
+    }
+
+    @Test
+    fun `쇼다운으로 끝나면 폴드 승자 포트를 비운다`() {
+        val table = seatedTable(1 to 200L, 2 to 200L)
+        val tableId = table.id!!
+        foldWinnerCards.save(tableId, FoldWinnerCards.FoldWinner(1, UserId(1000L), listOf("As", "Ah")))
+        val stacks = mapOf(1 to Chips.of(200), 2 to Chips.of(200))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), bustingShuffler)
+        hand.act(1, BettingAction.Call)
+        while (hand.isRunningOut) hand.advanceRunout()
+
+        settler.settle(tableId, table, hand)
+
+        assertNull(foldWinnerCards.find(tableId))
     }
 
     @Test

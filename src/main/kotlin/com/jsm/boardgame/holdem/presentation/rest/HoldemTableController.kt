@@ -5,6 +5,8 @@ import com.jsm.boardgame.holdem.application.command.usecase.CancelJoinRequestCom
 import com.jsm.boardgame.holdem.application.command.usecase.CancelJoinRequestUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.CreateTableUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.PlayActionUseCase
+import com.jsm.boardgame.holdem.application.command.usecase.ShowHandCommand
+import com.jsm.boardgame.holdem.application.command.usecase.ShowHandUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.SitDownUseCase
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.application.query.service.BuyInQueryService
@@ -40,6 +42,7 @@ class HoldemTableController(
     private val sitDownUseCase: SitDownUseCase,
     private val cancelJoinRequestUseCase: CancelJoinRequestUseCase,
     private val playActionUseCase: PlayActionUseCase,
+    private val showHandUseCase: ShowHandUseCase,
     private val holdemTableQueryService: HoldemTableQueryService,
     private val buyInQueryService: BuyInQueryService,
     private val tableExecutor: TableExecutor,
@@ -77,6 +80,13 @@ class HoldemTableController(
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun playAction(@AuthenticationPrincipal jwt: Jwt, @PathVariable tableId: Long, @RequestBody request: PlayActionRequest) {
         tableExecutor.call(TableId(tableId)) { playActionUseCase.play(request.toCommand(tableId, jwt.requireUserId())) }
+    }
+
+    // 모두 폴드해 이긴 사람이 핸드 종료 후 다음 핸드 전에 두 장을 공개한다(하우스 룰 10).
+    @PostMapping("/{tableId}/hands/show")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun showHand(@AuthenticationPrincipal jwt: Jwt, @PathVariable tableId: Long) {
+        tableExecutor.call(TableId(tableId)) { showHandUseCase.show(ShowHandCommand(tableId, jwt.requireUserId())) }
     }
 }
 

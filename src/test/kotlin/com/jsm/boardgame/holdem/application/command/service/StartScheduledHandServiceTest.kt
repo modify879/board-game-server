@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
+import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
@@ -81,7 +82,7 @@ class StartScheduledHandServiceTest {
     private val eventPublisher = ApplicationEventPublisher { }
     private val walletTransfer = StartScheduledHandFakeWalletTransfer()
     private val countdown = StartScheduledHandFakeNextHandCountdown()
-    private val handStarter = HandStarter(tables, handStore, StartScheduledHandServiceFakeLastHandResultStore(), identityShuffler, eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, StartScheduledHandServiceFakeLastHandResultStore(), FakeFoldWinnerCards(), identityShuffler, eventPublisher, countdown)
     private val service = StartScheduledHandService(
         tables, handStore, handStarter, TransactionOperations.withoutTransaction(),
     )
