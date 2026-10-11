@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.application.port
 
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
+import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.TableId
 
 /**
@@ -11,7 +12,7 @@ import com.jsm.boardgame.holdem.domain.model.TableId
 interface JoinQueue {
     /** userId 는 테이블 전역에서 한 번에 하나의 대기열에만 있을 수 있다 — 이미 대기 중이면
      *  [AlreadySeatedException] 을 던진다(구현이 원자적으로 검사+삽입한다). 1-based 대기 순번을 돌려준다. */
-    fun enqueue(tableId: TableId, userId: UserId, postBlindImmediately: Boolean): Int
+    fun enqueue(tableId: TableId, userId: UserId, postBlindImmediately: Boolean, buyIn: Chips): Int
 
     fun peekHead(tableId: TableId): JoinQueueEntry?
 
@@ -32,4 +33,4 @@ interface JoinQueue {
 
 data class QueuePosition(val tableId: TableId, val position: Int)
 
-data class JoinQueueEntry(val userId: UserId, val postBlindImmediately: Boolean)
+data class JoinQueueEntry(val userId: UserId, val postBlindImmediately: Boolean, val buyIn: Chips)

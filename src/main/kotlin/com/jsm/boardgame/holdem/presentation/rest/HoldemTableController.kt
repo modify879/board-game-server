@@ -7,11 +7,13 @@ import com.jsm.boardgame.holdem.application.command.usecase.CreateTableUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.PlayActionUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.SitDownUseCase
 import com.jsm.boardgame.holdem.application.port.TableExecutor
+import com.jsm.boardgame.holdem.application.query.service.BuyInQueryService
 import com.jsm.boardgame.holdem.application.query.service.HoldemTableQueryService
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.presentation.rest.request.CreateTableRequest
 import com.jsm.boardgame.holdem.presentation.rest.request.PlayActionRequest
 import com.jsm.boardgame.holdem.presentation.rest.request.SitDownRequest
+import com.jsm.boardgame.holdem.presentation.rest.response.BuyInResponse
 import com.jsm.boardgame.holdem.presentation.rest.response.SitDownResponse
 import com.jsm.boardgame.holdem.presentation.rest.response.TableCreatedResponse
 import com.jsm.boardgame.holdem.presentation.rest.response.TableSummaryResponse
@@ -39,6 +41,7 @@ class HoldemTableController(
     private val cancelJoinRequestUseCase: CancelJoinRequestUseCase,
     private val playActionUseCase: PlayActionUseCase,
     private val holdemTableQueryService: HoldemTableQueryService,
+    private val buyInQueryService: BuyInQueryService,
     private val tableExecutor: TableExecutor,
 ) {
 
@@ -50,6 +53,10 @@ class HoldemTableController(
     @GetMapping
     fun listTables(@AuthenticationPrincipal jwt: Jwt, pageable: Pageable): Page<TableSummaryResponse> =
         holdemTableQueryService.findAll(jwt.requireUserId(), pageable).map(TableSummaryResponse::from)
+
+    @GetMapping("/{tableId}/buy-in")
+    fun buyIn(@AuthenticationPrincipal jwt: Jwt, @PathVariable tableId: Long): BuyInResponse =
+        BuyInResponse.from(buyInQueryService.find(tableId, jwt.requireUserId()))
 
     // 좌석은 고를 수 없다 — 항상 대기열에 들어가고(202), 응답은 그 시점의 대기 순번이다.
     // 빈 좌석이 있어도 예외는 아니다 — ProcessJoinRequestsService 가 커밋 후 곧바로 처리할 뿐이다.

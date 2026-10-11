@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.domain.model
 
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
+import com.jsm.boardgame.holdem.domain.exception.ChipAddOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.InvalidTableNameException
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.exception.TableFullException
@@ -91,27 +92,87 @@ class HoldemTableTest {
     }
 
     @Test
-    fun `빅 블라인드 미만 바이인은 BUY_IN_OUT_OF_RANGE 로 거부된다`() {
+    fun `20BB 미만 바이인은 BUY_IN_OUT_OF_RANGE 로 거부된다`() {
         val table = newTable()
         val e = assertFailsWith<BuyInOutOfRangeException> {
-            table.sitDown(userId = UserId(1L), buyIn = Chips.of(100))
+            table.sitDown(userId = UserId(1L), buyIn = Chips.of(3_900))
         }
         assertEquals(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, e.errorCode)
     }
 
     @Test
-    fun `정확히 빅 블라인드인 바이인은 허용된다`() {
+    fun `정확히 20BB 인 바이인은 허용된다`() {
         val table = newTable()
-        val seat = table.sitDown(userId = UserId(1L), buyIn = Chips.of(200))
-        assertEquals(Chips.of(200), seat.stack)
+        val seat = table.sitDown(userId = UserId(1L), buyIn = Chips.of(4_000))
+        assertEquals(Chips.of(4_000), seat.stack)
     }
 
     @Test
-    fun `상한 없이 아주 큰 바이인도 허용된다`() {
+    fun `도메인은 바이인 상한을 검사하지 않는다 — 재착석 의무가 상한을 넘을 수 있어 application 이 본다`() {
         val table = newTable()
         val bigBuyIn = Chips.of(200_000_000)
         val seat = table.sitDown(userId = UserId(1L), buyIn = bigBuyIn)
         assertEquals(bigBuyIn, seat.stack)
+    }
+
+    @Test
+    fun `바이인 범위는 의무가 없으면 20BB 에서 100BB 다`() {
+        val range = newTable().buyInRange(Chips.ZERO)
+        assertEquals(Chips.of(4_000), range.start)
+        assertEquals(Chips.of(20_000), range.endInclusive)
+    }
+
+    @Test
+    fun `재착석 의무가 20BB 와 100BB 사이면 하한만 올라간다`() {
+        val range = newTable().buyInRange(Chips.of(12_000))
+        assertEquals(Chips.of(12_000), range.start)
+        assertEquals(Chips.of(20_000), range.endInclusive)
+    }
+
+    @Test
+    fun `재착석 의무가 100BB 를 넘으면 상한도 그 금액까지 올라간다`() {
+        val range = newTable().buyInRange(Chips.of(30_000))
+        assertEquals(Chips.of(30_000), range.start)
+        assertEquals(Chips.of(30_000), range.endInclusive)
+    }
+
+    @Test
+    fun `칩 추가는 스택에 더하고 정확히 100BB 까지 허용한다`() {
+        val table = newTable()
+        table.sitDown(userId = UserId(1L), buyIn = Chips.of(10_000))
+
+        table.addChips(1, Chips.of(10_000))
+
+        assertEquals(Chips.of(20_000), table.seatAt(1)!!.stack)
+    }
+
+    @Test
+    fun `칩 추가로 스택이 100BB 를 넘으면 CHIP_ADD_OUT_OF_RANGE 이고 스택은 그대로다`() {
+        val table = newTable()
+        table.sitDown(userId = UserId(1L), buyIn = Chips.of(10_000))
+
+        val e = assertFailsWith<ChipAddOutOfRangeException> { table.addChips(1, Chips.of(10_100)) }
+
+        assertEquals(HoldemErrorCode.CHIP_ADD_OUT_OF_RANGE, e.errorCode)
+        assertEquals(Chips.of(10_000), table.seatAt(1)!!.stack)
+    }
+
+    @Test
+    fun `이미 100BB 를 넘긴 스택에는 칩을 추가할 수 없다`() {
+        val table = newTable()
+        table.sitDown(userId = UserId(1L), buyIn = Chips.of(30_000))
+
+        val e = assertFailsWith<ChipAddOutOfRangeException> { table.addChips(1, Chips.of(100)) }
+
+        assertEquals(HoldemErrorCode.CHIP_ADD_OUT_OF_RANGE, e.errorCode)
+    }
+
+    @Test
+    fun `0 칩 추가는 CHIP_ADD_OUT_OF_RANGE 로 거부된다`() {
+        val table = newTable()
+        table.sitDown(userId = UserId(1L), buyIn = Chips.of(10_000))
+
+        assertFailsWith<ChipAddOutOfRangeException> { table.addChips(1, Chips.ZERO) }
     }
 
     @Test

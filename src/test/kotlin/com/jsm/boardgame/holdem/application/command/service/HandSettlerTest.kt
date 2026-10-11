@@ -1,8 +1,8 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
-import com.jsm.boardgame.holdem.application.event.SeatTopUpDue
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
+import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
@@ -97,7 +97,8 @@ class HandSettlerTest {
     private val lastHandResults = HandSettlerFakeLastHandResultStore()
     private val eventPublisher = HandSettlerFakeEventPublisher()
     private val countdown = HandSettlerFakeNextHandCountdown()
-    private val settler = HandSettler(tables, handStore, lastHandResults, eventPublisher, countdown)
+    private val departures = FakeRecentDepartures()
+    private val settler = HandSettler(tables, handStore, lastHandResults, eventPublisher, countdown, departures)
 
     private fun seatedTable(vararg stacks: Pair<Int, Long>): HoldemTable {
         val seats = stacks.associate { (seatNo, stack) ->
@@ -190,7 +191,24 @@ class HandSettlerTest {
     }
 
     @Test
-    fun `정산은 지갑을 건드리지 않고 커밋 후 합산을 위한 SeatTopUpDue 만 올린다`() {
+    fun `0칩 자동 기립은 재착석 의무를 0 으로 덮어 지운다`() {
+        val table = seatedTable(1 to 200L, 2 to 200L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(200), 2 to Chips.of(200))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), bustingShuffler)
+        handStore.save(tableId, hand)
+        departures.record(UserId(2000L), Chips.of(9_000)) // 좌석 2 의 옛 의무
+        hand.act(1, BettingAction.Call)
+        while (hand.isRunningOut) hand.advanceRunout()
+
+        settler.settle(tableId, table, hand)
+
+        assertNull(departures.obligationOf(UserId(2000L)))
+        assertEquals(Chips.ZERO, departures.recorded.last { it.first == UserId(2000L) }.second)
+    }
+
+    @Test
+    fun `정산은 지갑을 건드리지 않고 스택만 반영한다`() {
         val table = seatedTable(1 to 10_000L, 2 to 10_000L)
         val tableId = table.id!!
         val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
@@ -200,7 +218,6 @@ class HandSettlerTest {
         settler.settle(tableId, table, hand)
 
         assertEquals(Chips.of(10_100), tables.findById(tableId)!!.seatAt(2)!!.stack)
-        assertEquals(listOf(SeatTopUpDue(tableId)), eventPublisher.events.filterIsInstance<SeatTopUpDue>())
     }
 
     @Test

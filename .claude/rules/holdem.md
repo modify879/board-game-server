@@ -73,17 +73,15 @@ paths: ["**/holdem/**"]
   시간을 빼앗는다
 - (변경 예정 — 하우스 룰 1번) **1분 무응답은 체크할 수 있으면 체크, 아니면 폴드하고 폴드한 좌석은 판 도중 즉시 기립시킨다** — 폴드한 좌석의
   스택은 더 변하지 않으므로 그 자리에서 정산하고, 그 핸드가 끝날 때까지 그 좌석 번호에는 앉을 수 없다(정산이 새 착석자를 덮어쓴다)
-- (변경 예정 — 하우스 룰 5·6·7번) **바이인은 지갑 잔액 전부이고, 착석 중 지갑에 들어온 돈(충전 승인·출금 취소/반려·관리자 증액)은 핸드가 없으면 입금 즉시 스택에 합쳐진다.**
-  wallet 이 커밋 전에 `WalletCredited` 를 올리면 `WalletCreditedListener`(AFTER_COMMIT, 예외는 로그만)가 `TopUpSeatFromWalletService` 를 불러
-  그 사용자의 테이블을 찾아 `tableExecutor.post` 로 넘긴다(`call` 금지 — `.claude/rules/transactions.md` 커밋 후 콜백 규칙). 테이블 스레드에서 `TopUpTableSeatsService` 가 합치고 공개 뷰를 한 번 브로드캐스트한다.
-  핸드 도중에는 스택이 바뀌지 않는다(table stakes) — 정산 직후에는 `HandSettler` 가 `SeatTopUpDue` 만 올리고 `SeatTopUpProcessor`(AFTER_COMMIT)가 같은 합산을
-  테이블 스레드에 `post` 한다(정산 브로드캐스트 뒤에 후속 갱신이 나간다). 핸드 시작 때는 `StartScheduledHandService` 가 **시작 트랜잭션 앞에서** 합친다.
-  **합산은 정산·핸드 시작 트랜잭션 안에서 하지 않는다.** 지갑 행 락 대기(`lock_timeout`)·실패가 그 트랜잭션을 롤백시키면 끝난 핸드가 지워지거나
-  테이블이 멈추는데, 합산은 편의 기능이다. 그래서 좌석마다 `SeatTopUper` 의 `REQUIRES_NEW` 로 격리하고(`.claude/rules/transactions.md` 의 rollback-only 항목),
-  `TableSeatsTopUp` 이 실패를 ERROR 로 남기고 그 좌석만 건너뛴다 — 건너뛴 좌석은 다음 핸드 시작·다음 입금 때 합쳐진다. 지갑 잔액을 락 없이 먼저
-  읽어 0 이면 지갑 행 락을 잡지 않는다(읽고-이체 사이의 경합은 이체가 락 안에서 다시 읽으므로 괜찮다). 금액을 받아 `TransferToGame` 으로
-  옮기지 않고 잠근 지갑에서 읽고 옮기는 `TransferBalanceToGame` 을 쓴다: 읽고-이체 사이에 출금이 끼면 잔액 부족 예외가 난다. 착석 중 출금은
-  테이블로 옮겨지지 않은 지갑 잔액에서만 가능하다 — 테이블 돈은 기립 후에 뺀다
+- **바이인은 사용자가 20~100BB(4,000~20,000) 안에서 고르고, 자동 합산은 없다.** 지갑에 들어온 돈(충전 승인·출금 취소/반려·관리자 증액)은 지갑에만 남고
+  `WalletCredited` 를 듣는 쪽은 holdem 에 없다. 스택에 넣는 길은 두 가지뿐이다 — 착석 때의 바이인과 핸드 사이의 **칩 추가**(`POST /api/holdem/seat/chips`,
+  `AddChipsService`: 핸드 진행 중이면 `HAND_IN_PROGRESS`, 결과 스택이 100BB 를 넘으면 `CHIP_ADD_OUT_OF_RANGE`, 테이블 → 지갑 락 순서로 이체한 뒤 공개 뷰를 브로드캐스트).
+  범위는 `HoldemTable.buyInRange(obligation)` 하나가 정한다 — 도메인 `sitDown` 은 하한(20BB)만 보고 상한은 `SeatRequester` 가 본다. 잔액이 바이인보다 적으면
+  `INSUFFICIENT_BALANCE`(wallet 과 같은 코드 문자열 — 클라이언트가 하나만 처리한다). 대기열 항목(`JoinQueueEntry`)이 고른 금액을 들고 있고
+  `AdmitJoinRequestService` 가 정확히 그만큼만 `WalletTransfer.toGame` 으로 옮긴다. 범위·잔액은 `GET /api/holdem/tables/{id}/buy-in`(`BuyInQueryService`)이 알려 준다
+- **재착석 의무(ratholing 방지)**: 떠난 사람이 가져간 금액을 `RecentDepartures` 가 30분 동안 기억한다(인메모리 — 재시작하면 사라져 한 번은 샐 수 있다). 기립(`StandUpService`)·
+  만료 폴드 기립(`ExpireTurnService`)은 돌려받은 금액을, 0칩 자동 기립(`HandSettler`)은 0(이전 의무를 지운다)을 덮어쓴다. 의무가 있으면 `buyInRange` 의 하한이 그 금액으로
+  올라가고, 100BB 를 넘으면 상한도 따라 올라간다(의무가 상한보다 우선). 잔액이 의무에 못 미치면 `INSUFFICIENT_BALANCE`
 - **착석은 항상 대기열을 거친다 — 핸드 진행 여부와 무관하다.** 좌석은 고르지 않는다: 가장 낮은 번호의 빈 좌석에
   FIFO 순서대로 앉힌다. 대기열은 인메모리(`JoinQueue`)다 — 좌석 배정 전이라 돈이 걸려 있지 않고, 재시작하면
   비워져도 안전하다(복구할 게 없다). 트리거는 셋: 대기열 삽입 커밋(SitDownService), 핸드 정산(HandSettler),

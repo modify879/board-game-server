@@ -202,7 +202,7 @@ class HoldemStompIntegrationTest {
     // 연결을 먼저 만든다. 반환된 세션은 쓰지 않는다(연결 자체가 목적이라 fire-and-forget).
     private fun sitDown(accessToken: String, tableId: Long): ResultActions {
         tryConnect(accessToken)
-        return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{}""")
+        return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{"buyIn":10000}""")
     }
 
     private data class SeatedUser(val userId: Long, val accessToken: String, val tableId: Long)
@@ -833,7 +833,7 @@ class HoldemStompIntegrationTest {
         assertThat(JsonPath.read<String>(notice, "$.type")).isEqualTo("TABLE_CLOSED")
         assertThat(JsonPath.read<Int>(notice, "$.tableId").toLong()).isEqualTo(tableId)
         listed().andExpect(jsonPath("$.content[?(@.tableId == $tableId)]").isEmpty)
-        authPost("/api/holdem/tables/$tableId/seats", accessToken, "{}")
+        authPost("/api/holdem/tables/$tableId/seats", accessToken, """{"buyIn":10000}""")
             .andExpect(status().isNotFound)
             .andExpect(jsonPath("$.errorCode").value("TABLE_NOT_FOUND"))
     }

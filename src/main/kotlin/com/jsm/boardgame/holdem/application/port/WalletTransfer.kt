@@ -8,7 +8,7 @@ import com.jsm.boardgame.holdem.domain.model.TableId
  * infrastructure/acl 의 어댑터가 wallet 의 공개 application 만 부른다.
  */
 interface WalletTransfer {
-    /** 지갑 잔액 전부를 테이블로 옮기고 옮긴 금액을 돌려준다. 잔액이 0이면 0이다. */
-    fun allToGame(userId: UserId, tableId: TableId, memo: String?): Long
+    /** 지갑에서 [amount] 를 테이블로 옮긴다. 잔액이 모자라면 wallet 의 INSUFFICIENT_BALANCE 로 실패한다. */
+    fun toGame(userId: UserId, amount: Long, tableId: TableId, memo: String?)
     fun fromGame(userId: UserId, amount: Long, tableId: TableId, memo: String?)
 }

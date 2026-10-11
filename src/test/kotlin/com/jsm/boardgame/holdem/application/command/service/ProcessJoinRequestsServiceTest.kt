@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.common.error.CommonErrorCode
 import com.jsm.boardgame.common.error.ErrorCode
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestCommand
@@ -83,8 +84,8 @@ class ProcessJoinRequestsServiceTest {
     @Test
     fun `연결이 없는 대기열 항목은 앉히지 않고 NOT_CONNECTED 로 버린 뒤 다음 항목을 처리한다`() {
         val queue = InMemoryJoinQueue()
-        queue.enqueue(tableId, UserId(101L), false)
-        queue.enqueue(tableId, UserId(102L), false)
+        queue.enqueue(tableId, UserId(101L), false, Chips.of(8_000))
+        queue.enqueue(tableId, UserId(102L), false, Chips.of(8_000))
         val admit = ProcessJoinRequestsFakeAdmitUseCase(mapOf(102L to { AdmitJoinRequestResult.Seated(1) }))
         val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
         val service = ProcessJoinRequestsService(queue, admit, notifier, ProcessJoinRequestsFakeUserConnections(disconnected = setOf(101L)))
@@ -102,9 +103,9 @@ class ProcessJoinRequestsServiceTest {
     @Test
     fun `대기열 맨 앞부터 순서대로 좌석에 앉히고 완료되면 대기열이 빈다`() {
         val queue = InMemoryJoinQueue()
-        queue.enqueue(tableId, UserId(101L), false)
-        queue.enqueue(tableId, UserId(102L), false)
-        queue.enqueue(tableId, UserId(103L), false)
+        queue.enqueue(tableId, UserId(101L), false, Chips.of(8_000))
+        queue.enqueue(tableId, UserId(102L), false, Chips.of(8_000))
+        queue.enqueue(tableId, UserId(103L), false, Chips.of(8_000))
         val admit = ProcessJoinRequestsFakeAdmitUseCase(
             mapOf(
                 101L to { AdmitJoinRequestResult.Seated(1) },
@@ -134,7 +135,7 @@ class ProcessJoinRequestsServiceTest {
     @Test
     fun `핸드가 진행 중이면 대기열을 그대로 두고 처리를 멈춘다`() {
         val queue = InMemoryJoinQueue()
-        queue.enqueue(tableId, UserId(101L), false)
+        queue.enqueue(tableId, UserId(101L), false, Chips.of(8_000))
         val admit = ProcessJoinRequestsFakeAdmitUseCase(mapOf(101L to { AdmitJoinRequestResult.Blocked }))
         val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
         val service = ProcessJoinRequestsService(queue, admit, notifier, ProcessJoinRequestsFakeUserConnections())
@@ -152,8 +153,8 @@ class ProcessJoinRequestsServiceTest {
     @Test
     fun `지갑 실패로 앞사람이 버려져도 다음 사람은 계속 처리된다`() {
         val queue = InMemoryJoinQueue()
-        queue.enqueue(tableId, UserId(101L), false)
-        queue.enqueue(tableId, UserId(102L), false)
+        queue.enqueue(tableId, UserId(101L), false, Chips.of(8_000))
+        queue.enqueue(tableId, UserId(102L), false, Chips.of(8_000))
         val admit = ProcessJoinRequestsFakeAdmitUseCase(
             mapOf(
                 101L to { throw BuyInOutOfRangeException("wallet failure simulation") },
@@ -180,8 +181,8 @@ class ProcessJoinRequestsServiceTest {
     @Test
     fun `비즈니스 예외가 아닌 오류로 앞사람이 실패해도 버려지고 TEMPORARILY_UNAVAILABLE 로 알리며 다음 사람은 처리된다`() {
         val queue = InMemoryJoinQueue()
-        queue.enqueue(tableId, UserId(101L), false)
-        queue.enqueue(tableId, UserId(102L), false)
+        queue.enqueue(tableId, UserId(101L), false, Chips.of(8_000))
+        queue.enqueue(tableId, UserId(102L), false, Chips.of(8_000))
         val admit = ProcessJoinRequestsFakeAdmitUseCase(
             mapOf(
                 101L to { throw RuntimeException("lock timeout simulation") },
@@ -208,7 +209,7 @@ class ProcessJoinRequestsServiceTest {
     @Test
     fun `착석 시도가 인터럽트되면 머리를 버리지 않고 인터럽트 플래그를 세운 채 멈춘다`() {
         val queue = InMemoryJoinQueue()
-        queue.enqueue(tableId, UserId(101L), false)
+        queue.enqueue(tableId, UserId(101L), false, Chips.of(8_000))
         val admit = ProcessJoinRequestsFakeAdmitUseCase(mapOf(101L to { throw InterruptedException("shutdown") }))
         val notifier = ProcessJoinRequestsFakeJoinQueueNotifier()
         val service = ProcessJoinRequestsService(queue, admit, notifier, ProcessJoinRequestsFakeUserConnections())
@@ -227,7 +228,7 @@ class ProcessJoinRequestsServiceTest {
     @Test
     fun `착석 처리 중에는 취소가 기다리다가 결국 착석되고 취소는 JOIN_REQUEST_NOT_FOUND 로 실패한다`() {
         val queue = InMemoryJoinQueue()
-        queue.enqueue(tableId, UserId(101L), false)
+        queue.enqueue(tableId, UserId(101L), false, Chips.of(8_000))
         val admitStarted = CountDownLatch(1)
         val releaseAdmit = CountDownLatch(1)
         val admit = ProcessJoinRequestsFakeAdmitUseCase(

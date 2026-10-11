@@ -151,7 +151,7 @@ class ConnectionTimerStandUpIntegrationTest {
 
     private fun sitDown(accessToken: String, tableId: Long): ResultActions {
         tryConnect(accessToken)
-        return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{}""")
+        return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{"buyIn":10000}""")
     }
 
     private fun awaitSeated(userId: Long, timeoutMs: Long = 5_000) {

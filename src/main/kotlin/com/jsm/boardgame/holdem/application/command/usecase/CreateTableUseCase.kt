@@ -6,4 +6,4 @@ interface CreateTableUseCase {
     fun create(command: CreateTableCommand): TableId
 }
 
-data class CreateTableCommand(val ownerUserId: Long, val name: String)
+data class CreateTableCommand(val ownerUserId: Long, val name: String, val buyIn: Long)

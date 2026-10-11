@@ -163,9 +163,9 @@ class NextHandTimerIntegrationTest {
             .get(5, TimeUnit.SECONDS)
     }
 
-    private fun sitDown(accessToken: String, tableId: Long): ResultActions {
+    private fun sitDown(accessToken: String, tableId: Long, buyIn: Long = 10_000): ResultActions {
         tryConnect(accessToken)
-        return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{}""")
+        return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{"buyIn":$buyIn}""")
     }
 
     private fun awaitSeated(userId: Long, timeoutMs: Long = 5_000) {
@@ -312,7 +312,9 @@ class NextHandTimerIntegrationTest {
 
         // 4) 기립했던 사용자가 다시 앉는다(HandStarter.rescheduleOnEntry 가 카운트다운을 다시
         //    걸어야 한다).
-        sitDown(folder.accessToken, tableId).andExpect(status().isAccepted)
+        // 떠난 직후라 재착석 의무가 가져간 금액(지갑에 돌아온 전액)이다 — 지갑 전부로 앉는다.
+        val walletBalance = walletRepository.findByUserId(WalletUserId(folderUserId.value))!!.balance.amount
+        sitDown(folder.accessToken, tableId, buyIn = walletBalance).andExpect(status().isAccepted)
         awaitSeated(folderUserId.value)
 
         // 5) 다음 핸드가 3초 안에 자동 시작돼야 한다 — 실패하면 NextHandTimer 내부 상태를 진단으로 남긴다.

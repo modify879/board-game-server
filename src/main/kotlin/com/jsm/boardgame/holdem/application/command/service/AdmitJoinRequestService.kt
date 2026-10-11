@@ -50,9 +50,9 @@ class AdmitJoinRequestService(
             throw AlreadySeatedException("다른 테이블에 이미 앉아 있습니다: userId=${command.userId}")
         }
 
-        // 잔액이 BB 미만이면 sitDown 이 BuyInOutOfRange 로 던지고 REQUIRES_NEW 가 이체까지 롤백한다.
-        val amount = walletTransfer.allToGame(UserId(command.userId), tableId, memo = "holdem")
-        table.sitDown(UserId(command.userId), Chips.of(amount), command.postBlindImmediately)
+        // 잔액이 그새 모자라면 이체가 INSUFFICIENT_BALANCE 로 던지고, sitDown 이 던지면 REQUIRES_NEW 가 이체까지 롤백한다.
+        walletTransfer.toGame(UserId(command.userId), command.buyIn, tableId, memo = "holdem")
+        table.sitDown(UserId(command.userId), Chips.of(command.buyIn), command.postBlindImmediately)
         val seatNo = table.seatOf(UserId(command.userId))!!.seatNo
         handStarter.rescheduleOnEntry(tableId, table)
         return AdmitJoinRequestResult.Seated(seatNo)
