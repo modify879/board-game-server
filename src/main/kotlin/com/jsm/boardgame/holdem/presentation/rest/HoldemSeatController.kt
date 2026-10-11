@@ -8,9 +8,11 @@ import com.jsm.boardgame.holdem.application.command.usecase.StandUpUseCase
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.application.port.callForUser
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
+import com.jsm.boardgame.holdem.application.query.service.BuyInQueryService
 import com.jsm.boardgame.holdem.application.query.service.MySeatQueryService
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.presentation.rest.request.AddChipsRequest
+import com.jsm.boardgame.holdem.presentation.rest.response.BuyInResponse
 import com.jsm.boardgame.holdem.presentation.rest.response.MySeatResponse
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -33,6 +35,7 @@ class HoldemSeatController(
     private val standUpUseCase: StandUpUseCase,
     private val addChipsUseCase: AddChipsUseCase,
     private val mySeatQueryService: MySeatQueryService,
+    private val buyInQueryService: BuyInQueryService,
     private val tableExecutor: TableExecutor,
     private val tables: HoldemTableRepository,
 ) {
@@ -60,6 +63,11 @@ class HoldemSeatController(
     }
 
     // 이 조회는 언제나 허용된다 (MySeatQueryService KDoc 참고) — 여기에 차단 로직을 얹지 않는다.
+    // 테이블 생성 화면용 — 테이블이 없으니 기본 블라인드 기준이다. 응답은 /tables/{id}/buy-in 과 같다.
+    @GetMapping("/buy-in")
+    fun buyIn(@AuthenticationPrincipal jwt: Jwt): BuyInResponse =
+        BuyInResponse.from(buyInQueryService.findForNewTable(jwt.requireUserId()))
+
     @GetMapping("/me/seat")
     fun mySeat(@AuthenticationPrincipal jwt: Jwt): ResponseEntity<MySeatResponse> {
         val view = mySeatQueryService.findMine(jwt.requireUserId()) ?: return ResponseEntity.noContent().build()
