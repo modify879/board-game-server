@@ -227,7 +227,7 @@ class HandSettlerTest {
 
     @Test
     fun `핸드 도중 기립한 폴드 좌석은 정산에서 건너뛰고 칩은 보존된다`() {
-        // seat2 는 이미 ExpireTurnService 가 1분 무응답 폴드로 기립시켜 테이블에 없다고 가정한다.
+        // seat2 는 이미 ExpireTurnService 가 30초 무응답 폴드로 기립시켜 테이블에 없다고 가정한다.
         val table = seatedTable(1 to 10_000L, 3 to 10_000L)
         val tableId = table.id!!
         val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000))

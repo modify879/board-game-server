@@ -129,6 +129,6 @@ class TurnTimer(
         private val log = LoggerFactory.getLogger(TurnTimer::class.java)
 
         // 계획서: 테이블 설정값이 될 자리. 지금은 전역 상수.
-        private val TURN_TIMEOUT: Duration = Duration.ofMinutes(1)
+        private val TURN_TIMEOUT: Duration = Duration.ofSeconds(30)
     }
 }
