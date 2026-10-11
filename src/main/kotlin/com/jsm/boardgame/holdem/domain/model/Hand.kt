@@ -153,6 +153,7 @@ class Hand private constructor(
         if (round.isComplete) {
             onRoundComplete(round)
         }
+        checkChipsConserved()
     }
 
     /** 런아웃을 한 걸음 진행한다 — 보드가 5장 미만이면 다음 스트리트를 깔고, 다 깔렸으면 쇼다운한다. */
@@ -166,6 +167,21 @@ class Hand private constructor(
         } else {
             finishShowdown()
         }
+        checkChipsConserved()
+    }
+
+    /**
+     * 칩 보존 불변식 — 스택+투입액(끝났으면 수령 후 스택)의 합은 시작 스택 합과 같아야 한다.
+     * 호출자가 @Transactional 이라 IllegalStateException 이 액션·정산을 롤백해 틀린 칩이 저장되지 않는다.
+     */
+    private fun checkChipsConserved() {
+        val expected = startingStacks.values.fold(Chips.ZERO) { acc, c -> acc + c }
+        val actual = if (result != null) {
+            stacks.values.fold(Chips.ZERO) { acc, c -> acc + c }
+        } else {
+            seatNos.fold(Chips.ZERO) { acc, seatNo -> acc + stackOf(seatNo) + totalContributedBy(seatNo) }
+        }
+        check(actual == expected) { "칩 합계가 시작 스택 합계와 다릅니다: expected=$expected, actual=$actual, buttonSeatNo=$buttonSeatNo" }
     }
 
     private fun onRoundComplete(round: BettingRound) {
@@ -357,6 +373,7 @@ class Hand private constructor(
             if (preflopRound.isComplete) {
                 hand.onRoundComplete(preflopRound)
             }
+            hand.checkChipsConserved()
             return hand
         }
 
