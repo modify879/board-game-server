@@ -4,6 +4,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.PlayActionCommand
 import com.jsm.boardgame.holdem.application.exception.HandNotFoundException
 import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
 import com.jsm.boardgame.holdem.application.exception.UnknownActionException
+import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
@@ -78,7 +79,7 @@ class PlayActionServiceTest {
     private val handStore = PlayActionFakeHandStore()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
-    private val handSettler = HandSettler(tables, handStore, PlayActionServiceFakeLastHandResultStore(), eventPublisher, PlayActionFakeNextHandCountdown(), FakeRecentDepartures())
+    private val handSettler = HandSettler(tables, handStore, PlayActionServiceFakeLastHandResultStore(), FakeFoldWinnerCards(), eventPublisher, PlayActionFakeNextHandCountdown(), FakeRecentDepartures())
     private val service = PlayActionService(tables, handStore, handSettler, eventPublisher)
 
     /** userId = seatNo * 1000 으로 대응시킨다. */

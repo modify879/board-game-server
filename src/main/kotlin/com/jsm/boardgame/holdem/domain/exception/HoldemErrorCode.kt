@@ -38,6 +38,7 @@ enum class HoldemErrorCode(override val kind: ErrorKind) : ErrorCode {
     HAND_NOT_FOUND(ErrorKind.NOT_FOUND),
     UNKNOWN_ACTION(ErrorKind.INVALID),
     NOT_CONNECTED(ErrorKind.CONFLICT),
+    SHOW_NOT_ALLOWED(ErrorKind.CONFLICT),
     // wallet 의 INSUFFICIENT_BALANCE 와 코드 문자열이 같다 — 클라이언트가 하나만 처리하도록 일부러 맞춘다.
     INSUFFICIENT_BALANCE(ErrorKind.CONFLICT),
     ;

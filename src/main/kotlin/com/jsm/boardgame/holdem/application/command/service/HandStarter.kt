@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
+import com.jsm.boardgame.holdem.application.port.FoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
@@ -26,6 +27,7 @@ class HandStarter(
     private val tables: HoldemTableRepository,
     private val handStore: HandStore,
     private val lastHandResults: LastHandResultStore,
+    private val foldWinnerCards: FoldWinnerCards,
     private val shuffler: Shuffler,
     private val eventPublisher: ApplicationEventPublisher,
     private val countdown: NextHandCountdown,
@@ -97,6 +99,7 @@ class HandStarter(
 
         // 새 핸드가 시작됐으니 직전 결과는 낡았다.
         lastHandResults.remove(tableId)
+        foldWinnerCards.remove(tableId)
         handStore.save(tableId, hand)
         tables.save(table)
         eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand))

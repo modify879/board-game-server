@@ -14,3 +14,4 @@ class HandInProgressException(logMessage: String) : BusinessException(HoldemErro
 class JoinRequestNotFoundException(logMessage: String) : BusinessException(HoldemErrorCode.JOIN_REQUEST_NOT_FOUND, logMessage)
 class NotConnectedException(logMessage: String) : BusinessException(HoldemErrorCode.NOT_CONNECTED, logMessage)
 class InsufficientBalanceException(logMessage: String) : BusinessException(HoldemErrorCode.INSUFFICIENT_BALANCE, logMessage)
+class ShowNotAllowedException(logMessage: String) : BusinessException(HoldemErrorCode.SHOW_NOT_ALLOWED, logMessage)

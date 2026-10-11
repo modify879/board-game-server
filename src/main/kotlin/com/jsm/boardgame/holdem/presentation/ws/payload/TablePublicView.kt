@@ -63,7 +63,7 @@ data class PayoutPublicView(val seatNo: Int, val userId: Long, val amount: Long)
  * 담을 수 있는 유일한 타입이다 — [com.jsm.boardgame.holdem.domain.model.HandResult.shownSeatNos] 로만
  * 만든다. 폴드한 좌석·폴드 승리·진행 중 핸드의 카드는 여기 오지 않는다.
  */
-data class ShownHandView(val seatNo: Int, val userId: Long, val holeCards: List<String>, val category: String)
+data class ShownHandView(val seatNo: Int, val userId: Long, val holeCards: List<String>, val category: String?)
 
 /** 런아웃 중 공개된 좌석의 패 — [com.jsm.boardgame.holdem.domain.model.Hand.revealedSeatNos] 로만 만든다. */
 data class RevealedHandView(val seatNo: Int, val holeCards: List<String>)

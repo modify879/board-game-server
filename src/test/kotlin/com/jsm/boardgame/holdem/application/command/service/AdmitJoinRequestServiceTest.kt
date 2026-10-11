@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestCommand
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestResult
+import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
@@ -102,7 +103,7 @@ class AdmitJoinRequestServiceTest {
     private val eventPublisher = ApplicationEventPublisher { }
     private val walletTransfer = AdmitJoinRequestFakeWalletTransfer()
     private val countdown = AdmitJoinRequestFakeNextHandCountdown()
-    private val handStarter = HandStarter(tables, handStore, AdmitJoinRequestServiceFakeLastHandResultStore(), identityShuffler, eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, AdmitJoinRequestServiceFakeLastHandResultStore(), FakeFoldWinnerCards(), identityShuffler, eventPublisher, countdown)
     private val service = AdmitJoinRequestService(tables, handStore, walletTransfer, handStarter)
 
     /** 특정 좌석 번호에 특정 버이인으로 미리 앉혀 둔다 — sitDown 은 좌석을 고르지 않으므로

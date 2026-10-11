@@ -11,7 +11,7 @@ import com.jsm.boardgame.holdem.domain.model.Hand
  */
 data class LastHandResult(val board: List<String>, val payouts: List<Payout>, val shownHands: List<ShownHand>) {
     data class Payout(val seatNo: Int, val userId: UserId, val amount: Long)
-    data class ShownHand(val seatNo: Int, val userId: UserId, val holeCards: List<String>, val category: String)
+    data class ShownHand(val seatNo: Int, val userId: UserId, val holeCards: List<String>, val category: String?)
 
     companion object {
         /**

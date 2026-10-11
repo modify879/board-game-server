@@ -3,6 +3,7 @@ package com.jsm.boardgame.holdem.application.command.service
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
+import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
@@ -98,7 +99,7 @@ class StandUpServiceTest {
     private val walletTransfer = StandUpFakeWalletTransfer()
     private val eventPublisher = StandUpFakeEventPublisher()
     private val countdown = StandUpFakeNextHandCountdown()
-    private val handStarter = HandStarter(tables, handStore, StandUpServiceFakeLastHandResultStore(), Shuffler { it }, eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, StandUpServiceFakeLastHandResultStore(), FakeFoldWinnerCards(), Shuffler { it }, eventPublisher, countdown)
     private val departures = FakeRecentDepartures()
     private val service = StandUpService(tables, handStore, walletTransfer, handStarter, departures, eventPublisher)
 

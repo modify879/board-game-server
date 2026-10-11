@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
+import com.jsm.boardgame.holdem.application.port.FoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
@@ -44,6 +45,7 @@ class HandSettler(
     private val tables: HoldemTableRepository,
     private val handStore: HandStore,
     private val lastHandResults: LastHandResultStore,
+    private val foldWinnerCards: FoldWinnerCards,
     private val eventPublisher: ApplicationEventPublisher,
     private val countdown: NextHandCountdown,
     private val recentDepartures: RecentDepartures,
@@ -73,6 +75,16 @@ class HandSettler(
 
         handStore.remove(tableId)
         lastHandResults.save(tableId, lastResult)
+        // 폴드로 끝났으면 남은 한 좌석이 "보여 주기" 를 고를 수 있다 — 카드는 공개 결과가 아니라 별도 포트에 둔다.
+        if (hand.result!!.showdownRanks.isEmpty()) {
+            val winnerSeatNo = hand.seatNos.single { hand.statusOf(it) != SeatStatus.FOLDED }
+            foldWinnerCards.save(
+                tableId,
+                FoldWinnerCards.FoldWinner(winnerSeatNo, userIdBySeat.getValue(winnerSeatNo), hand.holeCardsOf(winnerSeatNo).map { it.toString() }),
+            )
+        } else {
+            foldWinnerCards.remove(tableId)
+        }
 
         if (table.candidateSeatNos().size >= 2) {
             countdown.restart(tableId)
