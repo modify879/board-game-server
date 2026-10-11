@@ -20,3 +20,4 @@ paths:
   이름은 `UniqueNames.suffix()`, Redis 등에 쓰는 합성 userId 는 실제 IDENTITY 와 겹치지 않는 대역(예: 1조부터)을 쓴다
 - 규칙을 테스트로 못 박을 때는 성격이 다른 경로를 여럿 잡는다 — 사전 체크 경로만 타면
   DB 제약 번역이 한 번도 돌지 않은 채 테스트가 통과한다
+- 홀덤 도메인은 `HandSimulationTest` 가 무작위 시뮬레이션·오라클·무늬 치환 메타모픽을 돈다. 실패 메시지의 시드는 `./gradlew unitTest -Dholdem.sim.seed=<시드>` 로 재생하고, 횟수는 `-Dholdem.sim.hands=<N>` 이다
