@@ -44,3 +44,9 @@ do $$ begin
         add constraint fk_last_hand_result_table foreign key (table_id) references holdem_tables(id);
 exception when duplicate_object then null;
 end $$
+@@@
+do $$ begin
+    alter table holdem_hand_history_player
+        add constraint fk_hand_history_player_hand foreign key (hand_id) references holdem_hand_history(id) on delete cascade;
+exception when duplicate_object then null;
+end $$

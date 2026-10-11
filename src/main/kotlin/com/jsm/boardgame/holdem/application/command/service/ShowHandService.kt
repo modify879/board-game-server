@@ -7,6 +7,7 @@ import com.jsm.boardgame.holdem.application.exception.HandInProgressException
 import com.jsm.boardgame.holdem.application.exception.ShowNotAllowedException
 import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
 import com.jsm.boardgame.holdem.application.port.FoldWinnerCards
+import com.jsm.boardgame.holdem.application.port.HandHistory
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
@@ -21,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional
 
 /**
  * 하우스 룰 10 — 모두 폴드해 이긴 사람만, 핸드가 끝난 뒤 다음 핸드 전에 두 장을 공개한다. 한 번만 가능하다.
- * 족보 이름은 보드가 3장 이상일 때만 붙인다(프리플랍 폴드 승리는 null).
+ * 히스토리의 shown 표시도 같은 트랜잭션에서 올린다. 족보 이름은 보드가 3장 이상일 때만 붙인다(프리플랍 폴드 승리는 null).
  */
 @Service
 @Transactional
@@ -30,6 +31,7 @@ class ShowHandService(
     private val handStore: HandStore,
     private val foldWinnerCards: FoldWinnerCards,
     private val lastHandResults: LastHandResultStore,
+    private val handHistory: HandHistory,
     private val eventPublisher: ApplicationEventPublisher,
 ) : ShowHandUseCase {
 
@@ -55,6 +57,7 @@ class ShowHandService(
             last.copy(shownHands = last.shownHands + LastHandResult.ShownHand(winner.seatNo, winner.userId, winner.holeCards, category)),
         )
         foldWinnerCards.remove(tableId)
+        handHistory.markShown(tableId, winner.userId)
         eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, null))
     }
 }

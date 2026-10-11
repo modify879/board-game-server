@@ -3,16 +3,20 @@ package com.jsm.boardgame.holdem.application.command.service
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.FoldWinnerCards
+import com.jsm.boardgame.holdem.application.port.HandHistory
+import com.jsm.boardgame.holdem.application.port.HandHistoryEntry
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.RecentDepartures
+import com.jsm.boardgame.holdem.domain.model.Card
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.SeatStatus
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
@@ -39,6 +43,8 @@ import org.springframework.stereotype.Component
  * 정산 뒤 후보(스택이 있는 점유 좌석)가 2명 이상이면 다음 핸드 카운트다운을 새로 건다 — 핸드가
  * 도는 동안은 카운트다운이 없었으므로 항상 처음부터 시작하는 셈이다. `NextHandCountdown` 이 상대
  * 시간(단조 시계)만 쓴다.
+ *
+ * 끝난 핸드는 같은 트랜잭션에서 히스토리(하우스 룰 11)에 남긴다. 취소된 핸드(CancelHandService)는 남기지 않는다.
  */
 @Component
 class HandSettler(
@@ -49,6 +55,7 @@ class HandSettler(
     private val eventPublisher: ApplicationEventPublisher,
     private val countdown: NextHandCountdown,
     private val recentDepartures: RecentDepartures,
+    private val handHistory: HandHistory,
 ) {
     fun settle(tableId: TableId, table: HoldemTable, hand: Hand) {
         val stacks = hand.seatNos.associateWith { seatNo -> hand.stackOf(seatNo) }
@@ -75,6 +82,7 @@ class HandSettler(
 
         handStore.remove(tableId)
         lastHandResults.save(tableId, lastResult)
+        recordHistory(tableId, hand, userIdBySeat)
         // 폴드로 끝났으면 남은 한 좌석이 "보여 주기" 를 고를 수 있다 — 카드는 공개 결과가 아니라 별도 포트에 둔다.
         if (hand.result!!.showdownRanks.isEmpty()) {
             val winnerSeatNo = hand.seatNos.single { hand.statusOf(it) != SeatStatus.FOLDED }
@@ -99,6 +107,30 @@ class HandSettler(
         // 넘긴다(JoinRequestsProcessor → ProcessJoinRequestsService → AdmitJoinRequestService, 항목마다 하나씩).
         // 대기열이 비어 있어도 트리거는 그냥 버려지므로(peekHead 가 null) 조건 없이 발행한다.
         eventPublisher.publishEvent(JoinRequestsDue(tableId))
+    }
+
+    private fun recordHistory(tableId: TableId, hand: Hand, userIdBySeat: Map<Int, UserId>) {
+        val result = hand.result!!
+        val startingStacks = hand.snapshot().startingStacks
+        handHistory.record(
+            HandHistoryEntry(
+                tableId = tableId.value,
+                buttonSeatNo = hand.buttonSeatNo,
+                board = hand.board.map(Card::toString),
+                players = hand.seatNos.map { seatNo ->
+                    HandHistoryEntry.Player(
+                        seatNo = seatNo,
+                        // 도중에 떠난 좌석은 다른 사람이 앉았을 수 있어 이탈 기록이 우선한다.
+                        userId = (hand.departedUserIds[seatNo] ?: userIdBySeat.getValue(seatNo)).value,
+                        startingStack = startingStacks.getValue(seatNo).amount,
+                        endingStack = hand.stackOf(seatNo).amount,
+                        payout = result.payouts[seatNo]?.amount ?: 0,
+                        holeCards = hand.holeCardsOf(seatNo).map(Card::toString),
+                        shown = seatNo in result.shownSeatNos,
+                    )
+                },
+            ),
+        )
     }
 
     companion object {

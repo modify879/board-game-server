@@ -16,6 +16,9 @@ import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import com.jsm.boardgame.holdem.presentation.ws.HoldemDestinations
+import com.jsm.boardgame.user.domain.model.UserRole
+import com.jsm.boardgame.user.domain.repository.UserRepository
+import com.jsm.boardgame.user.domain.model.UserId as UserDomainId
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
@@ -41,6 +44,10 @@ import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
+import org.hamcrest.Matchers.containsInAnyOrder
+import org.hamcrest.Matchers.nullValue
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.web.socket.client.standard.StandardWebSocketClient
@@ -102,6 +109,9 @@ class HoldemShowdownIntegrationTest {
 
     @Autowired
     private lateinit var fixedShuffler: ShowdownFixedShuffler
+
+    @Autowired
+    private lateinit var userRepository: UserRepository
 
     @LocalServerPort
     private var port: Int = 0
@@ -316,6 +326,93 @@ class HoldemShowdownIntegrationTest {
         assertThat(balanceOf(userIdB)).isEqualTo(8_000L)
         // 칩 보존 — 큰 스택이 순손실 4,000, 숏스택이 순이익 4,000 이고 총합은 그대로다.
         assertThat(balanceOf(userIdA) + balanceOf(userIdB)).isEqualTo(24_000L)
+    }
+
+    private fun authGet(url: String, accessToken: String): ResultActions =
+        mockMvc.perform(get(url).header("Authorization", "Bearer $accessToken"))
+
+    // 승격 후 다시 로그인한다 — 역할 변경은 기존 액세스 토큰을 끊는다.
+    private fun adminToken(): String {
+        val username = uniqueUsername()
+        val id = idFromLocation(signUp(username, "password123").andExpect(status().isCreated))
+        val user = userRepository.findById(UserDomainId(id))!!
+        user.changeRole(UserRole.ADMIN)
+        userRepository.save(user)
+        return login(username, "password123")
+    }
+
+    /** 두 사람을 앉히고 고정 덱으로 핸드를 시작한다. 좌석1(버튼) 에이스 페어, 좌석2 2-3 오프수트. */
+    private fun startHeadsUp(): Triple<Long, Pair<Long, String>, Pair<Long, String>> {
+        val a = signUpAndLogin()
+        val b = signUpAndLogin()
+        fundWallet(a.first, 10_000)
+        fundWallet(b.first, 10_000)
+        val tableId = createTable(a.second)
+        sitDown(a.second, tableId).andExpect(status().isAccepted)
+        awaitSeated(a.first)
+        sitDown(b.second, tableId).andExpect(status().isAccepted)
+        awaitSeated(b.first)
+        fixDeckOrder("2c", "As", "3d", "Ah", "Kd", "Qc", "Jh", "9s", "8h")
+        startHand(tableId)
+        return Triple(tableId, a, b)
+    }
+
+    @Test
+    fun `폴드로 끝난 핸드의 내 히스토리는 내 패만 보이고 상대 패는 null 이며 관리자는 둘 다 본다`() {
+        val (tableId, a, b) = startHeadsUp()
+        authPost("/api/holdem/tables/$tableId/hands/actions", a.second, """{"action":"FOLD"}""").andExpect(status().isNoContent)
+
+        authGet("/api/holdem/me/hands", a.second)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.content.length()").value(1))
+            .andExpect(jsonPath("$.content[0].tableId").value(tableId))
+            .andExpect(jsonPath("$.content[0].buttonSeatNo").value(1))
+            .andExpect(jsonPath("$.content[0].board.length()").value(0))
+            .andExpect(jsonPath("$.content[0].players[0].userId").value(a.first))
+            .andExpect(jsonPath("$.content[0].players[0].holeCards").value(containsInAnyOrder("As", "Ah")))
+            .andExpect(jsonPath("$.content[0].players[0].shown").value(false))
+            .andExpect(jsonPath("$.content[0].players[0].payout").value(0))
+            .andExpect(jsonPath("$.content[0].players[0].endingStack").value(9_900))
+            .andExpect(jsonPath("$.content[0].players[1].holeCards").value(nullValue()))
+            .andExpect(jsonPath("$.content[0].players[1].payout").value(300))
+            .andExpect(jsonPath("$.page.totalElements").value(1))
+        authGet("/api/holdem/me/hands", b.second)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.content[0].players[0].holeCards").value(nullValue()))
+            .andExpect(jsonPath("$.content[0].players[1].holeCards.length()").value(2))
+
+        // 폴드 승자(좌석2)가 보여 주면 상대 화면에서도 그 패가 보인다.
+        authPost("/api/holdem/tables/$tableId/hands/show", b.second).andExpect(status().isNoContent)
+        authGet("/api/holdem/me/hands", a.second)
+            .andExpect(jsonPath("$.content[0].players[1].holeCards.length()").value(2))
+            .andExpect(jsonPath("$.content[0].players[1].shown").value(true))
+
+        val admin = adminToken()
+        authGet("/api/admin/holdem/hands?tableId=$tableId", admin)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.content.length()").value(1))
+            .andExpect(jsonPath("$.content[0].players[0].holeCards.length()").value(2))
+        authGet("/api/admin/holdem/hands?userId=${a.first}&tableId=$tableId", admin)
+            .andExpect(jsonPath("$.content.length()").value(1))
+        authGet("/api/admin/holdem/hands?userId=${a.first + 1_000_000_000}", admin)
+            .andExpect(jsonPath("$.content.length()").value(0))
+        authGet("/api/admin/holdem/hands", a.second).andExpect(status().isForbidden)
+    }
+
+    @Test
+    fun `쇼다운으로 끝난 핸드의 히스토리에는 두 사람의 패와 보드가 모두 공개로 남는다`() {
+        val (tableId, a, b) = startHeadsUp()
+        playCheckCallToShowdown(tableId, mapOf(1 to a.second, 2 to b.second))
+
+        authGet("/api/holdem/me/hands", b.second)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.content[0].board.length()").value(5))
+            .andExpect(jsonPath("$.content[0].board[0]").value("Kd"))
+            .andExpect(jsonPath("$.content[0].players[0].holeCards.length()").value(2))
+            .andExpect(jsonPath("$.content[0].players[0].shown").value(true))
+            .andExpect(jsonPath("$.content[0].players[0].payout").value(400))
+            .andExpect(jsonPath("$.content[0].players[1].shown").value(true))
+            .andExpect(jsonPath("$.content[0].players[1].endingStack").value(9_800))
     }
 
     private fun capturingFrameHandler(): Pair<StompFrameHandler, LinkedBlockingQueue<String>> {

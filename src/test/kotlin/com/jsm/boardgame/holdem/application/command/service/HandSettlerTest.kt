@@ -3,8 +3,10 @@ package com.jsm.boardgame.holdem.application.command.service
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
+import com.jsm.boardgame.holdem.application.port.FakeHandHistory
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.FoldWinnerCards
+import com.jsm.boardgame.holdem.application.port.HandHistoryEntry
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
@@ -101,7 +103,8 @@ class HandSettlerTest {
     private val countdown = HandSettlerFakeNextHandCountdown()
     private val departures = FakeRecentDepartures()
     private val foldWinnerCards = FakeFoldWinnerCards()
-    private val settler = HandSettler(tables, handStore, lastHandResults, foldWinnerCards, eventPublisher, countdown, departures)
+    private val handHistory = FakeHandHistory()
+    private val settler = HandSettler(tables, handStore, lastHandResults, foldWinnerCards, eventPublisher, countdown, departures, handHistory)
 
     private fun seatedTable(vararg stacks: Pair<Int, Long>): HoldemTable {
         val seats = stacks.associate { (seatNo, stack) ->
@@ -116,6 +119,63 @@ class HandSettlerTest {
             seats = seats,
         )
         return tables.save(table)
+    }
+
+    @Test
+    fun `쇼다운으로 끝난 핸드는 히스토리에 두 좌석 모두 공개로 기록된다`() {
+        val table = seatedTable(1 to 200L, 2 to 200L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(200), 2 to Chips.of(200))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), bustingShuffler)
+        hand.act(1, BettingAction.Call)
+        while (hand.isRunningOut) hand.advanceRunout()
+
+        settler.settle(tableId, table, hand)
+
+        val entry = handHistory.entries.single()
+        assertEquals(1L, entry.tableId)
+        assertEquals(1, entry.buttonSeatNo)
+        assertEquals(listOf("Kd", "Qc", "Jh", "9s", "4h"), entry.board)
+        val p1 = entry.players.single { it.seatNo == 1 }
+        val p2 = entry.players.single { it.seatNo == 2 }
+        assertEquals(HandHistoryEntry.Player(1, 1000L, 200, 400, 400, listOf("As", "Ah"), true), p1)
+        assertEquals(HandHistoryEntry.Player(2, 2000L, 200, 0, 0, listOf("7c", "2d"), true), p2)
+    }
+
+    @Test
+    fun `폴드로 끝난 핸드는 히스토리에 공개 좌석이 없고 패는 그대로 남는다`() {
+        val table = seatedTable(1 to 10_000L, 2 to 10_000L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
+        hand.act(1, BettingAction.Fold)
+
+        settler.settle(tableId, table, hand)
+
+        val entry = handHistory.entries.single()
+        assertEquals(emptyList(), entry.board)
+        assertEquals(listOf(false, false), entry.players.map { it.shown })
+        assertEquals(listOf(9_900L, 10_100L), entry.players.map { it.endingStack })
+        assertEquals(listOf(0L, 300L), entry.players.map { it.payout })
+        assertEquals(2, entry.players.single { it.seatNo == 2 }.holeCards.size)
+    }
+
+    @Test
+    fun `핸드 도중 떠난 좌석은 이탈 기록의 userId 로 히스토리에 남는다`() {
+        val table = seatedTable(2 to 10_000L, 3 to 10_000L) // 좌석 1 은 이미 기립했다
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, Chips.of(100), Chips.of(200), identityShuffler)
+        hand.act(1, BettingAction.Fold)
+        hand.recordDeparture(1, UserId(1000L))
+        hand.act(2, BettingAction.Fold)
+
+        settler.settle(tableId, table, hand)
+
+        val entry = handHistory.entries.single()
+        assertEquals(listOf(1, 2, 3), entry.players.map { it.seatNo })
+        assertEquals(listOf(1000L, 2000L, 3000L), entry.players.map { it.userId })
+        assertEquals(10_000L, entry.players.first().endingStack)
     }
 
     @Test
@@ -285,6 +345,7 @@ class HandSettlerTest {
         val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, Chips.of(100), Chips.of(200), identityShuffler)
         hand.act(1, BettingAction.Call)
         hand.act(2, BettingAction.Fold)
+        hand.recordDeparture(2, UserId(2000L))
         hand.act(3, BettingAction.Fold)
         handStore.save(tableId, hand)
         assertTrue(hand.isFinished)
