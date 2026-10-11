@@ -100,7 +100,8 @@ paths: ["**/holdem/**"]
   재구독(재접속 포함) 시 채널별 last seq 를 리셋하면 문제없다. `WebSocketConfig` 의 `setPreservePublishOrder(true)`
   와 함께 써야 한다 — 순번만 있고 세션별 발행 순서가 안 지켜지면 같은 세션 안에서도 메시지가 뒤섞인다
 - **테이블별 인메모리 상태는 `TableId` 를 키로 두고 `TableClosed` 커밋 후 리스너로 스스로 치운다.** `TableClosedListenersTest` 가 `TableId` 키 필드를 가진 컴포넌트를 스캔해 리스너를 강제한다 — Long 키로 두면 이 검사에 보이지 않는다
-- **테이블은 비면 자동으로 닫힌다.** 착석 0명·핸드 없음·대기열 없음이 1분(`IdleTableSweeper`, 15초 스윕) 이어지면 `closed_at` 으로 닫는다 —
+- **테이블은 비면 자동으로 닫힌다.** 마지막 사람이 떠나면 `JoinRequestsDue` 처리(대기열 착석) 직후 `JoinRequestsProcessor` 가 곧바로 `closed_at` 으로 닫는다.
+  아무도 앉은 적 없는 테이블·재시작 뒤 남은 빈 테이블은 착석 0명·핸드 없음·대기열 없음이 1분(`IdleTableSweeper`, 15초 스윕) 이어지면 같은 방식으로 닫는 폴백이 맡는다 —
   행을 지우지 않는다(지갑 원장이 테이블 id 를 참조한다). 닫힌 테이블은 `HoldemTableRepository.findById` 가 없는 것으로 돌려 명령·조회 모두 `TABLE_NOT_FOUND`.
   닫힐 때 공개 토픽에 `{"tableId","type":"TABLE_CLOSED"}` 를 보내고, 닫힌·없는 테이블을 재구독하면 스냅샷 대신 같은 알림을 다시 보낸다
   (ERROR 프레임으로 거부하지 않는다 — STOMP 세션 전체가 끊긴다)
