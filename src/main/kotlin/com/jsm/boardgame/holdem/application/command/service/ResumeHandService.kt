@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * 재시작 복구에서 좌석 전원이 재접속했을 때 진행 중 핸드를 재개한다. 호출자는 사용자가 아니라
+ * 재시작 복구에서 전원 재접속 또는 복구 유예(3분) 만료로 진행 중 핸드를 재개한다. 호출자는 사용자가 아니라
  * `HandRecovery` 뿐이다.
  *
  * 상태는 바꾸지 않는다 - [HandBroadcastRequested] 를 다시 발행해 현재 핸드 상태를 좌석별로 다시
@@ -36,7 +36,7 @@ class ResumeHandService(
         val hand = handStore.find(tableId) ?: return
         val table = tables.findById(tableId) ?: return
 
-        log.info("전원 재접속을 확인해 핸드를 재개합니다: tableId={}", command.tableId)
+        log.info("복구 유예가 끝나 핸드를 재개합니다: tableId={}", command.tableId)
         eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand))
     }
 
