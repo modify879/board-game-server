@@ -80,7 +80,7 @@ paths: ["**/holdem/**"]
   `AddChipsService`: 핸드 진행 중이면 `HAND_IN_PROGRESS`, 결과 스택이 100BB 를 넘으면 `CHIP_ADD_OUT_OF_RANGE`, 테이블 → 지갑 락 순서로 이체한 뒤 공개 뷰를 브로드캐스트).
   범위는 `HoldemTable.buyInRange(obligation)` 하나가 정한다 — 도메인 `sitDown` 은 하한(20BB)만 보고 상한은 `SeatRequester` 가 본다. 잔액이 바이인보다 적으면
   `INSUFFICIENT_BALANCE`(wallet 과 같은 코드 문자열 — 클라이언트가 하나만 처리한다). 대기열 항목(`JoinQueueEntry`)이 고른 금액을 들고 있고
-  `AdmitJoinRequestService` 가 정확히 그만큼만 `WalletTransfer.toGame` 으로 옮긴다. 범위·잔액은 `GET /api/holdem/tables/{id}/buy-in`(`BuyInQueryService`)이 알려 준다
+  `AdmitJoinRequestService` 가 정확히 그만큼만 `WalletTransfer.toGame` 으로 옮긴다. 범위·잔액은 `GET /api/holdem/tables/{id}/buy-in`(`BuyInQueryService`; 테이블 생성 전에는 기본 블라인드 기준 `GET /api/holdem/buy-in`)이 알려 준다
 - **재착석 의무(ratholing 방지)**: 떠난 사람이 가져간 금액을 `RecentDepartures` 가 30분 동안 기억한다(인메모리 — 재시작하면 사라져 한 번은 샐 수 있다). 기립(`StandUpService`)·
   만료 폴드 기립(`ExpireTurnService`)은 돌려받은 금액을, 0칩 자동 기립(`HandSettler`)은 0(이전 의무를 지운다)을 덮어쓴다. 의무가 있으면 `buyInRange` 의 하한이 그 금액으로
   올라가고, 100BB 를 넘으면 상한도 따라 올라간다(의무가 상한보다 우선). 잔액이 의무에 못 미치면 `INSUFFICIENT_BALANCE`

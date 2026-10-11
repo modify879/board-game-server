@@ -569,6 +569,20 @@ class HoldemApiIntegrationTest {
     }
 
     @Test
+    fun `테이블 없는 바이인 조회는 기본 블라인드 범위와 지갑 잔액을 응답한다`() {
+        val (userId, accessToken) = signUpAndLogin()
+        fundWallet(userId, 10_000)
+
+        authGet("/api/holdem/buy-in", accessToken)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.minBuyIn").value(4_000))
+            .andExpect(jsonPath("$.maxBuyIn").value(20_000))
+            .andExpect(jsonPath("$.maxStack").value(20_000))
+            .andExpect(jsonPath("$.walletBalance").value(10_000))
+            .andExpect(jsonPath("$.obligationExpiresAt").value(nullValue()))
+    }
+
+    @Test
     fun `떠난 직후의 바이인 조회는 가져간 금액으로 올라간 하한과 의무 만료 시각을 응답한다`() {
         val ctx = seatedWithoutHand()
         authDelete("/api/holdem/seat", ctx.accessToken).andExpect(status().isNoContent)

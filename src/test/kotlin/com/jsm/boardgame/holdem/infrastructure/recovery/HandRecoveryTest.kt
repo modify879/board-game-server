@@ -295,7 +295,7 @@ class HandRecoveryTest {
     }
 
     @Test
-    fun `한 명이라도 유예 시간 안에 돌아오지 않으면 핸드를 취소한다`() {
+    fun `한 명이라도 유예 시간 안에 돌아오지 않아도 유예가 끝나면 핸드를 재개한다`() {
         val handStore = HandRecoveryFakeHandStore()
         val tables = HandRecoveryFakeTableRepository()
         val scheduler = HandRecoveryFakeTaskScheduler()
@@ -310,9 +310,9 @@ class HandRecoveryTest {
         recovery.onSessionConnected(connectedEvent(1000L)) // 한 명만 복귀
         scheduler.scheduledCalls[0].task.run() // 3분 경과를 흉내낸다
 
-        assertEquals(1, cancelUseCase.calls.size)
-        assertEquals(1L, cancelUseCase.calls[0].tableId)
-        assertEquals(0, resumeUseCase.calls.size)
+        assertEquals(1, resumeUseCase.calls.size)
+        assertEquals(1L, resumeUseCase.calls[0].tableId)
+        assertEquals(0, cancelUseCase.calls.size)
     }
 
     @Test
@@ -333,10 +333,10 @@ class HandRecoveryTest {
         val fresh = scheduler.scheduledCalls[1]
 
         stale.task.run()
-        assertEquals(0, cancelUseCase.calls.size)
+        assertEquals(0, resumeUseCase.calls.size)
 
         fresh.task.run()
-        assertEquals(1, cancelUseCase.calls.size)
+        assertEquals(1, resumeUseCase.calls.size)
     }
 
     @Test
@@ -401,9 +401,10 @@ class HandRecoveryTest {
         recovery.onApplicationReady()
         userConnections.connectedUserIds += UserId(1000L)
         recovery.onSessionConnected(connectedEvent(1000L)) // 1000L 만 복귀, 2000L 은 끝까지 안 돌아온다
-        recoveryScheduler.scheduledCalls[0].task.run() // 유예 3분 경과 -> 핸드 취소 + 감시 반영
+        recoveryScheduler.scheduledCalls[0].task.run() // 유예 3분 경과 -> 핸드 재개 + 감시 반영
 
-        assertEquals(1, cancelUseCase.calls.size)
+        assertEquals(1, resumeUseCase.calls.size)
+        assertEquals(0, cancelUseCase.calls.size)
 
         // 안 돌아온 2000L: DISCONNECTED 표시 + 3분 뒤 만료가 새로 예약된다.
         assertEquals(1, presenceUseCase.calls.size)
@@ -611,7 +612,7 @@ class HandRecoveryTest {
     }
 
     @Test
-    fun `복구 유예 중 핸드 브로드캐스트가 나면 유예만 끝내고 이후 타임아웃이 핸드를 취소하지 않는다`() {
+    fun `복구 유예 중 핸드 브로드캐스트가 나면 유예만 끝내고 이후 타임아웃이 핸드를 또 재개하지 않는다`() {
         val handStore = HandRecoveryFakeHandStore()
         val tables = HandRecoveryFakeTableRepository()
         val scheduler = HandRecoveryFakeTaskScheduler()

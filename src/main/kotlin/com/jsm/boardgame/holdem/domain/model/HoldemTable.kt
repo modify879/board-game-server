@@ -75,11 +75,10 @@ class HoldemTable private constructor(
      * 바이인으로 고를 수 있는 범위. 재착석 의무([obligation])가 하한을 올리고, 100BB 를 넘으면 상한도 같이 올린다 —
      * 의무가 상한보다 우선한다(하우스 룰 7).
      */
-    fun buyInRange(obligation: Chips): ClosedRange<Chips> =
-        maxOf(bigBlind * MIN_BUY_IN_BIG_BLINDS, obligation)..maxOf(maxStack(), obligation)
+    fun buyInRange(obligation: Chips): ClosedRange<Chips> = buyInRange(bigBlind, obligation)
 
     /** 칩 추가로 채울 수 있는 스택 상한(100BB). 바이인 상한과 같다. */
-    fun maxStack(): Chips = bigBlind * MAX_BUY_IN_BIG_BLINDS
+    fun maxStack(): Chips = maxStack(bigBlind)
 
     /**
      * 좌석 스택에 [amount] 를 더한다(칩 추가). 결과가 [maxStack] 을 넘으면 거부한다 — 플레이 중 스택이 100BB 를 넘는 건
@@ -262,6 +261,12 @@ class HoldemTable private constructor(
         // 나중에 테이블별로 블라인드를 달리할 자리를 남겨두기 위해서다. 별도 Blinds VO 는 아직 안 만든다.
         val SMALL_BLIND: Chips = Chips.of(100)
         val BIG_BLIND: Chips = Chips.of(200)
+
+        /** 테이블이 아직 없을 때도 같은 규칙으로 범위를 구하도록 companion 에 둔다. */
+        fun buyInRange(bigBlind: Chips, obligation: Chips): ClosedRange<Chips> =
+            maxOf(bigBlind * MIN_BUY_IN_BIG_BLINDS, obligation)..maxOf(maxStack(bigBlind), obligation)
+
+        fun maxStack(bigBlind: Chips): Chips = bigBlind * MAX_BUY_IN_BIG_BLINDS
 
         fun create(name: String): HoldemTable {
             val trimmed = name.trim()
