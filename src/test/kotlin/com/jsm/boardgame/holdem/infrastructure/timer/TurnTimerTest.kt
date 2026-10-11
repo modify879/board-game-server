@@ -134,7 +134,7 @@ class TurnTimerTest {
     }
 
     @Test
-    fun `차례가 있으면 1분 뒤로 예약된다`() {
+    fun `차례가 있으면 30초 뒤로 예약된다`() {
         val scheduler = TurnTimerFakeTaskScheduler()
         val useCase = TurnTimerFakeExpireTurnUseCase()
         val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase())
@@ -143,7 +143,7 @@ class TurnTimerTest {
         timer.commit(event(hand))
 
         assertEquals(1, scheduler.scheduledCalls.size)
-        assertEquals(fixedInstant.plus(Duration.ofMinutes(1)), scheduler.scheduledCalls[0].time)
+        assertEquals(fixedInstant.plus(Duration.ofSeconds(30)), scheduler.scheduledCalls[0].time)
     }
 
     @Test
@@ -168,7 +168,7 @@ class TurnTimerTest {
         assertNull(timer.remaining(tableId))
 
         timer.commit(event(handWithToAct(1 to 10_000L, 2 to 10_000L), tableId))
-        assertEquals(Duration.ofMinutes(1), timer.remaining(tableId))
+        assertEquals(Duration.ofSeconds(30), timer.remaining(tableId))
 
         timer.commit(event(null, tableId))
         assertNull(timer.remaining(tableId))

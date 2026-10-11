@@ -9,8 +9,6 @@ import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionComm
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandUseCase
-import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
-import com.jsm.boardgame.holdem.application.command.usecase.StandUpUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceCommand
@@ -146,10 +144,6 @@ private class HandRecoveryFakeExpireConnectionUseCase(
     override fun expire(command: ExpireConnectionCommand): TableId? = reservedTableId
 }
 
-private class HandRecoveryFakeStandUpUseCase : StandUpUseCase {
-    override fun standUp(command: StandUpCommand) {}
-}
-
 private class HandRecoveryFakeResumeHandUseCase(var failuresLeft: Int = 0) : ResumeHandUseCase {
     val calls = mutableListOf<ResumeHandCommand>()
     override fun resume(command: ResumeHandCommand) {
@@ -208,7 +202,6 @@ class HandRecoveryTest {
         clock,
         HandRecoveryFakeUpdateSeatPresenceUseCase(),
         HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null),
-        HandRecoveryFakeStandUpUseCase(),
         tables,
         InMemoryJoinQueue(),
         HandRecoveryFakeJoinQueueNotifier(),
@@ -361,8 +354,7 @@ class HandRecoveryTest {
             clock,
             presenceUseCase,
             HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null),
-            HandRecoveryFakeStandUpUseCase(),
-            tables,
+                tables,
             InMemoryJoinQueue(),
             HandRecoveryFakeJoinQueueNotifier(),
             HandRecoveryFakeUserConnections(),
@@ -395,8 +387,7 @@ class HandRecoveryTest {
             clock,
             presenceUseCase,
             HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null),
-            HandRecoveryFakeStandUpUseCase(),
-            tables,
+                tables,
             InMemoryJoinQueue(),
             HandRecoveryFakeJoinQueueNotifier(),
             userConnections,
@@ -501,8 +492,7 @@ class HandRecoveryTest {
             clock,
             presenceUseCase,
             HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null),
-            HandRecoveryFakeStandUpUseCase(),
-            tables,
+                tables,
             InMemoryJoinQueue(),
             HandRecoveryFakeJoinQueueNotifier(),
             HandRecoveryFakeUserConnections(),
@@ -628,7 +618,7 @@ class HandRecoveryTest {
         val resumeUseCase = HandRecoveryFakeResumeHandUseCase()
         val cancelUseCase = HandRecoveryFakeCancelHandUseCase()
         val timerScheduler = HandRecoveryFakeTaskScheduler()
-        val connectionTimer = ConnectionTimer(timerScheduler, clock, HandRecoveryFakeUpdateSeatPresenceUseCase(), HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null), HandRecoveryFakeStandUpUseCase(), tables, InMemoryJoinQueue(), HandRecoveryFakeJoinQueueNotifier(), HandRecoveryFakeUserConnections(), HandRecoveryFakeTableExecutor())
+        val connectionTimer = ConnectionTimer(timerScheduler, clock, HandRecoveryFakeUpdateSeatPresenceUseCase(), HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null), tables, InMemoryJoinQueue(), HandRecoveryFakeJoinQueueNotifier(), HandRecoveryFakeUserConnections(), HandRecoveryFakeTableExecutor())
         val recovery = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase, connectionTimer, nextHandTimer, HandRecoveryFakeTableExecutor(), HandRecoveryFakeUserConnections())
         val hand = seatTableWithHand(tables, 1L, 1, 2)
         handStore.put(TableId(1L), hand)
@@ -650,7 +640,7 @@ class HandRecoveryTest {
         val scheduler = HandRecoveryFakeTaskScheduler()
         val timerScheduler = HandRecoveryFakeTaskScheduler()
         val presenceUseCase = HandRecoveryFakeUpdateSeatPresenceUseCase()
-        val connectionTimer = ConnectionTimer(timerScheduler, clock, presenceUseCase, HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null), HandRecoveryFakeStandUpUseCase(), tables, InMemoryJoinQueue(), HandRecoveryFakeJoinQueueNotifier(), HandRecoveryFakeUserConnections(), HandRecoveryFakeTableExecutor())
+        val connectionTimer = ConnectionTimer(timerScheduler, clock, presenceUseCase, HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null), tables, InMemoryJoinQueue(), HandRecoveryFakeJoinQueueNotifier(), HandRecoveryFakeUserConnections(), HandRecoveryFakeTableExecutor())
         val recovery = HandRecovery(handStore, tables, scheduler, clock, HandRecoveryFakeResumeHandUseCase(), HandRecoveryFakeCancelHandUseCase(), connectionTimer, nextHandTimer, HandRecoveryFakeTableExecutor(), HandRecoveryFakeUserConnections())
         handStore.put(TableId(1L), seatTableWithHand(tables, 1L, 1, 2))
         recovery.onApplicationReady()
@@ -673,7 +663,7 @@ class HandRecoveryTest {
                 if (inAfterCommit) throw AssertionError("afterCommit 에서 call 금지") else task()
             override fun post(tableId: TableId, task: () -> Unit) { posted += task }
         }
-        val connectionTimer = ConnectionTimer(timerScheduler, clock, HandRecoveryFakeUpdateSeatPresenceUseCase(), HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null), HandRecoveryFakeStandUpUseCase(), tables, InMemoryJoinQueue(), HandRecoveryFakeJoinQueueNotifier(), HandRecoveryFakeUserConnections(), executor)
+        val connectionTimer = ConnectionTimer(timerScheduler, clock, HandRecoveryFakeUpdateSeatPresenceUseCase(), HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null), tables, InMemoryJoinQueue(), HandRecoveryFakeJoinQueueNotifier(), HandRecoveryFakeUserConnections(), executor)
         val recovery = HandRecovery(handStore, tables, HandRecoveryFakeTaskScheduler(), clock, HandRecoveryFakeResumeHandUseCase(), HandRecoveryFakeCancelHandUseCase(), connectionTimer, nextHandTimer, executor, HandRecoveryFakeUserConnections())
         val hand = seatTableWithHand(tables, 1L, 1, 2)
         handStore.put(TableId(1L), hand)
@@ -697,7 +687,7 @@ class HandRecoveryTest {
         val failingFirst = object : UpdateSeatPresenceUseCase {
             override fun update(command: UpdateSeatPresenceCommand) { if (first) { first = false; error("db down") } }
         }
-        val connectionTimer = ConnectionTimer(timerScheduler, clock, failingFirst, HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null), HandRecoveryFakeStandUpUseCase(), tables, InMemoryJoinQueue(), HandRecoveryFakeJoinQueueNotifier(), HandRecoveryFakeUserConnections(), HandRecoveryFakeTableExecutor())
+        val connectionTimer = ConnectionTimer(timerScheduler, clock, failingFirst, HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null), tables, InMemoryJoinQueue(), HandRecoveryFakeJoinQueueNotifier(), HandRecoveryFakeUserConnections(), HandRecoveryFakeTableExecutor())
         val recovery = HandRecovery(handStore, tables, HandRecoveryFakeTaskScheduler(), clock, HandRecoveryFakeResumeHandUseCase(), HandRecoveryFakeCancelHandUseCase(), connectionTimer, nextHandTimer, HandRecoveryFakeTableExecutor(), HandRecoveryFakeUserConnections())
         val hand = seatTableWithHand(tables, 1L, 1, 2)
         handStore.put(TableId(1L), hand)
