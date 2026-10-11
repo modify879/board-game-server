@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
+import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.UniqueNames
@@ -124,7 +125,7 @@ class HoldemJoinQueueStompIntegrationTest {
         try {
             val frames = subscribeJoinQueue(session, userId)
 
-            postAuth("/api/holdem/tables/$tableId/seats", token, "{}").andExpect(status().isAccepted)
+            postAuth("/api/holdem/tables/$tableId/seats", token, """{"buyIn":10000}""").andExpect(status().isAccepted)
 
             val seated = frames.poll(5, TimeUnit.SECONDS)
             assertThat(seated).isNotNull()
@@ -143,7 +144,7 @@ class HoldemJoinQueueStompIntegrationTest {
         try {
             val frames = subscribeJoinQueue(session, userId)
 
-            val result = postAuth("/api/holdem/tables", token, """{"name":"새 테이블"}""").andExpect(status().isCreated).andReturn()
+            val result = postAuth("/api/holdem/tables", token, """{"name":"새 테이블","buyIn":10000}""").andExpect(status().isCreated).andReturn()
             val tableId = JsonPath.read<Number>(result.response.contentAsString, "$.tableId").toLong()
 
             val seated = frames.poll(5, TimeUnit.SECONDS)
@@ -164,7 +165,7 @@ class HoldemJoinQueueStompIntegrationTest {
         var session: StompSession? = null
         try {
             val firstFrames = subscribeJoinQueue(first, userId)
-            val result = postAuth("/api/holdem/tables", token, """{"name":"s-${UniqueNames.suffix()}"}""").andExpect(status().isCreated).andReturn()
+            val result = postAuth("/api/holdem/tables", token, """{"name":"s-${UniqueNames.suffix()}","buyIn":10000}""").andExpect(status().isCreated).andReturn()
             val tableId = JsonPath.read<Number>(result.response.contentAsString, "$.tableId").toLong()
             assertThat(firstFrames.poll(5, TimeUnit.SECONDS)).isNotNull()
             val seatNo = holdemTableRepository.findByUserId(UserId(userId))!!.seatOf(UserId(userId))!!.seatNo
@@ -187,7 +188,7 @@ class HoldemJoinQueueStompIntegrationTest {
     fun `대기열에 있는 사용자가 구독하면 POSITION 스냅샷을 받는다`() {
         val (userId, token) = signUpAndLogin()
         val tableId = holdemTableRepository.save(HoldemTable.create("t-" + UUID.randomUUID().toString().take(8))).id!!
-        joinQueue.enqueue(tableId, UserId(userId), false)
+        joinQueue.enqueue(tableId, UserId(userId), false, Chips.of(8_000))
         val session = connect(token)
         try {
             val frames = subscribeJoinQueue(session, userId)
@@ -224,7 +225,7 @@ class HoldemJoinQueueStompIntegrationTest {
         var second: StompSession? = null
         try {
             val firstFrames = subscribeJoinQueue(first, userId)
-            joinQueue.enqueue(tableId, UserId(userId), false)
+            joinQueue.enqueue(tableId, UserId(userId), false, Chips.of(8_000))
 
             second = connect(token)
             val secondFrames = subscribeJoinQueue(second, userId)

@@ -69,21 +69,18 @@ private class AdmitJoinRequestFakeHandStore : HandStore {
     override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
 }
 
-/** 지갑 잔액을 들고 있다가 allToGame 으로 전부 내어준다. 실패시킬 사용자 id 를 지정하면 그 사용자의 호출에서
+/** 요청한 금액만큼 toGame 으로 내어준다. 실패시킬 사용자 id 를 지정하면 그 사용자의 호출에서
  *  BusinessException 을 던져 지갑 실패를 흉내낸다(holdem 은 wallet 의 domain 을 참조하지 않는다). */
 private class AdmitJoinRequestFakeWalletTransfer(private val failingUserIds: Set<UserId> = emptySet()) : WalletTransfer {
-    data class AllToGameCall(val userId: UserId, val tableId: TableId, val memo: String?, val amount: Long)
+    data class ToGameCall(val userId: UserId, val tableId: TableId, val memo: String?, val amount: Long)
 
-    val balances = mutableMapOf<UserId, Long>()
-    val allToGameCalls = mutableListOf<AllToGameCall>()
+    val toGameCalls = mutableListOf<ToGameCall>()
 
-    override fun allToGame(userId: UserId, tableId: TableId, memo: String?): Long {
+    override fun toGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) {
         if (userId in failingUserIds) {
             throw BuyInOutOfRangeException("잔액 부족 등 지갑 실패를 흉내낸다: userId=$userId")
         }
-        val amount = balances.remove(userId) ?: 0
-        allToGameCalls += AllToGameCall(userId, tableId, memo, amount)
-        return amount
+        toGameCalls += ToGameCall(userId, tableId, memo, amount)
     }
 
     override fun fromGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) {
@@ -142,38 +139,34 @@ class AdmitJoinRequestServiceTest {
         )
         handStore.save(tableId, hand)
 
-        val result = service.admit(AdmitJoinRequestCommand(tableId.value, 9001L, postBlindImmediately = false))
+        val result = service.admit(AdmitJoinRequestCommand(tableId.value, 9001L, postBlindImmediately = false, buyIn = 8_000))
 
         assertEquals(AdmitJoinRequestResult.Blocked, result)
         val savedTable = tables.findById(tableId)!!
         assertNull(savedTable.seatOf(UserId(9001L)))
-        assertTrue(walletTransfer.allToGameCalls.isEmpty())
+        assertTrue(walletTransfer.toGameCalls.isEmpty())
     }
 
     @Test
-    fun `핸드가 없고 빈 좌석이 있으면 참가자를 좌석에 앉히고 지갑 잔액 전부를 스택으로 옮긴다`() {
+    fun `핸드가 없고 빈 좌석이 있으면 참가자를 좌석에 앉히고 고른 바이인만 스택으로 옮긴다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        walletTransfer.balances[UserId(9002L)] = 8_000
-
-        val result = service.admit(AdmitJoinRequestCommand(tableId.value, 9002L, postBlindImmediately = false))
+        val result = service.admit(AdmitJoinRequestCommand(tableId.value, 9002L, postBlindImmediately = false, buyIn = 8_000))
 
         assertEquals(AdmitJoinRequestResult.Seated(3), result)
         val savedTable = tables.findById(tableId)!!
         assertEquals(UserId(9002L), savedTable.seatAt(3)?.userId)
         assertEquals(Chips.of(8_000), savedTable.seatAt(3)?.stack)
-        val call = walletTransfer.allToGameCalls.single()
+        val call = walletTransfer.toGameCalls.single()
         assertEquals(UserId(9002L), call.userId)
         assertEquals(8_000L, call.amount)
-        assertEquals(0L, walletTransfer.balances[UserId(9002L)] ?: 0L)
     }
 
     @Test
-    fun `배정 시점 잔액이 빅블라인드 미만이면 BUY_IN_OUT_OF_RANGE 로 착석하지 않는다`() {
+    fun `바이인이 20BB 미만이면 BUY_IN_OUT_OF_RANGE 로 착석하지 않는다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        walletTransfer.balances[UserId(9006L)] = 100
 
         val e = assertFailsWith<BuyInOutOfRangeException> {
-            service.admit(AdmitJoinRequestCommand(tableId.value, 9006L, postBlindImmediately = false))
+            service.admit(AdmitJoinRequestCommand(tableId.value, 9006L, postBlindImmediately = false, buyIn = 3_800))
         }
 
         assertEquals(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, e.errorCode)
@@ -188,7 +181,7 @@ class AdmitJoinRequestServiceTest {
         val failingService = AdmitJoinRequestService(tables, handStore, failingWallet, handStarter)
 
         assertFailsWith<BuyInOutOfRangeException> {
-            failingService.admit(AdmitJoinRequestCommand(tableId.value, 9003L, postBlindImmediately = false))
+            failingService.admit(AdmitJoinRequestCommand(tableId.value, 9003L, postBlindImmediately = false, buyIn = 8_000))
         }
 
         assertNull(tables.findById(tableId)!!.seatOf(UserId(9003L)))
@@ -204,7 +197,7 @@ class AdmitJoinRequestServiceTest {
         tables.save(otherTable)
 
         assertFailsWith<AlreadySeatedException> {
-            service.admit(AdmitJoinRequestCommand(tableId.value, 9004L, postBlindImmediately = false))
+            service.admit(AdmitJoinRequestCommand(tableId.value, 9004L, postBlindImmediately = false, buyIn = 8_000))
         }
     }
 
@@ -215,10 +208,10 @@ class AdmitJoinRequestServiceTest {
             6 to 10_000L, 7 to 10_000L, 8 to 10_000L, 9 to 10_000L,
         )
 
-        val result = service.admit(AdmitJoinRequestCommand(tableId.value, 9005L, postBlindImmediately = false))
+        val result = service.admit(AdmitJoinRequestCommand(tableId.value, 9005L, postBlindImmediately = false, buyIn = 8_000))
 
         assertEquals(AdmitJoinRequestResult.Blocked, result)
-        assertTrue(walletTransfer.allToGameCalls.isEmpty())
+        assertTrue(walletTransfer.toGameCalls.isEmpty())
     }
 }
 

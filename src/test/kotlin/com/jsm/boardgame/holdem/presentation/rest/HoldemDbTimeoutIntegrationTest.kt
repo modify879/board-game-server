@@ -76,7 +76,7 @@ class HoldemDbTimeoutIntegrationTest {
         // REST 생성은 만든 사람을 대기열에 넣는다 — 착석 요청을 직접 하려고 저장소로 만든다.
         val tableId = holdemTableRepository.save(HoldemTable.create("t-$suffix")).id!!.value
         connectStomp(token)
-        authPost("/api/holdem/tables/$tableId/seats", token, "{}").andExpect(status().isAccepted)
+        authPost("/api/holdem/tables/$tableId/seats", token, """{"buyIn":10000}""").andExpect(status().isAccepted)
         awaitSeated(userId)
 
         val locked = CountDownLatch(1)

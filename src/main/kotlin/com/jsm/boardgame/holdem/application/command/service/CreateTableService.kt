@@ -23,7 +23,7 @@ class CreateTableService(
 
     override fun create(command: CreateTableCommand): TableId {
         val saved = tables.save(HoldemTable.create(command.name))
-        seatRequester.request(saved, UserId(command.ownerUserId), postBlindImmediately = false)
+        seatRequester.request(saved, UserId(command.ownerUserId), postBlindImmediately = false, buyIn = command.buyIn)
         return saved.id!!
     }
 }

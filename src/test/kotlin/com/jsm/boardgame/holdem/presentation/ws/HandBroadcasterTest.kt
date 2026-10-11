@@ -76,7 +76,7 @@ class HandBroadcasterTest {
             HandBroadcasterFakeLastHandResultStore(stored),
         )
         val table = HoldemTable.create("t")
-        table.sitDown(UserId(1000L), Chips.of(1_000))
+        table.sitDown(UserId(1000L), Chips.of(10_000))
 
         broadcaster.publish(TableId(1L), table, hand, eventLastResult, 1L)
 

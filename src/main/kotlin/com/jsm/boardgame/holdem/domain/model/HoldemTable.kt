@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.domain.model
 
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
+import com.jsm.boardgame.holdem.domain.exception.ChipAddOutOfRangeException
 import com.jsm.boardgame.holdem.domain.exception.InvalidTableNameException
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.exception.TableNotEmptyException
@@ -59,8 +60,9 @@ class HoldemTable private constructor(
         if (seatOf(userId) != null) {
             throw AlreadySeatedException("이미 이 테이블에 앉아 있는 사용자입니다: userId=$userId")
         }
-        if (buyIn < bigBlind) {
-            throw BuyInOutOfRangeException("바이인은 빅 블라인드($bigBlind) 이상이어야 합니다: $buyIn")
+        // 상한은 application 이 본다 — 재착석 의무가 100BB 를 넘을 수 있어 도메인은 하한만 안다.
+        if (buyIn < bigBlind * MIN_BUY_IN_BIG_BLINDS) {
+            throw BuyInOutOfRangeException("바이인은 ${MIN_BUY_IN_BIG_BLINDS}BB(${bigBlind * MIN_BUY_IN_BIG_BLINDS}) 이상이어야 합니다: $buyIn")
         }
         val seatNo = (1..MAX_SEATS).firstOrNull { it !in seats }
             ?: throw TableFullException("빈 좌석이 없습니다: tableId=$id")
@@ -69,9 +71,25 @@ class HoldemTable private constructor(
         return seat
     }
 
-    /** 좌석 스택에 [amount] 를 더한다. 핸드 진행 중에는 부르면 안 된다 — 도메인은 모르니 호출 위치(HandStarter)가 보장한다. */
-    fun topUp(seatNo: Int, amount: Chips) {
-        val seat = seats[seatNo] ?: error("점유되지 않은 좌석에 충전할 수 없다: seatNo=$seatNo, occupied=${seats.keys.sorted()}")
+    /**
+     * 바이인으로 고를 수 있는 범위. 재착석 의무([obligation])가 하한을 올리고, 100BB 를 넘으면 상한도 같이 올린다 —
+     * 의무가 상한보다 우선한다(하우스 룰 7).
+     */
+    fun buyInRange(obligation: Chips): ClosedRange<Chips> =
+        maxOf(bigBlind * MIN_BUY_IN_BIG_BLINDS, obligation)..maxOf(maxStack(), obligation)
+
+    /** 칩 추가로 채울 수 있는 스택 상한(100BB). 바이인 상한과 같다. */
+    fun maxStack(): Chips = bigBlind * MAX_BUY_IN_BIG_BLINDS
+
+    /**
+     * 좌석 스택에 [amount] 를 더한다(칩 추가). 결과가 [maxStack] 을 넘으면 거부한다 — 플레이 중 스택이 100BB 를 넘는 건
+     * 허용이지만 추가로 넘기는 건 아니다. 핸드 진행 중에는 부르면 안 된다 — 도메인은 모르니 호출 위치(AddChipsService)가 보장한다.
+     */
+    fun addChips(seatNo: Int, amount: Chips) {
+        val seat = seats[seatNo] ?: error("점유되지 않은 좌석에 칩을 추가할 수 없다: seatNo=$seatNo, occupied=${seats.keys.sorted()}")
+        if (!amount.isPositive() || seat.stack + amount > maxStack()) {
+            throw ChipAddOutOfRangeException("칩 추가는 0 초과이고 스택이 ${maxStack()} 을 넘을 수 없습니다: stack=${seat.stack}, amount=$amount")
+        }
         seat.applyStack(seat.stack + amount)
     }
 
@@ -236,6 +254,8 @@ class HoldemTable private constructor(
 
     companion object {
         const val MAX_SEATS = 9
+        const val MIN_BUY_IN_BIG_BLINDS = 20
+        const val MAX_BUY_IN_BIG_BLINDS = 100
         private const val MAX_NAME_LENGTH = 30
 
         // 블라인드는 지금 테이블마다 다르게 할 요구가 없어 고정값이다. 필드로 들고 있는 건

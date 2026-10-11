@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutCommand
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
+import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
@@ -66,13 +67,13 @@ class AdvanceRunoutServiceTest {
     private val handStore = AdvanceRunoutFakeHandStore()
     private val lastHandResults = AdvanceRunoutFakeLastHandResultStore()
     private val eventPublisher = AdvanceRunoutFakeEventPublisher()
-    private val handSettler = HandSettler(tables, handStore, lastHandResults, eventPublisher, AdvanceRunoutFakeNextHandCountdown())
+    private val handSettler = HandSettler(tables, handStore, lastHandResults, eventPublisher, AdvanceRunoutFakeNextHandCountdown(), FakeRecentDepartures())
     private val service = AdvanceRunoutService(tables, handStore, handSettler, eventPublisher)
 
     private fun tableWithHand(allIn: Boolean): TableId {
         val table = HoldemTable.reconstitute(TableId(1), "t", Chips.of(100), Chips.of(200), 1, emptyMap())
-        table.sitDown(UserId(1000L), Chips.of(1_000))
-        table.sitDown(UserId(2000L), Chips.of(1_000))
+        table.sitDown(UserId(1000L), Chips.of(10_000))
+        table.sitDown(UserId(2000L), Chips.of(10_000))
         tables.save(table)
         val stacks = mapOf(1 to Chips.of(1_000), 2 to Chips.of(1_000))
         val hand = Hand.start(stacks, 1, 1, 2, Chips.of(100), Chips.of(200), Shuffler { it })

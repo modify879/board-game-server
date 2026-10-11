@@ -32,6 +32,7 @@ import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.hamcrest.Matchers.nullValue
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.web.socket.client.standard.StandardWebSocketClient
@@ -180,9 +181,9 @@ class HoldemApiIntegrationTest {
     }
 
     /** 좌석은 고를 수 없다(항상 대기열, FIFO) — POST 전에 STOMP 로 먼저 연결한다. */
-    private fun sitDown(accessToken: String, tableId: Long): ResultActions {
+    private fun sitDown(accessToken: String, tableId: Long, buyIn: Long = 10_000): ResultActions {
         connectStomp(accessToken)
-        return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{}""")
+        return authPost("/api/holdem/tables/$tableId/seats", accessToken, """{"buyIn":$buyIn}""")
     }
 
     /** 시작은 시스템 트리거뿐이라 진입점을 직접 불러 결정적으로 시작시킨다. */
@@ -298,7 +299,7 @@ class HoldemApiIntegrationTest {
     fun `핸드 진행 중인 사용자가 새 테이블을 생성하면 409와 HAND_IN_PROGRESS 를 응답한다`() {
         val ctx = seatedWithHandInProgress()
 
-        authPost("/api/holdem/tables", ctx.accessToken, """{"name":"새 테이블"}""")
+        authPost("/api/holdem/tables", ctx.accessToken, """{"name":"새 테이블","buyIn":10000}""")
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.errorCode").value("HAND_IN_PROGRESS"))
     }
@@ -307,7 +308,7 @@ class HoldemApiIntegrationTest {
     fun `착석했지만 핸드가 없는 사용자가 새 테이블을 생성하면 409와 ALREADY_SEATED 를 응답한다`() {
         val ctx = seatedWithoutHand()
 
-        authPost("/api/holdem/tables", ctx.accessToken, """{"name":"새 테이블"}""")
+        authPost("/api/holdem/tables", ctx.accessToken, """{"name":"새 테이블","buyIn":10000}""")
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.errorCode").value("ALREADY_SEATED"))
     }
@@ -318,7 +319,7 @@ class HoldemApiIntegrationTest {
         fundWallet(userId, 10_000)
         connectStomp(accessToken)
 
-        val result = authPost("/api/holdem/tables", accessToken, """{"name":"새 테이블"}""")
+        val result = authPost("/api/holdem/tables", accessToken, """{"name":"새 테이블","buyIn":10000}""")
             .andExpect(status().isCreated)
             .andExpect(jsonPath("$.tableId").isNumber)
             .andReturn()
@@ -334,7 +335,7 @@ class HoldemApiIntegrationTest {
         fundWallet(userId, 10_000)
         val name = "rollback-" + UniqueNames.suffix()
 
-        authPost("/api/holdem/tables", accessToken, """{"name":"$name"}""")
+        authPost("/api/holdem/tables", accessToken, """{"name":"$name","buyIn":10000}""")
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.errorCode").value("NOT_CONNECTED"))
 
@@ -506,14 +507,104 @@ class HoldemApiIntegrationTest {
     }
 
     @Test
-    fun `지갑 잔액이 빅 블라인드 미만이면 400과 BUY_IN_OUT_OF_RANGE 를 응답한다`() {
+    fun `지갑 잔액이 바이인보다 적으면 409와 INSUFFICIENT_BALANCE 를 응답한다`() {
         val (userId, accessToken) = signUpAndLogin()
-        fundWallet(userId, 100)
+        fundWallet(userId, 5_000)
         val tableId = createTable(accessToken)
 
-        sitDown(accessToken, tableId)
+        sitDown(accessToken, tableId, buyIn = 6_000)
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("INSUFFICIENT_BALANCE"))
+    }
+
+    @Test
+    fun `바이인이 20BB 미만이거나 100BB 초과이면 400과 BUY_IN_OUT_OF_RANGE 를 응답한다`() {
+        val (userId, accessToken) = signUpAndLogin()
+        fundWallet(userId, 50_000)
+        val tableId = createTable(accessToken)
+
+        sitDown(accessToken, tableId, buyIn = 3_800)
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.errorCode").value("BUY_IN_OUT_OF_RANGE"))
+        sitDown(accessToken, tableId, buyIn = 20_100)
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("BUY_IN_OUT_OF_RANGE"))
+    }
+
+    @Test
+    fun `바이인 조회는 범위와 지갑 잔액을 응답하고 의무가 없으면 obligationExpiresAt 이 null 이다`() {
+        val (userId, accessToken) = signUpAndLogin()
+        fundWallet(userId, 10_000)
+        val tableId = createTable(accessToken)
+
+        authGet("/api/holdem/tables/$tableId/buy-in", accessToken)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.minBuyIn").value(4_000))
+            .andExpect(jsonPath("$.maxBuyIn").value(20_000))
+            .andExpect(jsonPath("$.maxStack").value(20_000))
+            .andExpect(jsonPath("$.walletBalance").value(10_000))
+            .andExpect(jsonPath("$.obligationExpiresAt").value(nullValue()))
+    }
+
+    @Test
+    fun `떠난 직후의 바이인 조회는 가져간 금액으로 올라간 하한과 의무 만료 시각을 응답한다`() {
+        val ctx = seatedWithoutHand()
+        authDelete("/api/holdem/seat", ctx.accessToken).andExpect(status().isNoContent)
+
+        authGet("/api/holdem/tables/${ctx.tableId}/buy-in", ctx.accessToken)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.minBuyIn").value(10_000))
+            .andExpect(jsonPath("$.maxBuyIn").value(20_000))
+            .andExpect(jsonPath("$.walletBalance").value(10_000))
+            .andExpect(jsonPath("$.obligationExpiresAt").isString)
+    }
+
+    @Test
+    fun `없는 테이블의 바이인 조회는 404와 TABLE_NOT_FOUND 를 응답한다`() {
+        val (_, accessToken) = signUpAndLogin()
+
+        authGet("/api/holdem/tables/999999/buy-in", accessToken)
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.errorCode").value("TABLE_NOT_FOUND"))
+    }
+
+    @Test
+    fun `핸드가 없을 때 칩 추가는 204 이고 지갑에서 스택으로 옮겨진다`() {
+        val ctx = seatedWithoutHand(fundAmount = 25_000)
+
+        authPost("/api/holdem/seat/chips", ctx.accessToken, """{"amount":5000}""").andExpect(status().isNoContent)
+
+        assertThat(holdemTableRepository.findByUserId(UserId(ctx.userId))!!.seatOf(UserId(ctx.userId))!!.stack.amount).isEqualTo(15_000L)
+        assertThat(balanceOf(ctx.userId)).isEqualTo(10_000L)
+    }
+
+    @Test
+    fun `칩 추가로 스택이 100BB 를 넘으면 400과 CHIP_ADD_OUT_OF_RANGE 를 응답하고 지갑은 그대로다`() {
+        val ctx = seatedWithoutHand(fundAmount = 25_000)
+
+        authPost("/api/holdem/seat/chips", ctx.accessToken, """{"amount":10100}""")
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("CHIP_ADD_OUT_OF_RANGE"))
+
+        assertThat(balanceOf(ctx.userId)).isEqualTo(15_000L)
+    }
+
+    @Test
+    fun `핸드 진행 중 칩 추가는 409와 HAND_IN_PROGRESS 를 응답한다`() {
+        val ctx = seatedWithHandInProgress()
+
+        authPost("/api/holdem/seat/chips", ctx.accessToken, """{"amount":1000}""")
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("HAND_IN_PROGRESS"))
+    }
+
+    @Test
+    fun `앉아 있지 않은 사용자의 칩 추가는 404와 NOT_SEATED 를 응답한다`() {
+        val (_, accessToken) = signUpAndLogin()
+
+        authPost("/api/holdem/seat/chips", accessToken, """{"amount":1000}""")
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.errorCode").value("NOT_SEATED"))
     }
 
     @Test
@@ -532,7 +623,7 @@ class HoldemApiIntegrationTest {
         fundWallet(userId, 10_000)
         val tableId = createTable(accessToken)
 
-        authPost("/api/holdem/tables/$tableId/seats", accessToken, """{}""")
+        authPost("/api/holdem/tables/$tableId/seats", accessToken, """{"buyIn":10000}""")
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.errorCode").value("NOT_CONNECTED"))
     }
