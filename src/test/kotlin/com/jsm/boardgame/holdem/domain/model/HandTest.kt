@@ -476,4 +476,25 @@ class HandTest {
         assertEquals(listOf(Card.of("2c"), Card.of("4c")), hand.holeCardsOf(1))
         assertEquals(listOf(Card.of("3c"), Card.of("5c")), hand.holeCardsOf(2)) // 매 바퀴 마지막 카드
     }
+
+    @Test
+    fun `핸드가 끝나면 좌석별 스택 합이 시작 스택 합과 같다`() {
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 5_000, 3 to 7_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
+        hand.act(1, BettingAction.Fold)
+        hand.act(2, BettingAction.Fold)
+
+        assertTrue(hand.isFinished)
+        assertEquals(chips(22_000), sumStacks(listOf(1, 2, 3), hand))
+    }
+
+    @Test
+    fun `칩 합계가 시작 스택과 어긋난 스냅샷은 복원은 되지만 다음 act 가 IllegalStateException 을 던진다`() {
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
+        val snapshot = hand.snapshot()
+        val corrupted = snapshot.copy(startingStacks = snapshot.startingStacks + (1 to chips(15_000)))
+
+        val restored = Hand.reconstitute(corrupted, identityShuffler)
+
+        assertFailsWith<IllegalStateException> { restored.act(1, BettingAction.Call) }
+    }
 }
