@@ -3,20 +3,14 @@ package com.jsm.boardgame.holdem.infrastructure.timer
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionUseCase
-import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
-import com.jsm.boardgame.holdem.application.command.usecase.StandUpUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceCommand
 import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceUseCase
-import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
-import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.application.port.callForUser
 import com.jsm.boardgame.holdem.application.port.UserConnections
-import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
-import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -25,7 +19,6 @@ import org.springframework.core.annotation.Order
 import org.springframework.core.task.TaskRejectedException
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
-import org.springframework.transaction.event.TransactionalEventListener
 import org.springframework.web.socket.messaging.SessionConnectedEvent
 import org.springframework.web.socket.messaging.SessionDisconnectEvent
 import java.time.Clock
@@ -36,18 +29,15 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * 연결 끊김 타이머 + 퇴장 예약소.
+ * 연결 끊김 타이머.
+ *
+ * 연결이 끊기는 것 자체는 표시(DISCONNECTED)만 바꾼다. 핸드 중에는 턴 타임아웃([TurnTimer])이 처리한다.
+ * 핸드가 없을 때 [CONNECTION_TIMEOUT](3분) 동안 끊겨 있으면 퇴장시킨다. 만료 시점에 핸드가 진행 중이면
+ * 퇴장시키지 않고 감시를 다시 건다(going south 방지, 핸드가 끝난 뒤의 만료가 퇴장시킨다).
  *
  * [TurnTimer] 와 예약/토큰 패턴은 같다 - TaskScheduler 로 예약하고, 단조 증가 토큰으로 cancel()이
- * 못 막은 stale 실행을 걸러낸다. 하지만 상수를 공유하지 않는다: 턴 타이머는 "차례가 왔는데
- * 응답이 없다"(폴드한 사람에게는 차례가 다시 오지 않아 이 경로로는 못 잡는다)를 재고, 이
- * 타이머는 "자리만 차지하고 사라졌다"를 잰다. 값이 지금 우연히 같을 뿐, 만료 동작(폴드 vs 퇴장)도
- * 달라서 나중에 서로 다르게 조정될 수 있다 - 그래서 TURN_TIMEOUT 을 참조하지 않고 별도 상수를 둔다.
- *
- * 퇴장 예약([pendingStandUps])도 여기서 들고 있다. 핸드 진행 중에 연결이 만료되면
- * ExpireConnectionUseCase 는 기립시키지 않고(going south 방지) 테이블 id 만 돌려주고, 이후
- * [HandBroadcastRequested] 로 그 테이블의 핸드가 끝난 걸 확인하면 예약해둔 사용자를
- * StandUpUseCase 로 실제 기립시킨다.
+ * 못 막은 stale 실행을 걸러낸다. 상수는 공유하지 않는다: 턴 타이머는 "차례가 왔는데 응답이 없다"(30초)를,
+ * 이 타이머는 "자리만 차지하고 사라졌다"(3분)를 재고, 만료 동작(폴드 vs 퇴장)도 다르다.
  *
  * 재시작하면 예약이 사라지지만, 부팅 시 앉아 있는 사용자 전원에게 감시를 다시 건다.
  * 재시작 후 접속하지 않은 사람에게는 [SessionDisconnectEvent] 가 영영 오지 않으므로, 그 사람을
@@ -77,7 +67,6 @@ class ConnectionTimer(
     private val clock: Clock,
     private val updateSeatPresenceUseCase: UpdateSeatPresenceUseCase,
     private val expireConnectionUseCase: ExpireConnectionUseCase,
-    private val standUpUseCase: StandUpUseCase,
     private val tables: HoldemTableRepository,
     private val joinQueue: JoinQueue,
     private val joinQueueNotifier: JoinQueueNotifier,
@@ -89,8 +78,6 @@ class ConnectionTimer(
     // userId 기준 예약이다 - 연결은 테이블이 아니라 사람에게 붙는다.
     private val scheduled = ConcurrentHashMap<UserId, ScheduledExpiry>()
     private val tokens = ConcurrentHashMap<UserId, AtomicLong>()
-
-    private val pendingStandUps = ConcurrentHashMap<TableId, MutableSet<UserId>>()
 
     private val suspended = ConcurrentHashMap.newKeySet<UserId>()
 
@@ -135,9 +122,6 @@ class ConnectionTimer(
         val userId = event.user?.name?.toLongOrNull()?.let(::UserId) ?: return
 
         cancelWatch(userId)
-        // 만료가 먼저 일어나 이미 퇴장 예약이 걸려 있었을 수도 있다(연결 타이머 예약과 퇴장 예약은
-        // 서로 다른 생명주기라 token 만으로는 못 막는다) - 재접속했으니 그 예약도 지운다.
-        pendingStandUps.values.forEach { it.remove(userId) }
 
         dispatchForUser(userId) { updateSeatPresenceUseCase.update(UpdateSeatPresenceCommand(userId.value, SeatPresence.SEATED.name)) }
     }
@@ -148,7 +132,12 @@ class ConnectionTimer(
      */
     fun beginWatch(userId: UserId) {
         suspended.remove(userId)
+        schedule(userId)
+        // 타이머를 먼저 건다 — DB 장애로 presence 갱신이 던져도 만료 타이머는 이미 걸려 있어야 사용자가 치워진다.
+        dispatchForUser(userId) { updateSeatPresenceUseCase.update(UpdateSeatPresenceCommand(userId.value, SeatPresence.DISCONNECTED.name)) }
+    }
 
+    private fun schedule(userId: UserId) {
         scheduled.remove(userId)?.future?.cancel(false)
         val token = tokens.computeIfAbsent(userId) { AtomicLong() }.incrementAndGet()
         try {
@@ -161,8 +150,6 @@ class ConnectionTimer(
             // 컨텍스트 종료 중에는 퇴장 타이머를 걸 이유가 없고, 이를 ERROR로 두면 진짜 ERROR가 묻힌다
             log.debug("컨텍스트 종료 중이라 연결 만료 예약을 걸지 못했습니다: userId={}", userId)
         }
-        // 타이머를 먼저 건다 — DB 장애로 presence 갱신이 던져도 만료 타이머는 이미 걸려 있어야 사용자가 치워진다.
-        dispatchForUser(userId) { updateSeatPresenceUseCase.update(UpdateSeatPresenceCommand(userId.value, SeatPresence.DISCONNECTED.name)) }
     }
 
     /**
@@ -183,60 +170,23 @@ class ConnectionTimer(
     }
 
     private fun onExpire(userId: UserId, token: Long) {
-        if (tokens[userId]?.get() != token) return
-        val reservedTableId = try {
+        if (tokens[userId]?.get() != token || userConnections.isConnected(userId)) return
+        val handInProgressTableId = try {
             dispatchForUser(userId) {
                 // 스케줄러 스레드의 토큰 검사는 실행기 큐를 기다리는 사이 낡을 수 있다 - 안에서 다시 본다.
-                if (tokens[userId]?.get() != token) null else expireConnectionUseCase.expire(ExpireConnectionCommand(userId.value))
+                if (tokens[userId]?.get() != token || userConnections.isConnected(userId)) null else expireConnectionUseCase.expire(ExpireConnectionCommand(userId.value))
             }
         } catch (e: Exception) {
             log.error("연결 만료 처리에 실패했습니다: userId={}", userId, e)
             rearmWatch(userId, token)
             return
         }
-        // 만료 트랜잭션이 도는 사이 재접속했다면 토큰이 바뀌고 예약도 이미 지워졌다 - 다시 넣지 않는다.
-        if (reservedTableId != null && tokens[userId]?.get() == token) {
-            pendingStandUps.computeIfAbsent(reservedTableId) { ConcurrentHashMap.newKeySet() }.add(userId)
-        }
+        // 핸드 진행 중이라 퇴장하지 않았다 - 감시를 다시 건다. 만료 트랜잭션이 도는 사이 재접속했다면
+        // 토큰이 바뀌었으니 다시 걸지 않는다.
+        if (handInProgressTableId != null && tokens[userId]?.get() == token && !userConnections.isConnected(userId)) schedule(userId)
     }
 
-    /** 테이블이 닫히면 그 테이블의 퇴장 예약을 버린다 — 앉을 자리가 없다. userId 기준 맵은 사람 단위라 그대로 둔다. */
-    @TransactionalEventListener
-    fun onTableClosed(event: TableClosed) {
-        pendingStandUps.remove(event.tableId)
-    }
-
-    @TransactionalEventListener
-    fun onHandBroadcastRequested(event: HandBroadcastRequested) {
-        if (event.hand != null && !event.hand.isFinished) return
-        val userIds = pendingStandUps.remove(event.tableId) ?: return
-        // 퇴장을 시도하기 전의 토큰을 잡아둔다 — 시도 중에 감시가 바뀌었는지 rearmWatch 가 비교할 기준이다.
-        val tokensBefore = userIds.associateWith { tokens[it]?.get() }
-        // 커밋 직후 콜백이라 이 스레드는 아직 JDBC 커넥션을 쥐고 있다 - call 로 인라인 실행하면 StandUpService 가
-        // 이미 커밋된 트랜잭션에 합류해 쓰기가 사라진다. post 로 커넥션이 풀린 뒤 테이블 스레드에서 돈다.
-        tableExecutor.post(event.tableId) {
-            for (userId in userIds) {
-                // post 로 넘어간 사이 재접속했다면(cancelWatch 가 토큰을 올린다) 일으켜 세우면 안 된다.
-                if (tokens[userId]?.get() != tokensBefore[userId]) {
-                    log.info("예약된 퇴장 대상이 그 사이 재접속해 건너뜁니다: userId={}, tableId={}", userId, event.tableId.value)
-                    continue
-                }
-                try {
-                    standUpUseCase.standUp(StandUpCommand(userId.value))
-                    log.info("핸드 종료로 예약된 퇴장을 실행했습니다: userId={}, tableId={}", userId, event.tableId.value)
-                } catch (e: NotSeatedException) {
-                    // 이미 치워졌다(예: 차례 만료 폴드 뒤 퇴장) - 할 일이 끝난 것이라 실패가 아니다.
-                    log.info("예약된 퇴장 대상이 이미 앉아 있지 않습니다: userId={}, tableId={}", userId, event.tableId.value)
-                } catch (e: Exception) {
-                    // 한 명의 실패가 나머지 퇴장을 버리면 안 된다 — 일반 3분 감시로 되돌려 자가 치유한다.
-                    log.error("예약된 퇴장에 실패했습니다: userId={}, tableId={}", userId, event.tableId.value, e)
-                    rearmWatch(userId, tokensBefore[userId])
-                }
-            }
-        }
-    }
-
-    /** 실패한 만료를 일반 3분 감시로 되돌린다. 그 사이 재접속했거나 감시가 바뀌었으면(토큰·연결 확인) 건드리지 않는다. */
+    /** 실패한 만료를 3분 감시로 되돌린다. 그 사이 재접속했거나 감시가 바뀌었으면(토큰·연결 확인) 건드리지 않는다. */
     private fun rearmWatch(userId: UserId, token: Long?) {
         if (tokens[userId]?.get() != token || userConnections.isConnected(userId)) return
         try {
@@ -249,7 +199,7 @@ class ConnectionTimer(
     companion object {
         private val log = LoggerFactory.getLogger(ConnectionTimer::class.java)
 
-        // TurnTimer.TURN_TIMEOUT 과 값은 같지만 상수를 공유하지 않는다 - 클래스 KDoc 참고.
+        // TurnTimer.TURN_TIMEOUT(30초)과 값이 다르고 상수를 공유하지 않는다 - 클래스 KDoc 참고.
         private val CONNECTION_TIMEOUT: Duration = Duration.ofMinutes(3)
     }
 }

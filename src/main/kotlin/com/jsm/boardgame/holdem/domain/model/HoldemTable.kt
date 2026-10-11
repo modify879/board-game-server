@@ -243,7 +243,7 @@ class HoldemTable private constructor(
 
     /**
      * [stacks] 에 없는 점유 좌석의 스택은 변경되지 않는다 — 그 핸드에 참가하지 않은 좌석(BB 대기)이 있고,
-     * 1분 무응답 기립은 한 좌석만 정산한다.
+     * 30초 무응답 기립은 한 좌석만 정산한다.
      */
     fun applyStacks(stacks: Map<Int, Chips>) {
         for ((seatNo, stack) in stacks) {
