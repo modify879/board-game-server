@@ -56,8 +56,12 @@ import java.util.concurrent.atomic.AtomicLong
  * 자체가 없으므로 "그 핸드는 없었던 것"이 이미 올바른 상태이고, 이 컴포넌트가 따로 처리할
  * 게 없다.
  *
- * **단일 인스턴스 배포를 전제한다.** 인스턴스가 여럿이면 모두가 같은 행을 복구하려 들어 취소·재개
+ * **단일 인스턴스 배포를 전제한다.** 인스턴스가 여럿이면 모두가 같은 행을 복구하려 들어 재개
  * 유스케이스가 중복 호출된다. 다중 인스턴스로 가려면 리더 선출이나 행 잠금이 필요하다.
+ *
+ * 3분 유예는 전원이 돌아오면 일찍, 아니면 시간이 다 되어 *재개*로 끝난다(하우스 룰 8번) — 취소·환불하지 않는다.
+ * 안 돌아온 사람은 [applyWatch] 로 평소의 연결 감시를 새로 받고, 재개가 거는 새 차례 타이머(30초)가
+ * 그 사람의 차례를 체크/폴드·퇴장으로 처리한다. 이미 낸 칩은 팟에 남는다. 취소·환불은 재개가 끝내 실패할 때(서버 버그)만 쓴다.
  *
  * 런아웃 중인 핸드는 3분 재접속 유예 없이 바로 재개한다 — 남은 결정이 없어 기다려도 얻는 게 없고, 오히려
  * 질 쪽이 일부러 돌아오지 않아 이미 공개된 올인을 무효로 만들 수 있다. 안 돌아온 사용자는 유예 중단
@@ -175,31 +179,27 @@ class HandRecovery(
         val userId = event.user?.name?.toLongOrNull()?.let(::UserId) ?: return
         for ((tableId, recovery) in pending) {
             if (recovery.awaitingUserIds.remove(userId) && recovery.awaitingUserIds.isEmpty()) {
-                completeRecovery(tableId, resume = true)
+                completeRecovery(tableId)
             }
         }
     }
 
     private fun onRecoveryTimeout(tableId: TableId, token: Long) {
         if (tokens[tableId]?.get() != token) return
-        completeRecovery(tableId, resume = false)
+        completeRecovery(tableId)
     }
 
-    private fun completeRecovery(tableId: TableId, resume: Boolean) {
+    /** 전원이 돌아왔거나 3분이 지났다 - 어느 쪽이든 핸드를 재개한다. 안 돌아온 사람은 [applyWatch] 와 차례 타이머가 맡는다. */
+    private fun completeRecovery(tableId: TableId) {
         if (!finishRecovery(tableId)) return
 
-        if (resume) {
-            log.info("테이블 {} 전원 재접속을 확인해 핸드를 재개합니다.", tableId.value)
-            resumeOrCancel(tableId)
-        } else {
-            log.info("테이블 {} 복구 유예 시간 안에 전원이 돌아오지 않아 핸드를 취소합니다.", tableId.value)
-            cancelRetrying(tableId)
-        }
+        log.info("테이블 {} 복구 유예가 끝나 핸드를 재개합니다.", tableId.value)
+        resumeOrCancel(tableId)
     }
 
     /**
      * 유예 중에 핸드가 다시 살아났다(플레이어가 액션해 [HandBroadcastRequested] 가 났다) - 3분 뒤 타임아웃이
-     * 그 뒤의 핸드를 취소하면 안 되므로 재개·취소 없이 유예만 끝낸다. 재개 유스케이스가 내는 이벤트는
+     * 그 뒤의 핸드를 또 재개하면 안 되므로 재개 없이 유예만 끝낸다. 재개 유스케이스가 내는 이벤트는
      * [completeRecovery] 가 pending 을 먼저 지운 뒤라 여기서 아무것도 못 찾는다. 커밋 후 콜백이라 던지지 않는다.
      */
     @TransactionalEventListener
@@ -243,7 +243,7 @@ class HandRecovery(
         }
     }
 
-    // 재개가 안 되면 핸드가 DB 에 남은 채 멈춘다 — 다시 걸고, 그래도 안 되면 취소·환불한다(그것도 다시 건다).
+    // 재개가 안 되면 핸드가 DB 에 남은 채 멈춘다 — 다시 걸고, 그래도 안 되면(서버 버그) 취소·환불한다(그것도 다시 건다).
     private fun resumeOrCancel(tableId: TableId) = taskScheduler.runRetrying(
         "핸드 재개 tableId=${tableId.value}", clock,
         isStale = { false },
