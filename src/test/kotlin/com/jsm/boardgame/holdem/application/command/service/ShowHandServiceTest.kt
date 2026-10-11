@@ -4,6 +4,7 @@ import com.jsm.boardgame.common.error.BusinessException
 import com.jsm.boardgame.holdem.application.command.usecase.ShowHandCommand
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
+import com.jsm.boardgame.holdem.application.port.FakeHandHistory
 import com.jsm.boardgame.holdem.application.port.FoldWinnerCards.FoldWinner
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
@@ -64,9 +65,10 @@ class ShowHandServiceTest {
     private val handStore = ShowHandFakeHandStore()
     private val foldWinnerCards = FakeFoldWinnerCards()
     private val lastHandResults = ShowHandFakeLastHandResultStore()
+    private val handHistory = FakeHandHistory()
     private val events = mutableListOf<Any>()
     private val service = ShowHandService(
-        ShowHandFakeTableRepository(table), handStore, foldWinnerCards, lastHandResults, ApplicationEventPublisher { events += it },
+        ShowHandFakeTableRepository(table), handStore, foldWinnerCards, lastHandResults, handHistory, ApplicationEventPublisher { events += it },
     )
 
     private val winner = FoldWinner(2, winnerUser, listOf("As", "Ah"))
@@ -90,6 +92,7 @@ class ShowHandServiceTest {
         val shown = lastHandResults.find(tableId)!!.shownHands.single()
         assertEquals(LastHandResult.ShownHand(2, winnerUser, listOf("As", "Ah"), "PAIR"), shown)
         assertNull(foldWinnerCards.find(tableId))
+        assertEquals(listOf(tableId to winnerUser), handHistory.shown)
         val event = events.filterIsInstance<HandBroadcastRequested>().single()
         assertEquals(tableId, event.tableId)
         assertNull(event.hand)
@@ -113,6 +116,7 @@ class ShowHandServiceTest {
         assertEquals(winner, foldWinnerCards.find(tableId))
         assertEquals(emptyList(), lastHandResults.find(tableId)!!.shownHands)
         assertEquals(emptyList(), events)
+        assertEquals(emptyList(), handHistory.shown)
     }
 
     @Test

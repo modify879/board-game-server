@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
 import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
+import com.jsm.boardgame.holdem.application.port.FakeHandHistory
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
@@ -93,7 +94,7 @@ class ExpireTurnServiceTest {
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
     private val departures = FakeRecentDepartures()
-    private val handSettler = HandSettler(tables, handStore, ExpireTurnServiceFakeLastHandResultStore(), FakeFoldWinnerCards(), eventPublisher, ExpireTurnFakeNextHandCountdown(), departures)
+    private val handSettler = HandSettler(tables, handStore, ExpireTurnServiceFakeLastHandResultStore(), FakeFoldWinnerCards(), eventPublisher, ExpireTurnFakeNextHandCountdown(), departures, FakeHandHistory())
     private val service = ExpireTurnService(tables, handStore, handSettler, walletTransfer, departures, eventPublisher)
 
     /** userId = seatNo * 1000 으로 대응시킨다. */
