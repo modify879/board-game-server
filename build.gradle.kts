@@ -70,6 +70,10 @@ tasks.withType<Test> {
     // 지 @TestPropertySource 가 아니다). 컨텍스트 캐시 키를 하나 줄이는 효과도 있다.
     systemProperty("app.holdem.next-hand-delay", "1h")
     systemProperty("app.holdem.runout-step-delay", "1h")
+    // HandSimulationTest 의 반복 횟수·단일 시드 재생. gradle 은 -D 를 테스트 JVM 으로 넘기지 않는다.
+    listOf("holdem.sim.hands", "holdem.sim.seed").forEach { key ->
+        System.getProperty(key)?.let { systemProperty(key, it) }
+    }
 }
 
 tasks.register<Test>("unitTest") {
