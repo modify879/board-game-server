@@ -8,6 +8,7 @@ import com.jsm.boardgame.user.domain.exception.UserNotFoundException
 import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.domain.model.UserRole
 import com.jsm.boardgame.user.domain.repository.UserRepository
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -47,10 +48,15 @@ class ChangeUserRoleService(
             // 소켓을 닫는 것은 상태 방송이 아니다 — 커밋 전에 불러도 규칙 6(BEFORE_COMMIT 방송 금지)을
             // 어기지 않는다. 위 블랙리스트도 이미 커밋 여부와 무관한 즉시 Redis 쓰기라 같은 성격이다.
             realtimeConnections.closeAllOf(targetUserId)
+            log.info("역할 변경으로 세션을 폐기했습니다: userId={}, role={}, reason=ROLE_CHANGED", command.targetUserId, role)
         }
 
         // 리프레시 토큰 세션은 여기서 끊지 않는다(sessions.clear() 호출 안 함). 클라이언트가
         // 이미 타는 401 → refresh 경로가 새 역할이 박힌 액세스 토큰을 넘겨주도록 하는 것이
         // 의도다 — clear() 로 끊으면 재로그인을 강요하게 된다.
+    }
+
+    companion object {
+        private val log = LoggerFactory.getLogger(ChangeUserRoleService::class.java)
     }
 }
