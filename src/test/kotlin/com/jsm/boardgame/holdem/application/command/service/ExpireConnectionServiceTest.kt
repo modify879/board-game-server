@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
+import com.jsm.boardgame.holdem.application.command.usecase.StandUpResult
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpUseCase
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -52,9 +53,11 @@ private class ExpireConnectionFakeHandStore : HandStore {
 
 private class ExpireConnectionFakeStandUpUseCase : StandUpUseCase {
     val calls = mutableListOf<StandUpCommand>()
-    override fun standUp(command: StandUpCommand) {
+    override fun standUp(command: StandUpCommand): StandUpResult {
         calls += command
+        return StandUpResult.STOOD_UP
     }
+
 }
 
 class ExpireConnectionServiceTest {

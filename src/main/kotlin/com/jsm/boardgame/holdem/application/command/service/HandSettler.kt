@@ -40,6 +40,8 @@ import org.springframework.stereotype.Component
  * 이체를 건너뛰는 것과 같은 이유). 재착석 의무는 0 으로 덮어 지운다(빈손으로 떠났으니 가져간 게 없다). 남은 참가 요청의 바이인
  * 이체는 여기서 하지 않고 커밋 후 별도 트랜잭션에서 처리한다(JoinRequestsProcessor).
  *
+ * 그다음 퇴장 예약([LeaveReservations])한 좌석을 기립시킨다.
+ *
  * 정산 뒤 후보(스택이 있는 점유 좌석)가 2명 이상이면 다음 핸드 카운트다운을 새로 건다 — 핸드가
  * 도는 동안은 카운트다운이 없었으므로 항상 처음부터 시작하는 셈이다. `NextHandCountdown` 이 상대
  * 시간(단조 시계)만 쓴다.
@@ -56,6 +58,7 @@ class HandSettler(
     private val countdown: NextHandCountdown,
     private val recentDepartures: RecentDepartures,
     private val handHistory: HandHistory,
+    private val leaveReservations: LeaveReservations,
 ) {
     fun settle(tableId: TableId, table: HoldemTable, hand: Hand) {
         val stacks = hand.seatNos.associateWith { seatNo -> hand.stackOf(seatNo) }
@@ -79,6 +82,9 @@ class HandSettler(
             recentDepartures.record(userId, Chips.ZERO)
             log.info("auto stand-up after 0-stack settle: tableId={}, seatNo={}, userId={}", tableId.value, seatNo, userId)
         }
+
+        // 0칩 기립 다음, 후보 수 판단·대기열 트리거 앞이다 — 비운 좌석을 대기열이 채우고 빈 테이블이 닫혀야 한다.
+        leaveReservations.standUpAll(tableId, table)
 
         handStore.remove(tableId)
         lastHandResults.save(tableId, lastResult)

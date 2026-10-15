@@ -5,6 +5,7 @@ import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.FakeHandHistory
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
+import com.jsm.boardgame.holdem.application.port.FakeWalletTransfer
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
@@ -69,7 +70,7 @@ class AdvanceRunoutServiceTest {
     private val handStore = AdvanceRunoutFakeHandStore()
     private val lastHandResults = AdvanceRunoutFakeLastHandResultStore()
     private val eventPublisher = AdvanceRunoutFakeEventPublisher()
-    private val handSettler = HandSettler(tables, handStore, lastHandResults, FakeFoldWinnerCards(), eventPublisher, AdvanceRunoutFakeNextHandCountdown(), FakeRecentDepartures(), FakeHandHistory())
+    private val handSettler = HandSettler(tables, handStore, lastHandResults, FakeFoldWinnerCards(), eventPublisher, AdvanceRunoutFakeNextHandCountdown(), FakeRecentDepartures(), FakeHandHistory(), LeaveReservations(FakeRecentDepartures(), FakeWalletTransfer()))
     private val service = AdvanceRunoutService(tables, handStore, handSettler, eventPublisher)
 
     private fun tableWithHand(allIn: Boolean): TableId {

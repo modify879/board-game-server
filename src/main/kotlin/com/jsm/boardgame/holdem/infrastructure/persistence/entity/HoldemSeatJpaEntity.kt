@@ -43,6 +43,9 @@ class HoldemSeatJpaEntity(
     var awaitingBigBlind: Boolean,
     @Column(name = "owes_immediate_post", nullable = false)
     var owesImmediatePost: Boolean,
+    // 기존 행에 ddl-auto update 가 not null 컬럼을 붙이려면 default 가 있어야 한다.
+    @Column(name = "leave_after_hand", nullable = false, columnDefinition = "boolean not null default false")
+    var leaveReserved: Boolean = false,
 )
 
 interface HoldemSeatJpaRepository : JpaRepository<HoldemSeatJpaEntity, Long>, KotlinJdslJpqlExecutor {
@@ -59,6 +62,7 @@ fun HoldemSeatJpaEntity.toDomain(): Seat =
         presence = SeatPresence.valueOf(presence),
         awaitingBigBlind = awaitingBigBlind,
         owesImmediatePost = owesImmediatePost,
+        leaveReserved = leaveReserved,
     )
 
 // Seat -> HoldemSeatJpaEntity 매핑은 여기 두지 않는다: 부모 테이블의 DB id 와, 기존 행이 있다면

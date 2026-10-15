@@ -3,7 +3,10 @@ package com.jsm.boardgame.holdem.presentation.rest
 import com.jsm.boardgame.common.error.AuthenticationRequiredException
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.AddChipsUseCase
+import com.jsm.boardgame.holdem.application.command.usecase.CancelLeaveReservationCommand
+import com.jsm.boardgame.holdem.application.command.usecase.CancelLeaveReservationUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
+import com.jsm.boardgame.holdem.application.command.usecase.StandUpResult
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpUseCase
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.application.port.callForUser
@@ -33,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/holdem")
 class HoldemSeatController(
     private val standUpUseCase: StandUpUseCase,
+    private val cancelLeaveReservationUseCase: CancelLeaveReservationUseCase,
     private val addChipsUseCase: AddChipsUseCase,
     private val mySeatQueryService: MySeatQueryService,
     private val buyInQueryService: BuyInQueryService,
@@ -40,15 +44,29 @@ class HoldemSeatController(
     private val tables: HoldemTableRepository,
 ) {
 
+    // 핸드 중이면 즉시 기립 대신 퇴장 예약이고 202 다(바로 일어선 것이 아니다).
     @DeleteMapping("/seat")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    fun standUp(@AuthenticationPrincipal jwt: Jwt) {
+    fun standUp(@AuthenticationPrincipal jwt: Jwt): ResponseEntity<Void> {
         val userId = jwt.requireUserId()
         // 앉아 있지 않은 사용자의 기립은 NotSeatedException 뿐이다(StandUpService) — 실행기 밖에서 유스케이스를 돌리지 않고 같은 오류를 던진다.
-        tableExecutor.callForUser(
+        val result = tableExecutor.callForUser(
             tables, UserId(userId),
             onNotSeated = { throw NotSeatedException("어느 테이블에도 앉아 있지 않은 사용자입니다: userId=$userId") },
         ) { standUpUseCase.standUp(StandUpCommand(userId)) }
+        return when (result) {
+            StandUpResult.STOOD_UP -> ResponseEntity.noContent().build()
+            StandUpResult.RESERVED -> ResponseEntity.accepted().build()
+        }
+    }
+
+    @DeleteMapping("/seat/leave-reservation")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun cancelLeaveReservation(@AuthenticationPrincipal jwt: Jwt) {
+        val userId = jwt.requireUserId()
+        tableExecutor.callForUser(
+            tables, UserId(userId),
+            onNotSeated = { throw NotSeatedException("어느 테이블에도 앉아 있지 않은 사용자입니다: userId=$userId") },
+        ) { cancelLeaveReservationUseCase.cancel(CancelLeaveReservationCommand(userId)) }
     }
 
     // 칩 추가도 기립처럼 tableId 없이 유저로 테이블을 찾아 그 실행기에서 돌린다(앉아 있지 않으면 NotSeatedException).

@@ -36,6 +36,7 @@ fun publicViewOf(
                 totalContributed = hand.totalContributedBy(seat.seatNo).amount,
                 status = hand.statusOf(seat.seatNo).name,
                 presence = seat.presence.name,
+                leaveReserved = seat.leaveReserved,
             )
         } else {
             SeatPublicView(
@@ -45,6 +46,7 @@ fun publicViewOf(
                 totalContributed = 0L,
                 status = "SITTING_OUT",
                 presence = seat.presence.name,
+                leaveReserved = seat.leaveReserved,
             )
         }
     }

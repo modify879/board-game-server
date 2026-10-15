@@ -46,6 +46,8 @@ data class SeatPublicView(
     val totalContributed: Long,
     val status: String,
     val presence: String,
+    /** 이 핸드가 끝나면 일어나겠다고 예약한 좌석. 숨길 정보가 아니다. */
+    val leaveReserved: Boolean,
 )
 
 /**

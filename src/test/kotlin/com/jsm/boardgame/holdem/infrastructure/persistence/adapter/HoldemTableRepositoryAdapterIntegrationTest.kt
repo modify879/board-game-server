@@ -136,6 +136,23 @@ class HoldemTableRepositoryAdapterIntegrationTest {
     }
 
     @Test
+    fun `퇴장 예약 플래그가 저장되고 복원되며 취소도 UPDATE 로 반영된다`() {
+        val userId = uniqueUserId()
+        val table = HoldemTable.create("t-leave")
+        table.sitDown(userId, buyIn)
+        val saved = tables.save(table)
+        assertFalse(saved.seatOf(userId)!!.leaveReserved)
+
+        saved.reserveLeave(userId)
+        tables.save(saved)
+        assertTrue(tables.findById(saved.id!!)!!.seatOf(userId)!!.leaveReserved)
+
+        saved.cancelLeaveReservation(userId)
+        tables.save(saved)
+        assertFalse(tables.findById(saved.id!!)!!.seatOf(userId)!!.leaveReserved)
+    }
+
+    @Test
     fun `uk_holdem_seats_user 위반은 AlreadySeatedException 으로 번역된다`() {
         val userX = uniqueUserId()
         val table1 = HoldemTable.create("t6")
