@@ -4,7 +4,7 @@ import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.UserId
 import java.time.Instant
 
-/** 서비스 테스트가 공유하는 인메모리 대역. 0 은 의무 해제다(InMemoryRecentDepartures 와 같다). */
+/** 서비스 테스트가 공유하는 인메모리 대역. 0 은 의무 해제다(RecentDeparturesAdapter 와 같다). */
 class FakeRecentDepartures : RecentDepartures {
     val recorded = mutableListOf<Pair<UserId, Chips>>()
     private val obligations = mutableMapOf<UserId, Departure>()
