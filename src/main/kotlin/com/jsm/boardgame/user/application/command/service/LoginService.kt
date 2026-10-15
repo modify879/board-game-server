@@ -15,6 +15,7 @@ import com.jsm.boardgame.user.domain.model.RawPassword
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import com.jsm.boardgame.user.domain.service.PasswordHasher
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -81,7 +82,8 @@ class LoginService(
         val userId = checkNotNull(user.id) { "조회된 User 는 id 가 채워져 있어야 한다" }
 
         // 단일 기기 정책: 새 로그인은 이전 기기의 액세스 토큰을 즉시 무효화한다.
-        sessions.currentAccessTokenId(userId)?.let { previousAccessTokenId ->
+        val previous = sessions.currentAccessTokenId(userId)
+        previous?.let { previousAccessTokenId ->
             sessions.blacklistAccessToken(previousAccessTokenId, Instant.now(clock).plus(accessTokenTtl))
             // 소켓을 닫는 것은 상태 방송이 아니다 — 커밋 전에 불러도 규칙 6을 어기지 않는다.
             realtimeConnections.closeAllOf(userId)
@@ -89,6 +91,7 @@ class LoginService(
 
         val tokens = tokenIssuer.issue(userId, user.role)
         sessions.start(userId, AuthSession(tokens.accessTokenId, tokens.refreshToken, tokens.refreshTokenExpiresAt))
+        log.info("로그인 성공: userId={}, role={}, replacedPreviousSession={}, reason=NEW_LOGIN", userId.value, user.role, previous != null)
         return AuthTokens(
             accessToken = tokens.accessToken,
             refreshToken = tokens.refreshToken,
@@ -98,6 +101,7 @@ class LoginService(
     }
 
     companion object {
+        private val log = LoggerFactory.getLogger(LoginService::class.java)
         const val MAX_FAILURES = 5
         val FAILURE_WINDOW: Duration = Duration.ofMinutes(15)
     }

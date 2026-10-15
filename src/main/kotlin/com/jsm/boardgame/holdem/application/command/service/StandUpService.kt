@@ -10,6 +10,7 @@ import com.jsm.boardgame.holdem.application.port.RecentDepartures
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
+import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -53,5 +54,10 @@ class StandUpService(
         }
         handStarter.rescheduleOnExit(tableId, table)
         eventPublisher.publishEvent(JoinRequestsDue(tableId))
+        log.info("기립했습니다: userId={}, tableId={}, returnedChips={}", command.userId, tableId.value, returned.amount)
+    }
+
+    private companion object {
+        private val log = LoggerFactory.getLogger(StandUpService::class.java)
     }
 }

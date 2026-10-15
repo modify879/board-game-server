@@ -4,6 +4,7 @@ import com.jsm.boardgame.user.application.command.usecase.LogoutUseCase
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.RealtimeConnections
 import com.jsm.boardgame.user.domain.model.UserId
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.time.Clock
@@ -27,5 +28,10 @@ class LogoutService(
             realtimeConnections.closeAllOf(id)
         }
         sessions.clear(id)
+        log.info("로그아웃: userId={}, reason=LOGOUT", userId)
+    }
+
+    companion object {
+        private val log = LoggerFactory.getLogger(LogoutService::class.java)
     }
 }
