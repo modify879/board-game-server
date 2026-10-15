@@ -6,6 +6,7 @@ import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
 import com.jsm.boardgame.holdem.application.port.JoinQueue
+import com.jsm.boardgame.holdem.application.port.RecentDepartures
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
@@ -76,6 +77,9 @@ class HoldemApiIntegrationTest {
 
     @Autowired
     private lateinit var joinQueue: JoinQueue
+
+    @Autowired
+    private lateinit var recentDepartures: RecentDepartures
 
     @Autowired
     private lateinit var startScheduledHandUseCase: StartScheduledHandUseCase
@@ -378,12 +382,67 @@ class HoldemApiIntegrationTest {
     }
 
     @Test
-    fun `핸드 진행 중에는 기립이 409와 HAND_IN_PROGRESS 를 응답한다`() {
+    fun `핸드 진행 중 기립은 202 로 퇴장을 예약하고 핸드가 끝나면 일어서 스택이 지갑으로 돌아온다`() {
         val ctx = seatedWithHandInProgress()
 
-        authDelete("/api/holdem/seat", ctx.accessToken)
-            .andExpect(status().isConflict)
-            .andExpect(jsonPath("$.errorCode").value("HAND_IN_PROGRESS"))
+        authDelete("/api/holdem/seat", ctx.accessToken).andExpect(status().isAccepted)
+        authDelete("/api/holdem/seat", ctx.accessToken).andExpect(status().isAccepted)
+
+        val reserved = holdemTableRepository.findByUserId(UserId(ctx.userId))!!.seatOf(UserId(ctx.userId))!!
+        assertThat(reserved.leaveReserved).isTrue()
+
+        authPost("/api/holdem/tables/${ctx.tableId}/hands/actions", ctx.accessToken, """{"action":"FOLD"}""")
+            .andExpect(status().isNoContent)
+
+        assertThat(holdemTableRepository.findByUserId(UserId(ctx.userId))).isNull()
+        assertThat(balanceOf(ctx.userId)).isGreaterThan(0L)
+        assertThat(recentDepartures.obligationOf(UserId(ctx.userId))).isNotNull()
+    }
+
+    @Test
+    fun `퇴장 예약을 취소하면 204 이고 핸드가 끝나도 계속 앉아 있다`() {
+        val ctx = seatedWithHandInProgress()
+        authDelete("/api/holdem/seat", ctx.accessToken).andExpect(status().isAccepted)
+
+        authDelete("/api/holdem/seat/leave-reservation", ctx.accessToken).andExpect(status().isNoContent)
+        authDelete("/api/holdem/seat/leave-reservation", ctx.accessToken).andExpect(status().isNoContent)
+        authPost("/api/holdem/tables/${ctx.tableId}/hands/actions", ctx.accessToken, """{"action":"FOLD"}""")
+            .andExpect(status().isNoContent)
+
+        val seat = holdemTableRepository.findByUserId(UserId(ctx.userId))!!.seatOf(UserId(ctx.userId))!!
+        assertThat(seat.leaveReserved).isFalse()
+    }
+
+    @Test
+    fun `앉아 있지 않은 사용자의 예약 취소는 404와 NOT_SEATED 를 응답한다`() {
+        val (_, accessToken) = signUpAndLogin()
+
+        authDelete("/api/holdem/seat/leave-reservation", accessToken)
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.errorCode").value("NOT_SEATED"))
+    }
+
+    @Test
+    fun `두 사람 모두 퇴장을 예약하고 핸드가 끝나면 테이블이 닫힌다`() {
+        val (userIdA, tokenA) = signUpAndLogin()
+        val (userIdB, tokenB) = signUpAndLogin()
+        fundWallet(userIdA, 10_000)
+        fundWallet(userIdB, 10_000)
+        val tableId = createTable(tokenA)
+        sitDown(tokenA, tableId).andExpect(status().isAccepted)
+        awaitSeated(userIdA)
+        sitDown(tokenB, tableId).andExpect(status().isAccepted)
+        awaitSeated(userIdB)
+        startHand(tableId)
+        authDelete("/api/holdem/seat", tokenA).andExpect(status().isAccepted)
+        authDelete("/api/holdem/seat", tokenB).andExpect(status().isAccepted)
+
+        authPost("/api/holdem/tables/$tableId/hands/actions", tokenA, """{"action":"FOLD"}""")
+            .andExpect(status().isNoContent)
+
+        val deadline = System.currentTimeMillis() + 5_000
+        while (holdemTableRepository.findById(TableId(tableId)) != null && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        assertThat(holdemTableRepository.findById(TableId(tableId))).isNull()
     }
 
     @Test

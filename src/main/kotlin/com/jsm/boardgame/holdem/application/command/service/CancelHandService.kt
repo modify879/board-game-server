@@ -35,6 +35,8 @@ import org.springframework.transaction.annotation.Transactional
  * 취소 뒤에는 `HandSettler` 와 같이 다음 핸드 카운트다운을 걸고 참가 요청 처리를 트리거한다 - 안 그러면
  * 테이블이 멈춘다.
  *
+ * 퇴장 예약한 좌석은 끝난 핸드와 똑같이 기립시킨다([LeaveReservations]).
+ *
  * 좌석은 그대로 둔다 - 취소는 핸드를 무르는 것이지 사람을 내보내는 게 아니다. 안 돌아온 사람은
  * 이 서비스가 끝난 뒤 평소의 연결 타이머가 새로 돌면서 퇴장 여부를 가른다.
  */
@@ -45,6 +47,7 @@ class CancelHandService(
     private val handStore: HandStore,
     private val walletTransfer: WalletTransfer,
     private val countdown: NextHandCountdown,
+    private val leaveReservations: LeaveReservations,
     private val eventPublisher: ApplicationEventPublisher,
 ) : CancelHandUseCase {
 
@@ -56,6 +59,7 @@ class CancelHandService(
         val departed = hand.departedUserIds
         val refunds = hand.snapshot().startingStacks.filterKeys { it !in departed }
         table.applyStacks(refunds)
+        leaveReservations.standUpAll(tableId, table)
         tables.save(table)
         handStore.remove(tableId)
 

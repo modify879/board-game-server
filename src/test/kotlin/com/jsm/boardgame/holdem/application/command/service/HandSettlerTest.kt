@@ -5,6 +5,7 @@ import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.FakeHandHistory
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
+import com.jsm.boardgame.holdem.application.port.FakeWalletTransfer
 import com.jsm.boardgame.holdem.application.port.FoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.HandHistoryEntry
 import com.jsm.boardgame.holdem.application.port.HandStore
@@ -104,7 +105,8 @@ class HandSettlerTest {
     private val departures = FakeRecentDepartures()
     private val foldWinnerCards = FakeFoldWinnerCards()
     private val handHistory = FakeHandHistory()
-    private val settler = HandSettler(tables, handStore, lastHandResults, foldWinnerCards, eventPublisher, countdown, departures, handHistory)
+    private val leaveWallet = FakeWalletTransfer()
+    private val settler = HandSettler(tables, handStore, lastHandResults, foldWinnerCards, eventPublisher, countdown, departures, handHistory, LeaveReservations(departures, leaveWallet))
 
     private fun seatedTable(vararg stacks: Pair<Int, Long>): HoldemTable {
         val seats = stacks.associate { (seatNo, stack) ->
@@ -401,6 +403,26 @@ class HandSettlerTest {
         settler.settle(tableId, table, hand)
 
         assertTrue(countdown.restarted.isEmpty())
+    }
+
+    @Test
+    fun `퇴장 예약한 좌석은 정산 뒤 스택을 지갑으로 돌려주고 의무를 남기며 카운트다운 판단보다 먼저 기립한다`() {
+        val table = seatedTable(1 to 10_000L, 2 to 10_000L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
+        handStore.save(tableId, hand)
+        table.reserveLeave(UserId(2000L))
+        hand.act(1, BettingAction.Fold)
+
+        settler.settle(tableId, table, hand)
+
+        assertNull(table.seatAt(2))
+        assertEquals(10_100L, leaveWallet.fromGameCalls.single().amount)
+        assertEquals(UserId(2000L), leaveWallet.fromGameCalls.single().userId)
+        assertEquals(listOf(UserId(2000L) to Chips.of(10_100)), departures.recorded)
+        assertTrue(countdown.restarted.isEmpty())
+        assertTrue(eventPublisher.events.any { it is JoinRequestsDue })
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
+import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
@@ -91,7 +92,8 @@ class CancelHandServiceTest {
     private val countdown = CancelHandFakeNextHandCountdown()
     private val events = mutableListOf<Any>()
     private val eventPublisher = ApplicationEventPublisher { events += it }
-    private val service = CancelHandService(tables, handStore, walletTransfer, countdown, eventPublisher)
+    private val departures = FakeRecentDepartures()
+    private val service = CancelHandService(tables, handStore, walletTransfer, countdown, LeaveReservations(departures, walletTransfer), eventPublisher)
 
     private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): TableId {
         var table = HoldemTable.create("test-table")
@@ -156,6 +158,21 @@ class CancelHandServiceTest {
 
         val savedTable = tables.findById(tableId)!!
         assertEquals(2, savedTable.occupiedSeats().size)
+    }
+
+    @Test
+    fun `취소해도 퇴장 예약한 좌석은 기립해 시작 스택을 지갑으로 돌려받는다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+        startAndStoreHand(tableId, mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)))
+        tables.findById(tableId)!!.also { it.reserveLeave(UserId(2L)); tables.save(it) }
+
+        service.cancel(CancelHandCommand(tableId.value))
+
+        val savedTable = tables.findById(tableId)!!
+        assertNull(savedTable.seatOf(UserId(2L)))
+        assertEquals(2, savedTable.occupiedSeats().size)
+        assertEquals(listOf(UserId(2L) to 10_000L), walletTransfer.fromGameCalls.map { it.userId to it.amount })
+        assertEquals(listOf(UserId(2L) to Chips.of(10_000)), departures.recorded)
     }
 
     @Test

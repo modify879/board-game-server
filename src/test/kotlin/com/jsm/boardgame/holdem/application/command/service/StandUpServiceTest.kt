@@ -2,7 +2,8 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
-import com.jsm.boardgame.holdem.application.exception.HandInProgressException
+import com.jsm.boardgame.holdem.application.command.usecase.StandUpResult
+import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.HandStore
@@ -128,8 +129,7 @@ class StandUpServiceTest {
         assertEquals(HoldemErrorCode.NOT_SEATED, e.errorCode)
     }
 
-    @Test
-    fun `핸드가 진행 중이면 기립할 수 없다`() {
+    private fun tableWithHandInProgress(): TableId {
         val table = tables.save(HoldemTable.create("테스트 테이블"))
         table.sitDown(UserId(1), Chips.of(8_000))
         val saved = tables.save(table)
@@ -137,12 +137,29 @@ class StandUpServiceTest {
             saved.id!!,
             Hand.start(mapOf(1 to Chips.of(8_000), 2 to Chips.of(8_000)), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, HoldemTable.SMALL_BLIND, HoldemTable.BIG_BLIND, Shuffler { it }),
         )
+        return saved.id!!
+    }
 
-        val e = assertFailsWith<HandInProgressException> {
-            service.standUp(StandUpCommand(userId = 1))
-        }
-        assertEquals(HoldemErrorCode.HAND_IN_PROGRESS, e.errorCode)
+    @Test
+    fun `핸드가 진행 중이면 기립 대신 퇴장을 예약하고 공개 뷰를 브로드캐스트한다`() {
+        val tableId = tableWithHandInProgress()
+
+        val result = service.standUp(StandUpCommand(userId = 1))
+
+        assertEquals(StandUpResult.RESERVED, result)
+        assertTrue(tables.findById(tableId)!!.seatAt(1)!!.leaveReserved)
         assertEquals(0, walletTransfer.fromGameCalls.size)
+        assertEquals(1, eventPublisher.events.count { it is HandBroadcastRequested })
+    }
+
+    @Test
+    fun `퇴장 예약은 멱등이라 다시 불러도 브로드캐스트하지 않는다`() {
+        tableWithHandInProgress()
+        service.standUp(StandUpCommand(userId = 1))
+
+        assertEquals(StandUpResult.RESERVED, service.standUp(StandUpCommand(userId = 1)))
+
+        assertEquals(1, eventPublisher.events.count { it is HandBroadcastRequested })
     }
 
     @Test

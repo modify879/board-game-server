@@ -10,6 +10,7 @@ class Seat private constructor(
     presence: SeatPresence,
     awaitingBigBlind: Boolean,
     owesImmediatePost: Boolean,
+    leaveReserved: Boolean,
 ) {
     var stack: Chips = stack
         private set
@@ -27,6 +28,10 @@ class Seat private constructor(
      * "즉시 포스팅을 아직 안 치른 좌석"을 구분할 다른 신호가 없다 — 그래서 별도 축으로 둔다.
      * 이 좌석이 처음 핸드에 참가하는 순간(HandStarter) 단 한 번만 소비되고 이후 계속 false 다. */
     var owesImmediatePost: Boolean = owesImmediatePost
+        private set
+
+    /** "이 핸드가 끝나면 일어난다" 예약. 핸드가 끝날 때 좌석이 기립하며 함께 사라진다. */
+    var leaveReserved: Boolean = leaveReserved
         private set
 
     /** 스택 증감은 테이블 애그리거트(HoldemTable)를 거친다. */
@@ -49,6 +54,10 @@ class Seat private constructor(
         owesImmediatePost = false
     }
 
+    internal fun applyLeaveReserved(reserved: Boolean) {
+        leaveReserved = reserved
+    }
+
     companion object {
         /** seatNo·buyIn 검증은 HoldemTable 이 한다(블라인드 등 테이블 컨텍스트가 필요해서).
          * postBlindImmediately=true 면 곧바로 참가하되(awaitingBigBlind=false) 다음 핸드에 추가 BB 포스팅을 빚진다(owesImmediatePost=true).
@@ -58,6 +67,7 @@ class Seat private constructor(
                 seatNo, userId, stack, SeatPresence.SEATED,
                 awaitingBigBlind = !postBlindImmediately,
                 owesImmediatePost = postBlindImmediately,
+                leaveReserved = false,
             )
 
         /** 영속 복원 전용 — 검증하지 않는다. */
@@ -68,6 +78,7 @@ class Seat private constructor(
             presence: SeatPresence,
             awaitingBigBlind: Boolean = false,
             owesImmediatePost: Boolean = false,
-        ): Seat = Seat(seatNo, userId, stack, presence, awaitingBigBlind, owesImmediatePost)
+            leaveReserved: Boolean = false,
+        ): Seat = Seat(seatNo, userId, stack, presence, awaitingBigBlind, owesImmediatePost, leaveReserved)
     }
 }

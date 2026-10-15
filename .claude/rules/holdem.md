@@ -44,6 +44,10 @@ paths: ["**/holdem/**"]
   정보 유출이 된다**
 - **올인으로 더 베팅할 수 없으면 남은 보드를 한 번에 깔지 않는다.** `RunoutTimer` 가 `runout-step-delay` 간격으로 한 스트리트씩
   진행한다 — 공개 → 플랍/턴/리버 → 쇼다운 순. 결과를 한 메시지로 몰아 보내면 클라이언트 오류 하나로 이용자가 과정을 못 본다(사용자 결정)
+- **퇴장 예약(핸드 뒤 일어나기)은 DB 에 저장한다.** `DELETE /api/holdem/seat` 가 핸드 중이면 `HandInProgressException` 대신 좌석의 `leaveReserved`(`holdem_seats.leave_after_hand`)를
+  켜고 **202**(바디 없음, 멱등), 핸드가 없으면 즉시 기립 **204**. `DELETE /api/holdem/seat/leave-reservation` 은 예약을 풀고 204(없어도 204, 미착석은 404 `NOT_SEATED`).
+  공개 뷰의 좌석마다 `leaveReserved` 가 나간다. 실행은 `LeaveReservations.standUpAll` — `HandSettler.settle`(0칩 기립 뒤, 후보 수 판단·`JoinRequestsDue` 앞)과
+  `CancelHandService` 가 부른다. StandUpService 와 같이 재착석 의무 기록·지갑 환급·INFO 로그(`reason=LEAVE_RESERVED`). 좌석이 어떤 이유로든 사라지면 예약도 함께 사라진다
 - **BB 대기 규칙은 판을 굶겨 죽이지 않는다.** 후보(스택 양수 점유 좌석)가 2명 이상인데 대기를
   빼면 2명 미만이면, 전원의 대기를 풀고 참가시킨다. 이게 없으면 영구 데드락이다 — 참가자 부족으로
   예외를 던지는 순간 `@Transactional` 이 롤백해 블라인드 전진과 플래그 해제가 취소되고, 다음
