@@ -96,7 +96,7 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 5. 무작위성은 주입받는다. 각 게임이 자기 `Shuffler`/`DiceRoller` 포트를 정의한다.
    시계는 `common/config` 의 `Clock` 빈 하나를 공유한다 — `Instant.now()` 가 한 곳만 남아도 TTL 테스트가 흔들린다
 6. 히든 정보는 뷰어별로 마스킹한다. WebSocket 으로 도메인 객체나 전체 게임 상태를 내보내지 않는다.
-   공개 뷰와 개인 뷰를 별도 타입으로 조립한다(holdem: `publicViewOf`/`privateViewOf`). 브로드캐스트의 기본값은 뷰어별로 다른 페이로드다
+   공개 뷰와 개인 뷰를 별도 타입으로 조립한다. 브로드캐스트의 기본값은 뷰어별로 다른 페이로드다
    (STOMP 세부는 `.claude/rules/websocket.md`)
 7. 재화는 원시 타입으로 다루지 않는다. 각 게임이 자기 VO 로 갖고, 게임 간에 공유하지 않는다
 8. 오류는 코드로 계약하고, 문구는 클라이언트가 만든다
