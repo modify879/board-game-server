@@ -38,6 +38,7 @@ com.jsm.boardgame
 
 - **한 패키지에 역할이 섞이면 가른다. 크기는 기준이 아니다.** 파일 1개짜리 하위 패키지도 그대로 둔다
 - `domain/model` 처럼 패키지명이 이미 역할인 곳은 더 가르지 않는다
+- `infrastructure/` 의 위 셋은 최소 형태다. DB·보안·타 컨텍스트가 아닌 기술 어댑터는 역할 이름으로 하위 패키지를 만든다(holdem: `timer/` `executor/` `queue/` `recovery/`)
 - 계층 이름은 `domain`/`application`/`infrastructure`/`presentation`. `interfaces` 는 쓰지 않는다
 - 새 게임은 최상위에 자기 컨텍스트를 갖는다(`com.jsm.boardgame.<game>`). `game/` 같은 상위 묶음 금지
 
@@ -115,3 +116,5 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 - **첫 편집 전에 `feature/` 브랜치부터 만든다** — 문서 한 줄도 예외 없다. 커밋할 때 만드는 건 위반이다
 - 작업 브랜치는 **항상 `feature/` 로 시작한다** — 버그 수정·리팩터링·테스트·문서 작업도 예외 없다(`fix/`·`chore/`·`test/`·`docs/` 브랜치를 만들지 않는다). 그 뒤에 컨텍스트 접두를 붙인다(`feature/user-signup`, `feature/holdem-view-seq`)
 - 커밋은 Conventional Commits + 컨텍스트 스코프(`fix(holdem): ...`) — 작업 성격은 브랜치가 아니라 커밋 타입으로 드러낸다
+- `feature/*` → `develop` 은 `git merge --no-ff` 로 합친다
+- 충돌이 나면 `develop` 에서 해결하지 않는다 — feature 브랜치에 `develop` 을 먼저 합쳐 거기서 풀고 테스트한 뒤 병합한다
