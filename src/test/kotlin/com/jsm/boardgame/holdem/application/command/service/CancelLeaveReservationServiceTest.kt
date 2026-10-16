@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
 import com.jsm.boardgame.holdem.application.command.usecase.CancelLeaveReservationCommand
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.HandStore
@@ -9,28 +10,10 @@ import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
-import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.springframework.context.ApplicationEventPublisher
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-
-private class CancelLeaveFakeTables : HoldemTableRepository {
-    val stored = mutableMapOf<Long, HoldemTable>()
-    override fun findById(id: TableId): HoldemTable? = stored[id.value]
-    override fun findByUserId(userId: UserId): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
-    override fun findAllSeatedUserIds(): List<UserId> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
-    override fun findAllTableIds(): List<TableId> = stored.values.mapNotNull { it.id }
-    override fun save(table: HoldemTable): HoldemTable {
-        val id = table.id ?: TableId(stored.size + 1L)
-        val saved = HoldemTable.reconstitute(
-            id = id, name = table.name, smallBlind = table.smallBlind, bigBlind = table.bigBlind,
-            buttonSeatNo = table.buttonSeatNo, seats = table.occupiedSeats().associateBy { it.seatNo },
-        )
-        stored[id.value] = saved
-        return saved
-    }
-}
 
 private class CancelLeaveFakeHandStore : HandStore {
     override fun find(tableId: TableId): Hand? = null
@@ -41,7 +24,7 @@ private class CancelLeaveFakeHandStore : HandStore {
 
 class CancelLeaveReservationServiceTest {
 
-    private val tables = CancelLeaveFakeTables()
+    private val tables = FakeHoldemTableRepository()
     private val events = mutableListOf<Any>()
     private val service = CancelLeaveReservationService(tables, CancelLeaveFakeHandStore(), ApplicationEventPublisher { events += it })
 

@@ -1,14 +1,13 @@
 package com.jsm.boardgame.holdem.application.query.service
 
+import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
-import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.query.port.HoldemTableQueryRepository
 import com.jsm.boardgame.holdem.application.query.view.SeatLocation
 import com.jsm.boardgame.holdem.application.query.view.TableSummaryView
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
-import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
@@ -27,20 +26,10 @@ private class HoldemTableQueryFakeTableQueryRepository : HoldemTableQueryReposit
     override fun findEmptyTableIds(): List<Long> = emptyList()
 }
 
-private class HoldemTableQueryFakeHandStore : HandStore {
-    private val store = mutableMapOf<Long, Hand>()
-
-    fun put(tableId: Long, hand: Hand) { store[tableId] = hand }
-    override fun find(tableId: TableId): Hand? = store[tableId.value]
-    override fun save(tableId: TableId, hand: Hand) { store[tableId.value] = hand }
-    override fun remove(tableId: TableId) { store.remove(tableId.value) }
-    override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
-}
-
 class HoldemTableQueryServiceTest {
 
     private val tableQuery = HoldemTableQueryFakeTableQueryRepository()
-    private val handStore = HoldemTableQueryFakeHandStore()
+    private val handStore = FakeHandStore()
     private val service = HoldemTableQueryService(tableQuery, handStore)
 
     private fun sampleHand(): Hand =

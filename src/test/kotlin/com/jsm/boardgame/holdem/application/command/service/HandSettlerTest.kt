@@ -1,5 +1,9 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
+import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
+import com.jsm.boardgame.holdem.application.port.FakeHandStore
+import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
@@ -8,10 +12,7 @@ import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.FakeWalletTransfer
 import com.jsm.boardgame.holdem.application.port.FoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.HandHistoryEntry
-import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
-import com.jsm.boardgame.holdem.application.port.LastHandResultStore
-import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Card
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -21,52 +22,14 @@ import com.jsm.boardgame.holdem.domain.model.Seat
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
-import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
-import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-
-private class HandSettlerFakeTableRepository : HoldemTableRepository {
-    private val store = mutableMapOf<Long, HoldemTable>()
-    private var nextId = 1L
-
-    override fun findById(id: TableId): HoldemTable? = store[id.value]
-
-    override fun findByUserId(userId: UserId): HoldemTable? = store.values.find { it.seatOf(userId) != null }
-
-    override fun findAllSeatedUserIds(): List<UserId> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
-
-    override fun save(table: HoldemTable): HoldemTable {
-        val id = table.id ?: TableId(nextId++)
-        val saved = HoldemTable.reconstitute(
-            id = id,
-            name = table.name,
-            smallBlind = table.smallBlind,
-            bigBlind = table.bigBlind,
-            buttonSeatNo = table.buttonSeatNo,
-            seats = table.occupiedSeats().associateBy { it.seatNo },
-        )
-        store[id.value] = saved
-        return saved
-    }
-
-    override fun findAllTableIds(): List<TableId> = store.values.mapNotNull { it.id }
-}
-
-private class HandSettlerFakeHandStore : HandStore {
-    private val store = mutableMapOf<Long, Hand>()
-
-    override fun find(tableId: TableId): Hand? = store[tableId.value]
-    override fun save(tableId: TableId, hand: Hand) { store[tableId.value] = hand }
-    override fun remove(tableId: TableId) { store.remove(tableId.value) }
-    override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
-}
 
 /**
  * 좌석 1 = As Ah(포켓 에이스), 좌석 2 = 7c 2d(무패). 보드는 Kd Qc Jh 9s 4h — 좌석 2 에는
@@ -87,21 +50,13 @@ private class HandSettlerFakeEventPublisher : ApplicationEventPublisher {
     override fun publishEvent(event: Any) { events += event }
 }
 
-private class HandSettlerFakeNextHandCountdown : NextHandCountdown {
-    val restarted = mutableListOf<TableId>()
-    val cancelled = mutableListOf<TableId>()
-    override fun restart(tableId: TableId) { restarted += tableId }
-    override fun cancel(tableId: TableId) { cancelled += tableId }
-    override fun remaining(tableId: TableId): Duration? = null
-}
-
 class HandSettlerTest {
 
-    private val tables = HandSettlerFakeTableRepository()
-    private val handStore = HandSettlerFakeHandStore()
-    private val lastHandResults = HandSettlerFakeLastHandResultStore()
+    private val tables = FakeHoldemTableRepository()
+    private val handStore = FakeHandStore()
+    private val lastHandResults = FakeLastHandResultStore()
     private val eventPublisher = HandSettlerFakeEventPublisher()
-    private val countdown = HandSettlerFakeNextHandCountdown()
+    private val countdown = FakeNextHandCountdown()
     private val departures = FakeRecentDepartures()
     private val foldWinnerCards = FakeFoldWinnerCards()
     private val handHistory = FakeHandHistory()
@@ -440,9 +395,3 @@ class HandSettlerTest {
     }
 }
 
-private class HandSettlerFakeLastHandResultStore : LastHandResultStore {
-    val store = mutableMapOf<Long, LastHandResult>()
-    override fun find(tableId: TableId): LastHandResult? = store[tableId.value]
-    override fun save(tableId: TableId, result: LastHandResult) { store[tableId.value] = result }
-    override fun remove(tableId: TableId) { store.remove(tableId.value) }
-}

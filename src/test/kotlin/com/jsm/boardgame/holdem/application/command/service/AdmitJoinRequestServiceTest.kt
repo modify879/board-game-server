@@ -1,12 +1,11 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
+import com.jsm.boardgame.holdem.application.port.FakeHandStore
+import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestCommand
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestResult
 import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
-import com.jsm.boardgame.holdem.application.port.HandStore
-import com.jsm.boardgame.holdem.application.port.LastHandResult
-import com.jsm.boardgame.holdem.application.port.LastHandResultStore
-import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.BuyInOutOfRangeException
@@ -21,7 +20,6 @@ import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
-import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -61,15 +59,6 @@ private class AdmitJoinRequestFakeTableRepository : HoldemTableRepository {
     }
 }
 
-private class AdmitJoinRequestFakeHandStore : HandStore {
-    private val store = mutableMapOf<Long, Hand>()
-
-    override fun find(tableId: TableId): Hand? = store[tableId.value]
-    override fun save(tableId: TableId, hand: Hand) { store[tableId.value] = hand }
-    override fun remove(tableId: TableId) { store.remove(tableId.value) }
-    override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
-}
-
 /** 요청한 금액만큼 toGame 으로 내어준다. 실패시킬 사용자 id 를 지정하면 그 사용자의 호출에서
  *  BusinessException 을 던져 지갑 실패를 흉내낸다(holdem 은 wallet 의 domain 을 참조하지 않는다). */
 private class AdmitJoinRequestFakeWalletTransfer(private val failingUserIds: Set<UserId> = emptySet()) : WalletTransfer {
@@ -89,21 +78,15 @@ private class AdmitJoinRequestFakeWalletTransfer(private val failingUserIds: Set
     }
 }
 
-private class AdmitJoinRequestFakeNextHandCountdown : NextHandCountdown {
-    override fun restart(tableId: TableId) {}
-    override fun cancel(tableId: TableId) {}
-    override fun remaining(tableId: TableId): Duration? = null
-}
-
 class AdmitJoinRequestServiceTest {
 
     private val tables = AdmitJoinRequestFakeTableRepository()
-    private val handStore = AdmitJoinRequestFakeHandStore()
+    private val handStore = FakeHandStore()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
     private val walletTransfer = AdmitJoinRequestFakeWalletTransfer()
-    private val countdown = AdmitJoinRequestFakeNextHandCountdown()
-    private val handStarter = HandStarter(tables, handStore, AdmitJoinRequestServiceFakeLastHandResultStore(), FakeFoldWinnerCards(), identityShuffler, eventPublisher, countdown)
+    private val countdown = FakeNextHandCountdown()
+    private val handStarter = HandStarter(tables, handStore, FakeLastHandResultStore(), FakeFoldWinnerCards(), identityShuffler, eventPublisher, countdown)
     private val service = AdmitJoinRequestService(tables, handStore, walletTransfer, handStarter)
 
     /** 특정 좌석 번호에 특정 버이인으로 미리 앉혀 둔다 — sitDown 은 좌석을 고르지 않으므로
@@ -216,9 +199,3 @@ class AdmitJoinRequestServiceTest {
     }
 }
 
-private class AdmitJoinRequestServiceFakeLastHandResultStore : LastHandResultStore {
-    val store = mutableMapOf<Long, LastHandResult>()
-    override fun find(tableId: TableId): LastHandResult? = store[tableId.value]
-    override fun save(tableId: TableId, result: LastHandResult) { store[tableId.value] = result }
-    override fun remove(tableId: TableId) { store.remove(tableId.value) }
-}

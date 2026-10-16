@@ -1,96 +1,33 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.port.FakeCopyingHoldemTableRepository
+import com.jsm.boardgame.holdem.application.port.FakeWalletTransfer
+import com.jsm.boardgame.holdem.application.port.FakeHandStore
+import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
-import com.jsm.boardgame.holdem.application.port.HandStore
-import com.jsm.boardgame.holdem.application.port.NextHandCountdown
-import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
-import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
-import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-private class CancelHandFakeTableRepository : HoldemTableRepository {
-    private val store = mutableMapOf<Long, HoldemTable>()
-    private var nextId = 1L
-
-    override fun findById(id: TableId): HoldemTable? = store[id.value]?.let { copyOf(it) }
-
-    override fun findByUserId(userId: UserId): HoldemTable? =
-        store.values.firstOrNull { it.seatOf(userId) != null }?.let { copyOf(it) }
-
-    override fun findAllSeatedUserIds(): List<UserId> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
-
-    override fun findAllTableIds(): List<TableId> = store.values.mapNotNull { it.id }
-
-    override fun save(table: HoldemTable): HoldemTable {
-        val id = table.id ?: TableId(nextId++)
-        val saved = copyOf(table, id)
-        store[id.value] = saved
-        return saved
-    }
-
-    private fun copyOf(table: HoldemTable, id: TableId = table.id!!): HoldemTable =
-        HoldemTable.reconstitute(
-            id = id,
-            name = table.name,
-            smallBlind = table.smallBlind,
-            bigBlind = table.bigBlind,
-            buttonSeatNo = table.buttonSeatNo,
-            seats = table.occupiedSeats().associateBy { it.seatNo },
-        )
-}
-
-private class CancelHandFakeHandStore : HandStore {
-    private val store = mutableMapOf<Long, Hand>()
-
-    override fun find(tableId: TableId): Hand? = store[tableId.value]
-    override fun save(tableId: TableId, hand: Hand) { store[tableId.value] = hand }
-    override fun remove(tableId: TableId) { store.remove(tableId.value) }
-    override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
-}
-
-private class CancelHandFakeWalletTransfer : WalletTransfer {
-    data class FromGameCall(val userId: UserId, val amount: Long, val tableId: TableId, val memo: String?)
-
-    val fromGameCalls = mutableListOf<FromGameCall>()
-
-    override fun toGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) {
-        error("CancelHandService 는 toGame 을 부르지 않는다")
-    }
-
-    override fun fromGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) {
-        fromGameCalls += FromGameCall(userId, amount, tableId, memo)
-    }
-}
-
-private class CancelHandFakeNextHandCountdown : NextHandCountdown {
-    val restarted = mutableListOf<TableId>()
-
-    override fun restart(tableId: TableId) { restarted += tableId }
-    override fun cancel(tableId: TableId) {}
-    override fun remaining(tableId: TableId): Duration? = null
-}
-
 class CancelHandServiceTest {
 
-    private val tables = CancelHandFakeTableRepository()
-    private val handStore = CancelHandFakeHandStore()
+    private val tables = FakeCopyingHoldemTableRepository()
+    private val handStore = FakeHandStore()
     private val identityShuffler = Shuffler { it }
-    private val walletTransfer = CancelHandFakeWalletTransfer()
-    private val countdown = CancelHandFakeNextHandCountdown()
+    private val walletTransfer = FakeWalletTransfer()
+    private val countdown = FakeNextHandCountdown()
     private val events = mutableListOf<Any>()
     private val eventPublisher = ApplicationEventPublisher { events += it }
     private val departures = FakeRecentDepartures()

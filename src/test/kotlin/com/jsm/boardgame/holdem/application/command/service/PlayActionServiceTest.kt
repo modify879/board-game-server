@@ -1,5 +1,9 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.port.FakeCopyingHoldemTableRepository
+import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
+import com.jsm.boardgame.holdem.application.port.FakeHandStore
+import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
 import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.holdem.application.command.usecase.PlayActionCommand
 import com.jsm.boardgame.holdem.application.exception.HandNotFoundException
@@ -9,10 +13,6 @@ import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.FakeHandHistory
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.FakeWalletTransfer
-import com.jsm.boardgame.holdem.application.port.HandStore
-import com.jsm.boardgame.holdem.application.port.LastHandResult
-import com.jsm.boardgame.holdem.application.port.LastHandResultStore
-import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.exception.IllegalBettingActionException
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
@@ -21,68 +21,20 @@ import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
-import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
-import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
-private class PlayActionFakeTableRepository : HoldemTableRepository {
-    private val store = mutableMapOf<Long, HoldemTable>()
-    private var nextId = 1L
-
-    override fun findById(id: TableId): HoldemTable? = store[id.value]?.let { copyOf(it) }
-
-    override fun findByUserId(userId: UserId): HoldemTable? =
-        store.values.firstOrNull { it.seatOf(userId) != null }?.let { copyOf(it) }
-
-    override fun findAllSeatedUserIds(): List<UserId> = store.values.flatMap { it.occupiedSeats() }.map { it.userId }
-
-    override fun findAllTableIds(): List<TableId> = store.values.mapNotNull { it.id }
-
-    override fun save(table: HoldemTable): HoldemTable {
-        val id = table.id ?: TableId(nextId++)
-        val saved = copyOf(table, id)
-        store[id.value] = saved
-        return saved
-    }
-
-    private fun copyOf(table: HoldemTable, id: TableId = table.id!!): HoldemTable =
-        HoldemTable.reconstitute(
-            id = id,
-            name = table.name,
-            smallBlind = table.smallBlind,
-            bigBlind = table.bigBlind,
-            buttonSeatNo = table.buttonSeatNo,
-            seats = table.occupiedSeats().associateBy { it.seatNo },
-        )
-}
-
-private class PlayActionFakeHandStore : HandStore {
-    private val store = mutableMapOf<Long, Hand>()
-
-    override fun find(tableId: TableId): Hand? = store[tableId.value]
-    override fun save(tableId: TableId, hand: Hand) { store[tableId.value] = hand }
-    override fun remove(tableId: TableId) { store.remove(tableId.value) }
-    override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
-}
-
-private class PlayActionFakeNextHandCountdown : NextHandCountdown {
-    override fun restart(tableId: TableId) {}
-    override fun cancel(tableId: TableId) {}
-    override fun remaining(tableId: TableId): Duration? = null
-}
-
 class PlayActionServiceTest {
 
-    private val tables = PlayActionFakeTableRepository()
-    private val handStore = PlayActionFakeHandStore()
+    private val tables = FakeCopyingHoldemTableRepository()
+    private val handStore = FakeHandStore()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
-    private val handSettler = HandSettler(tables, handStore, PlayActionServiceFakeLastHandResultStore(), FakeFoldWinnerCards(), eventPublisher, PlayActionFakeNextHandCountdown(), FakeRecentDepartures(), FakeHandHistory(), LeaveReservations(FakeRecentDepartures(), FakeWalletTransfer()))
+    private val handSettler = HandSettler(tables, handStore, FakeLastHandResultStore(), FakeFoldWinnerCards(), eventPublisher, FakeNextHandCountdown(), FakeRecentDepartures(), FakeHandHistory(), LeaveReservations(FakeRecentDepartures(), FakeWalletTransfer()))
     private val service = PlayActionService(tables, handStore, handSettler, eventPublisher)
 
     /** userId = seatNo * 1000 으로 대응시킨다. */
@@ -219,9 +171,3 @@ class PlayActionServiceTest {
     }
 }
 
-private class PlayActionServiceFakeLastHandResultStore : LastHandResultStore {
-    val store = mutableMapOf<Long, LastHandResult>()
-    override fun find(tableId: TableId): LastHandResult? = store[tableId.value]
-    override fun save(tableId: TableId, result: LastHandResult) { store[tableId.value] = result }
-    override fun remove(tableId: TableId) { store.remove(tableId.value) }
-}
