@@ -141,7 +141,7 @@ class HoldemSubscriptionSnapshotListener(
             messagingTemplate.convertAndSendToUser(
                 userId.value.toString(),
                 HoldemDestinations.privateQueueSendTargetOf(rawTableId),
-                privateViewOf(tableId, seat.seatNo, hand, seq),
+                privateViewOf(tableId, seat.seatNo, hand, seq, seat.leaveReservation),
             )
         }
     }

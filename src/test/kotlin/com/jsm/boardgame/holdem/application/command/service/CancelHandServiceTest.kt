@@ -4,6 +4,7 @@ import com.jsm.boardgame.holdem.application.port.FakeCopyingHoldemTableRepositor
 import com.jsm.boardgame.holdem.application.port.FakeWalletTransfer
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
+import com.jsm.boardgame.holdem.domain.model.LeaveReservation
 import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
@@ -102,7 +103,7 @@ class CancelHandServiceTest {
     fun `취소해도 퇴장 예약한 좌석은 기립해 시작 스택을 지갑으로 돌려받는다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
         startAndStoreHand(tableId, mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)))
-        tables.findById(tableId)!!.also { it.reserveLeave(UserId(2L)); tables.save(it) }
+        tables.findById(tableId)!!.also { it.reserveLeave(UserId(2L), LeaveReservation.SPECTATE); tables.save(it) }
 
         service.cancel(CancelHandCommand(tableId.value))
 

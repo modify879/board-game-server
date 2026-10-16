@@ -100,16 +100,16 @@ class HoldemTable private constructor(
         return seat.stack
     }
 
-    /** 핸드가 끝나면 일어나겠다는 예약. 이미 예약돼 있으면 아무 일도 없다. */
-    fun reserveLeave(userId: UserId) {
+    /** 핸드가 끝나면 일어나겠다는 예약. 이미 예약돼 있으면 종류만 바꾼다. */
+    fun reserveLeave(userId: UserId, reservation: LeaveReservation) {
         val seat = seatOf(userId) ?: throw NotSeatedException("이 테이블에 앉아 있지 않은 사용자입니다: userId=$userId")
-        seat.applyLeaveReserved(true)
+        seat.applyLeaveReservation(reservation)
     }
 
     /** 예약을 푼다. 예약이 없었으면 아무 일도 없다. */
     fun cancelLeaveReservation(userId: UserId) {
         val seat = seatOf(userId) ?: throw NotSeatedException("이 테이블에 앉아 있지 않은 사용자입니다: userId=$userId")
-        seat.applyLeaveReserved(false)
+        seat.applyLeaveReservation(null)
     }
 
     fun markPresence(userId: UserId, presence: SeatPresence) {

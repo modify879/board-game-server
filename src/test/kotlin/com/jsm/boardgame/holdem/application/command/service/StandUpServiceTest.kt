@@ -13,6 +13,7 @@ import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
+import com.jsm.boardgame.holdem.domain.model.LeaveReservation
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -107,7 +108,18 @@ class StandUpServiceTest {
     }
 
     @Test
-    fun `퇴장 예약은 멱등이라 다시 불러도 브로드캐스트하지 않는다`() {
+    fun `다른 종류로 다시 요청하면 종류가 바뀌고 브로드캐스트한다`() {
+        val tableId = tableWithHandInProgress()
+        service.standUp(StandUpCommand(userId = 1))
+
+        assertEquals(StandUpResult.RESERVED, service.standUp(StandUpCommand(userId = 1, after = "LEAVE")))
+
+        assertEquals(LeaveReservation.LEAVE, tables.findById(tableId)!!.seatAt(1)!!.leaveReservation)
+        assertEquals(2, eventPublisher.events.count { it is HandBroadcastRequested })
+    }
+
+    @Test
+    fun `같은 종류로 다시 요청하면 브로드캐스트하지 않는다`() {
         tableWithHandInProgress()
         service.standUp(StandUpCommand(userId = 1))
 

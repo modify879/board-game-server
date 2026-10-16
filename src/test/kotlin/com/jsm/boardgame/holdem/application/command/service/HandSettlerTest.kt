@@ -13,6 +13,7 @@ import com.jsm.boardgame.holdem.application.port.FakeWalletTransfer
 import com.jsm.boardgame.holdem.application.port.FoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.HandHistoryEntry
 import com.jsm.boardgame.holdem.application.port.LastHandResult
+import com.jsm.boardgame.holdem.domain.model.LeaveReservation
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Card
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -367,7 +368,7 @@ class HandSettlerTest {
         val stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000))
         val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), identityShuffler)
         handStore.save(tableId, hand)
-        table.reserveLeave(UserId(2000L))
+        table.reserveLeave(UserId(2000L), LeaveReservation.SPECTATE)
         hand.act(1, BettingAction.Fold)
 
         settler.settle(tableId, table, hand)

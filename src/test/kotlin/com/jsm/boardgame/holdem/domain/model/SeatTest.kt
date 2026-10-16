@@ -61,4 +61,20 @@ class SeatTest {
         owing.consumeImmediatePost()
         assertFalse(owing.owesImmediatePost)
     }
+
+    @Test
+    fun `퇴장 예약은 종류를 설정하고 바꾸고 취소할 수 있다`() {
+        val seat = Seat.of(seatNo = 1, userId = UserId(1L), stack = Chips.of(10_000))
+        assertFalse(seat.leaveReserved)
+
+        seat.applyLeaveReservation(LeaveReservation.LEAVE)
+        assertEquals(LeaveReservation.LEAVE, seat.leaveReservation)
+        assertTrue(seat.leaveReserved)
+
+        seat.applyLeaveReservation(LeaveReservation.SPECTATE)
+        assertEquals(LeaveReservation.SPECTATE, seat.leaveReservation)
+
+        seat.applyLeaveReservation(null)
+        assertFalse(seat.leaveReserved)
+    }
 }

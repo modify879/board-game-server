@@ -3,6 +3,15 @@ package com.jsm.boardgame.holdem.domain.model
 /** 좌석 점유 상태. BettingRound 의 SeatStatus(ACTIVE/FOLDED/ALL_IN)와 다른 개념이라 이름을 가른다. */
 enum class SeatPresence { SEATED, SITTING_OUT, DISCONNECTED }
 
+/** 퇴장 예약의 종류. 서버 실행(핸드 뒤 기립)은 둘이 같고, 클라이언트가 기립 뒤 행동을 정하는 데만 쓴다. */
+enum class LeaveReservation {
+    /** 핸드 뒤 일어나 관전자로 남는다. */
+    SPECTATE,
+
+    /** 핸드 뒤 일어나 방 목록으로 이동한다. */
+    LEAVE,
+}
+
 class Seat private constructor(
     val seatNo: Int,
     val userId: UserId,
@@ -10,7 +19,7 @@ class Seat private constructor(
     presence: SeatPresence,
     awaitingBigBlind: Boolean,
     owesImmediatePost: Boolean,
-    leaveReserved: Boolean,
+    leaveReservation: LeaveReservation?,
 ) {
     var stack: Chips = stack
         private set
@@ -31,8 +40,10 @@ class Seat private constructor(
         private set
 
     /** "이 핸드가 끝나면 일어난다" 예약. 핸드가 끝날 때 좌석이 기립하며 함께 사라진다. */
-    var leaveReserved: Boolean = leaveReserved
+    var leaveReservation: LeaveReservation? = leaveReservation
         private set
+
+    val leaveReserved: Boolean get() = leaveReservation != null
 
     /** 스택 증감은 테이블 애그리거트(HoldemTable)를 거친다. */
     internal fun applyStack(newStack: Chips) {
@@ -54,8 +65,8 @@ class Seat private constructor(
         owesImmediatePost = false
     }
 
-    internal fun applyLeaveReserved(reserved: Boolean) {
-        leaveReserved = reserved
+    internal fun applyLeaveReservation(reservation: LeaveReservation?) {
+        leaveReservation = reservation
     }
 
     companion object {
@@ -67,7 +78,7 @@ class Seat private constructor(
                 seatNo, userId, stack, SeatPresence.SEATED,
                 awaitingBigBlind = !postBlindImmediately,
                 owesImmediatePost = postBlindImmediately,
-                leaveReserved = false,
+                leaveReservation = null,
             )
 
         /** 영속 복원 전용 — 검증하지 않는다. */
@@ -78,7 +89,7 @@ class Seat private constructor(
             presence: SeatPresence,
             awaitingBigBlind: Boolean = false,
             owesImmediatePost: Boolean = false,
-            leaveReserved: Boolean = false,
-        ): Seat = Seat(seatNo, userId, stack, presence, awaitingBigBlind, owesImmediatePost, leaveReserved)
+            leaveReservation: LeaveReservation? = null,
+        ): Seat = Seat(seatNo, userId, stack, presence, awaitingBigBlind, owesImmediatePost, leaveReservation)
     }
 }
