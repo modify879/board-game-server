@@ -4,8 +4,6 @@ import com.jsm.boardgame.wallet.application.command.usecase.CancelWithdrawalRequ
 import com.jsm.boardgame.wallet.domain.exception.WithdrawalRequestNotFoundException
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
 import com.jsm.boardgame.wallet.domain.model.BankAccount
-import com.jsm.boardgame.wallet.domain.model.LedgerEntry
-import com.jsm.boardgame.wallet.domain.model.LedgerEntryId
 import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.model.WalletId
@@ -13,82 +11,25 @@ import com.jsm.boardgame.wallet.domain.model.WithdrawalRequest
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestId
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestStatus
 import com.jsm.boardgame.wallet.domain.model.UserId
-import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
-import com.jsm.boardgame.wallet.domain.repository.WalletRepository
-import com.jsm.boardgame.wallet.domain.repository.WithdrawalRequestRepository
 import com.jsm.boardgame.wallet.application.event.WalletCredited
-import org.springframework.context.ApplicationEventPublisher
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-
-private class CancelFakeWithdrawalRequestRepository : WithdrawalRequestRepository {
-    val stored = mutableMapOf<Long, WithdrawalRequest>()
-
-    fun put(request: WithdrawalRequest) {
-        stored[request.id!!.value] = request
-    }
-
-    override fun findById(id: WithdrawalRequestId): WithdrawalRequest? = stored[id.value]
-
-    override fun findByUserAndIdempotencyKey(userId: UserId, idempotencyKey: String): WithdrawalRequest? =
-        stored.values.firstOrNull { it.userId == userId && it.idempotencyKey == idempotencyKey }
-
-    override fun save(request: WithdrawalRequest): WithdrawalRequest {
-        stored[request.id!!.value] = request
-        return request
-    }
-}
-
-private class CancelFakeWalletRepository : WalletRepository {
-    val stored = mutableMapOf<Long, Wallet>()
-
-    override fun findByUserId(userId: UserId): Wallet? = stored[userId.value]
-
-    override fun save(wallet: Wallet): Wallet {
-        stored[wallet.userId.value] = wallet
-        return wallet
-    }
-
-    override fun findOrOpen(userId: UserId): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
-}
-
-private class CancelFakeLedgerEntryRepository : LedgerEntryRepository {
-    val stored = mutableListOf<LedgerEntry>()
-    private var sequence = 0L
-
-    override fun save(entry: LedgerEntry): LedgerEntry {
-        sequence += 1
-        val saved = LedgerEntry.reconstitute(
-            id = LedgerEntryId(sequence),
-            walletId = entry.walletId,
-            type = entry.type,
-            amount = entry.amount,
-            balanceAfter = entry.balanceAfter,
-            reference = entry.reference,
-            memo = entry.memo,
-            occurredAt = entry.occurredAt,
-        )
-        stored += saved
-        return saved
-    }
-}
-
-private class CancelFakeEventPublisher : ApplicationEventPublisher {
-    val events = mutableListOf<Any>()
-    override fun publishEvent(event: Any) { events += event }
-}
+import com.jsm.boardgame.wallet.domain.repository.FakeLedgerEntryRepository
+import com.jsm.boardgame.wallet.domain.repository.FakeWalletRepository
+import com.jsm.boardgame.wallet.application.event.FakeEventPublisher
+import com.jsm.boardgame.wallet.domain.repository.FakeWithdrawalRequestRepository
 
 class CancelWithdrawalRequestServiceTest {
 
-    private val withdrawalRequests = CancelFakeWithdrawalRequestRepository()
-    private val wallets = CancelFakeWalletRepository()
-    private val ledger = CancelFakeLedgerEntryRepository()
+    private val withdrawalRequests = FakeWithdrawalRequestRepository()
+    private val wallets = FakeWalletRepository()
+    private val ledger = FakeLedgerEntryRepository()
     private val clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
-    private val eventPublisher = CancelFakeEventPublisher()
+    private val eventPublisher = FakeEventPublisher()
     private val service = CancelWithdrawalRequestService(withdrawalRequests, wallets, ledger, clock, eventPublisher)
     private val bankAccount = BankAccount.of("국민은행", "123456789012", "홍길동")
 

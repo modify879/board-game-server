@@ -9,18 +9,13 @@ import com.jsm.boardgame.wallet.domain.exception.InsufficientBalanceException
 import com.jsm.boardgame.wallet.domain.exception.InvalidAdjustmentException
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
 import com.jsm.boardgame.wallet.domain.exception.WalletOwnerNotFoundException
-import com.jsm.boardgame.wallet.domain.model.LedgerEntry
-import com.jsm.boardgame.wallet.domain.model.LedgerEntryId
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.model.WalletId
 import com.jsm.boardgame.wallet.domain.model.UserId
-import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
-import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import com.jsm.boardgame.wallet.application.event.WalletCredited
-import org.springframework.context.ApplicationEventPublisher
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -28,26 +23,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
-
-private class AdjustFakeWalletRepository : WalletRepository {
-    val stored = mutableMapOf<Long, Wallet>()
-    private var sequence = 0L
-
-    override fun findByUserId(userId: UserId): Wallet? = stored[userId.value]
-
-    override fun save(wallet: Wallet): Wallet {
-        val saved = if (wallet.id == null) {
-            sequence += 1
-            Wallet.reconstitute(id = WalletId(sequence), userId = wallet.userId, balance = wallet.balance)
-        } else {
-            wallet
-        }
-        stored[wallet.userId.value] = saved
-        return saved
-    }
-
-    override fun findOrOpen(userId: UserId): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
-}
+import com.jsm.boardgame.wallet.domain.repository.FakeLedgerEntryRepository
+import com.jsm.boardgame.wallet.domain.repository.FakeWalletRepository
+import com.jsm.boardgame.wallet.application.event.FakeEventPublisher
 
 private class AdjustFakeUserExistence(private val existingUserIds: MutableSet<Long> = mutableSetOf()) : UserExistence {
     fun register(userId: Long) {
@@ -67,40 +45,14 @@ private class AdjustFakeAdjustmentKeyRegistry : AdjustmentKeyRegistry {
     }
 }
 
-private class AdjustFakeLedgerEntryRepository : LedgerEntryRepository {
-    val stored = mutableListOf<LedgerEntry>()
-    private var sequence = 0L
-
-    override fun save(entry: LedgerEntry): LedgerEntry {
-        sequence += 1
-        val saved = LedgerEntry.reconstitute(
-            id = LedgerEntryId(sequence),
-            walletId = entry.walletId,
-            type = entry.type,
-            amount = entry.amount,
-            balanceAfter = entry.balanceAfter,
-            reference = entry.reference,
-            memo = entry.memo,
-            occurredAt = entry.occurredAt,
-        )
-        stored += saved
-        return saved
-    }
-}
-
-private class AdjustFakeEventPublisher : ApplicationEventPublisher {
-    val events = mutableListOf<Any>()
-    override fun publishEvent(event: Any) { events += event }
-}
-
 class AdjustWalletBalanceServiceTest {
 
-    private val wallets = AdjustFakeWalletRepository()
-    private val ledger = AdjustFakeLedgerEntryRepository()
+    private val wallets = FakeWalletRepository()
+    private val ledger = FakeLedgerEntryRepository()
     private val userExistence = AdjustFakeUserExistence()
     private val adjustmentKeys = AdjustFakeAdjustmentKeyRegistry()
     private val clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
-    private val eventPublisher = AdjustFakeEventPublisher()
+    private val eventPublisher = FakeEventPublisher()
     private val service = AdjustWalletBalanceService(wallets, ledger, userExistence, adjustmentKeys, clock, eventPublisher)
 
     @Test

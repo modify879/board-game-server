@@ -4,68 +4,25 @@ import com.jsm.boardgame.wallet.application.command.usecase.TransferToGameComman
 import com.jsm.boardgame.wallet.domain.exception.InsufficientBalanceException
 import com.jsm.boardgame.wallet.domain.exception.InvalidAmountException
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
-import com.jsm.boardgame.wallet.domain.model.LedgerEntry
-import com.jsm.boardgame.wallet.domain.model.LedgerEntryId
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.Wallet
 import com.jsm.boardgame.wallet.domain.model.WalletId
 import com.jsm.boardgame.wallet.domain.model.UserId
-import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
-import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-
-private class TransferToGameFakeWalletRepository : WalletRepository {
-    val stored = mutableMapOf<Long, Wallet>()
-    private var sequence = 0L
-
-    override fun findByUserId(userId: UserId): Wallet? = stored[userId.value]
-
-    override fun save(wallet: Wallet): Wallet {
-        val saved = if (wallet.id == null) {
-            sequence += 1
-            Wallet.reconstitute(id = WalletId(sequence), userId = wallet.userId, balance = wallet.balance)
-        } else {
-            wallet
-        }
-        stored[wallet.userId.value] = saved
-        return saved
-    }
-
-    override fun findOrOpen(userId: UserId): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
-}
-
-private class TransferToGameFakeLedgerEntryRepository : LedgerEntryRepository {
-    val stored = mutableListOf<LedgerEntry>()
-    private var sequence = 0L
-
-    override fun save(entry: LedgerEntry): LedgerEntry {
-        sequence += 1
-        val saved = LedgerEntry.reconstitute(
-            id = LedgerEntryId(sequence),
-            walletId = entry.walletId,
-            type = entry.type,
-            amount = entry.amount,
-            balanceAfter = entry.balanceAfter,
-            reference = entry.reference,
-            memo = entry.memo,
-            occurredAt = entry.occurredAt,
-        )
-        stored += saved
-        return saved
-    }
-}
+import com.jsm.boardgame.wallet.domain.repository.FakeLedgerEntryRepository
+import com.jsm.boardgame.wallet.domain.repository.FakeWalletRepository
 
 class TransferToGameServiceTest {
 
-    private val wallets = TransferToGameFakeWalletRepository()
-    private val ledger = TransferToGameFakeLedgerEntryRepository()
+    private val wallets = FakeWalletRepository()
+    private val ledger = FakeLedgerEntryRepository()
     private val clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
     private val service = TransferToGameService(wallets, ledger, clock)
 
