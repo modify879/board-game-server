@@ -2,11 +2,14 @@ package com.jsm.boardgame.holdem.infrastructure.persistence.entity
 
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.model.Chips
+import com.jsm.boardgame.holdem.domain.model.LeaveReservation
 import com.jsm.boardgame.holdem.domain.model.Seat
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.linecorp.kotlinjdsl.support.spring.data.jpa.repository.KotlinJdslJpqlExecutor
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.EnumType
+import jakarta.persistence.Enumerated
 import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
@@ -45,7 +48,11 @@ class HoldemSeatJpaEntity(
     var owesImmediatePost: Boolean,
     // 기존 행에 ddl-auto update 가 not null 컬럼을 붙이려면 default 가 있어야 한다.
     @Column(name = "leave_after_hand", nullable = false, columnDefinition = "boolean not null default false")
-    var leaveReserved: Boolean = false,
+    var leaveAfterHand: Boolean = false,
+    // 종류. 종류가 생기기 전에 저장된 예약 행은 null 이고 leave_after_hand 만 true 다.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "leave_reservation")
+    var leaveReservation: LeaveReservation? = null,
 )
 
 interface HoldemSeatJpaRepository : JpaRepository<HoldemSeatJpaEntity, Long>, KotlinJdslJpqlExecutor {
@@ -62,7 +69,7 @@ fun HoldemSeatJpaEntity.toDomain(): Seat =
         presence = SeatPresence.valueOf(presence),
         awaitingBigBlind = awaitingBigBlind,
         owesImmediatePost = owesImmediatePost,
-        leaveReserved = leaveReserved,
+        leaveReservation = leaveReservation ?: if (leaveAfterHand) LeaveReservation.SPECTATE else null,
     )
 
 // Seat -> HoldemSeatJpaEntity 매핑은 여기 두지 않는다: 부모 테이블의 DB id 와, 기존 행이 있다면

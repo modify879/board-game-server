@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.LeaveReservation
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpUseCase
@@ -45,11 +46,12 @@ class StandUpService(
 
         val hand = handStore.find(tableId)
         if (hand != null) {
-            if (!table.seatOf(UserId(command.userId))!!.leaveReserved) {
-                table.reserveLeave(UserId(command.userId))
+            val requested = LeaveReservation.valueOf(command.after)
+            if (table.seatOf(UserId(command.userId))!!.leaveReservation != requested) {
+                table.reserveLeave(UserId(command.userId), requested)
                 tables.save(table)
                 eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand))
-                log.info("핸드 뒤 퇴장을 예약했습니다: userId={}, tableId={}", command.userId, tableId.value)
+                log.info("핸드 뒤 퇴장을 예약했습니다: userId={}, tableId={}, after={}", command.userId, tableId.value, requested)
             }
             return StandUpResult.RESERVED
         }

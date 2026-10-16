@@ -7,6 +7,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCo
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
 import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.RecentDepartures
+import com.jsm.boardgame.holdem.domain.model.LeaveReservation
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
@@ -397,6 +398,25 @@ class HoldemApiIntegrationTest {
         assertThat(holdemTableRepository.findByUserId(UserId(ctx.userId))).isNull()
         assertThat(balanceOf(ctx.userId)).isGreaterThan(0L)
         assertThat(recentDepartures.obligationOf(UserId(ctx.userId))).isNotNull()
+    }
+
+    @Test
+    fun `after=LEAVE 로 기립하면 202 이고 종류가 LEAVE 로 저장된다`() {
+        val ctx = seatedWithHandInProgress()
+
+        authDelete("/api/holdem/seat?after=LEAVE", ctx.accessToken).andExpect(status().isAccepted)
+
+        val seat = holdemTableRepository.findByUserId(UserId(ctx.userId))!!.seatOf(UserId(ctx.userId))!!
+        assertThat(seat.leaveReservation).isEqualTo(LeaveReservation.LEAVE)
+    }
+
+    @Test
+    fun `after 가 잘못된 값이면 400 REQUEST_INVALID 를 응답한다`() {
+        val ctx = seatedWithHandInProgress()
+
+        authDelete("/api/holdem/seat?after=NOPE", ctx.accessToken)
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("REQUEST_INVALID"))
     }
 
     @Test

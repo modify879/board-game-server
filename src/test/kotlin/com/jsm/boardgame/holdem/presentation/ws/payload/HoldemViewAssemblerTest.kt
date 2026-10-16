@@ -7,6 +7,7 @@ import com.jsm.boardgame.holdem.domain.model.Card
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.LeaveReservation
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
@@ -73,6 +74,21 @@ class HoldemViewAssemblerTest {
     }
 
     @Test
+    fun `개인 뷰에는 좌석의 퇴장 예약 종류가 실린다`() {
+        val table = HoldemTable.create("t")
+        table.sitDown(UserId(1), Chips.of(10_000))
+        table.sitDown(UserId(2), Chips.of(10_000))
+        table.placeButtonAtFirstSeat()
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
+            table.buttonSeatNo!!, smallBlindSeatNo = 1, bigBlindSeatNo = 2, table.smallBlind, table.bigBlind, identityShuffler,
+        )
+
+        assertNull(privateViewOf(TableId(1), 1, hand, 1L, null).leaveReservation)
+        assertEquals("LEAVE", privateViewOf(TableId(1), 1, hand, 1L, LeaveReservation.LEAVE).leaveReservation)
+    }
+
+    @Test
     fun `좌석 A 의 개인 뷰에는 좌석 B 의 카드가 들어가지 않는다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         table.placeButtonAtFirstSeat()
@@ -87,8 +103,8 @@ class HoldemViewAssemblerTest {
             fixedShuffler("3s", "2s", "5s", "4s"),
         )
 
-        val viewA = privateViewOf(TableId(1), 1, hand, 1L)
-        val viewB = privateViewOf(TableId(1), 2, hand, 1L)
+        val viewA = privateViewOf(TableId(1), 1, hand, 1L, null)
+        val viewB = privateViewOf(TableId(1), 2, hand, 1L, null)
 
         assertEquals(listOf("2s", "4s"), viewA.holeCards)
         assertEquals(listOf("3s", "5s"), viewB.holeCards)
@@ -459,9 +475,9 @@ class HoldemViewAssemblerTest {
         )
         val toAct = hand.toActSeatNo!!
 
-        val actingView = privateViewOf(TableId(1), toAct, hand, 1L)
+        val actingView = privateViewOf(TableId(1), toAct, hand, 1L, null)
         val otherSeatNo = hand.seatNos.first { it != toAct }
-        val otherView = privateViewOf(TableId(1), otherSeatNo, hand, 1L)
+        val otherView = privateViewOf(TableId(1), otherSeatNo, hand, 1L, null)
 
         assertTrue(actingView.availableActions != null)
         assertNull(otherView.availableActions)
@@ -482,7 +498,7 @@ class HoldemViewAssemblerTest {
         )
         hand.act(hand.toActSeatNo!!, BettingAction.Fold)
 
-        val view = privateViewOf(TableId(1), 1, hand, 1L)
+        val view = privateViewOf(TableId(1), 1, hand, 1L, null)
 
         assertNull(view.availableActions)
     }
@@ -562,7 +578,7 @@ class HoldemViewAssemblerTest {
         )
 
         val publicView = publicViewOf(TableId(1), table, hand, null, 42L, null, null)
-        val privateView = privateViewOf(TableId(1), 1, hand, 42L)
+        val privateView = privateViewOf(TableId(1), 1, hand, 42L, null)
 
         assertEquals(42L, publicView.seq)
         assertEquals(42L, privateView.seq)

@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.persistence.adapter
 
+import com.jsm.boardgame.holdem.domain.model.LeaveReservation
 import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.TestcontainersConfiguration
@@ -144,9 +145,13 @@ class HoldemTableRepositoryAdapterIntegrationTest {
         val saved = tables.save(table)
         assertFalse(saved.seatOf(userId)!!.leaveReserved)
 
-        saved.reserveLeave(userId)
+        saved.reserveLeave(userId, LeaveReservation.LEAVE)
         tables.save(saved)
-        assertTrue(tables.findById(saved.id!!)!!.seatOf(userId)!!.leaveReserved)
+        assertEquals(LeaveReservation.LEAVE, tables.findById(saved.id!!)!!.seatOf(userId)!!.leaveReservation)
+
+        saved.reserveLeave(userId, LeaveReservation.SPECTATE)
+        tables.save(saved)
+        assertEquals(LeaveReservation.SPECTATE, tables.findById(saved.id!!)!!.seatOf(userId)!!.leaveReservation)
 
         saved.cancelLeaveReservation(userId)
         tables.save(saved)

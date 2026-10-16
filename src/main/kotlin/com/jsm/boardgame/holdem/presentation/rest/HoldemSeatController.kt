@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.rest
 
 import com.jsm.boardgame.common.error.AuthenticationRequiredException
+import com.jsm.boardgame.holdem.domain.model.LeaveReservation
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.AddChipsUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.CancelLeaveReservationCommand
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
@@ -46,13 +48,16 @@ class HoldemSeatController(
 
     // 핸드 중이면 즉시 기립 대신 퇴장 예약이고 202 다(바로 일어선 것이 아니다).
     @DeleteMapping("/seat")
-    fun standUp(@AuthenticationPrincipal jwt: Jwt): ResponseEntity<Void> {
+    fun standUp(
+        @AuthenticationPrincipal jwt: Jwt,
+        @RequestParam(required = false) after: LeaveReservation?,
+    ): ResponseEntity<Void> {
         val userId = jwt.requireUserId()
         // 앉아 있지 않은 사용자의 기립은 NotSeatedException 뿐이다(StandUpService) — 실행기 밖에서 유스케이스를 돌리지 않고 같은 오류를 던진다.
         val result = tableExecutor.callForUser(
             tables, UserId(userId),
             onNotSeated = { throw NotSeatedException("어느 테이블에도 앉아 있지 않은 사용자입니다: userId=$userId") },
-        ) { standUpUseCase.standUp(StandUpCommand(userId)) }
+        ) { standUpUseCase.standUp(StandUpCommand(userId, (after ?: LeaveReservation.SPECTATE).name)) }
         return when (result) {
             StandUpResult.STOOD_UP -> ResponseEntity.noContent().build()
             StandUpResult.RESERVED -> ResponseEntity.accepted().build()
