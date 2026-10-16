@@ -8,35 +8,17 @@ import com.jsm.boardgame.wallet.domain.model.DepositRequestId
 import com.jsm.boardgame.wallet.domain.model.DepositRequestStatus
 import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.UserId
-import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-
-private class CancelFakeDepositRequestRepository : DepositRequestRepository {
-    val stored = mutableMapOf<Long, DepositRequest>()
-
-    fun put(request: DepositRequest) {
-        stored[request.id!!.value] = request
-    }
-
-    override fun findById(id: DepositRequestId): DepositRequest? = stored[id.value]
-
-    override fun findByUserAndIdempotencyKey(userId: UserId, idempotencyKey: String): DepositRequest? =
-        stored.values.firstOrNull { it.userId == userId && it.idempotencyKey == idempotencyKey }
-
-    override fun save(request: DepositRequest): DepositRequest {
-        stored[request.id!!.value] = request
-        return request
-    }
-}
+import com.jsm.boardgame.wallet.domain.repository.FakeDepositRequestRepository
 
 class CancelDepositRequestServiceTest {
 
-    private val depositRequests = CancelFakeDepositRequestRepository()
+    private val depositRequests = FakeDepositRequestRepository()
     private val clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
     private val service = CancelDepositRequestService(depositRequests, clock)
 

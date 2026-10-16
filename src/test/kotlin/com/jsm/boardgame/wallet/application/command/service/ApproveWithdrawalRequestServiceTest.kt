@@ -10,37 +10,19 @@ import com.jsm.boardgame.wallet.domain.model.WithdrawalRequest
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestId
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestStatus
 import com.jsm.boardgame.wallet.domain.model.UserId
-import com.jsm.boardgame.wallet.domain.repository.WithdrawalRequestRepository
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-
-private class ApproveFakeWithdrawalRequestRepository : WithdrawalRequestRepository {
-    val stored = mutableMapOf<Long, WithdrawalRequest>()
-
-    fun put(request: WithdrawalRequest) {
-        stored[request.id!!.value] = request
-    }
-
-    override fun findById(id: WithdrawalRequestId): WithdrawalRequest? = stored[id.value]
-
-    override fun findByUserAndIdempotencyKey(userId: UserId, idempotencyKey: String): WithdrawalRequest? =
-        stored.values.firstOrNull { it.userId == userId && it.idempotencyKey == idempotencyKey }
-
-    override fun save(request: WithdrawalRequest): WithdrawalRequest {
-        stored[request.id!!.value] = request
-        return request
-    }
-}
+import com.jsm.boardgame.wallet.domain.repository.FakeWithdrawalRequestRepository
 
 // ApproveWithdrawalRequestService 는 지갑·원장 출력 포트를 아예 의존하지 않는다(생성자에 없다).
 // 그래서 "잔액도 원장도 변하지 않는다"는 페이크를 만들 필요 없이 타입으로 이미 보장된다.
 class ApproveWithdrawalRequestServiceTest {
 
-    private val withdrawalRequests = ApproveFakeWithdrawalRequestRepository()
+    private val withdrawalRequests = FakeWithdrawalRequestRepository()
     private val clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
     private val service = ApproveWithdrawalRequestService(withdrawalRequests, clock)
     private val bankAccount = BankAccount.of("국민은행", "123456789012", "홍길동")

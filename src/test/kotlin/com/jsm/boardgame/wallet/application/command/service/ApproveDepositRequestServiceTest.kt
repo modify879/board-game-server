@@ -7,19 +7,11 @@ import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
 import com.jsm.boardgame.wallet.domain.model.DepositRequest
 import com.jsm.boardgame.wallet.domain.model.DepositRequestId
 import com.jsm.boardgame.wallet.domain.model.DepositRequestStatus
-import com.jsm.boardgame.wallet.domain.model.LedgerEntry
-import com.jsm.boardgame.wallet.domain.model.LedgerEntryId
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.Money
-import com.jsm.boardgame.wallet.domain.model.Wallet
-import com.jsm.boardgame.wallet.domain.model.WalletId
 import com.jsm.boardgame.wallet.domain.model.UserId
-import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
-import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
-import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import com.jsm.boardgame.wallet.application.event.WalletCredited
-import org.springframework.context.ApplicationEventPublisher
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -28,78 +20,18 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-
-private class ApproveFakeDepositRequestRepository : DepositRequestRepository {
-    val stored = mutableMapOf<Long, DepositRequest>()
-
-    fun put(request: DepositRequest) {
-        stored[request.id!!.value] = request
-    }
-
-    override fun findById(id: DepositRequestId): DepositRequest? = stored[id.value]
-
-    override fun findByUserAndIdempotencyKey(userId: UserId, idempotencyKey: String): DepositRequest? =
-        stored.values.firstOrNull { it.userId == userId && it.idempotencyKey == idempotencyKey }
-
-    override fun save(request: DepositRequest): DepositRequest {
-        stored[request.id!!.value] = request
-        return request
-    }
-}
-
-private class ApproveFakeWalletRepository : WalletRepository {
-    val stored = mutableMapOf<Long, Wallet>()
-    private var sequence = 0L
-
-    override fun findByUserId(userId: UserId): Wallet? = stored[userId.value]
-
-    override fun save(wallet: Wallet): Wallet {
-        val saved = if (wallet.id == null) {
-            sequence += 1
-            Wallet.reconstitute(id = WalletId(sequence), userId = wallet.userId, balance = wallet.balance)
-        } else {
-            wallet
-        }
-        stored[wallet.userId.value] = saved
-        return saved
-    }
-
-    override fun findOrOpen(userId: UserId): Wallet = findByUserId(userId) ?: save(Wallet.open(userId))
-}
-
-private class ApproveFakeLedgerEntryRepository : LedgerEntryRepository {
-    val stored = mutableListOf<LedgerEntry>()
-    private var sequence = 0L
-
-    override fun save(entry: LedgerEntry): LedgerEntry {
-        sequence += 1
-        val saved = LedgerEntry.reconstitute(
-            id = LedgerEntryId(sequence),
-            walletId = entry.walletId,
-            type = entry.type,
-            amount = entry.amount,
-            balanceAfter = entry.balanceAfter,
-            reference = entry.reference,
-            memo = entry.memo,
-            occurredAt = entry.occurredAt,
-        )
-        stored += saved
-        return saved
-    }
-}
-
-private class ApproveFakeEventPublisher : ApplicationEventPublisher {
-    val events = mutableListOf<Any>()
-    override fun publishEvent(event: Any) { events += event }
-}
+import com.jsm.boardgame.wallet.domain.repository.FakeLedgerEntryRepository
+import com.jsm.boardgame.wallet.domain.repository.FakeDepositRequestRepository
+import com.jsm.boardgame.wallet.application.event.FakeEventPublisher
+import com.jsm.boardgame.wallet.domain.repository.FakeWalletRepository
 
 class ApproveDepositRequestServiceTest {
 
-    private val depositRequests = ApproveFakeDepositRequestRepository()
-    private val wallets = ApproveFakeWalletRepository()
-    private val ledger = ApproveFakeLedgerEntryRepository()
+    private val depositRequests = FakeDepositRequestRepository()
+    private val wallets = FakeWalletRepository()
+    private val ledger = FakeLedgerEntryRepository()
     private val clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
-    private val eventPublisher = ApproveFakeEventPublisher()
+    private val eventPublisher = FakeEventPublisher()
     private val service = ApproveDepositRequestService(depositRequests, wallets, ledger, clock, eventPublisher)
 
     private fun pendingRequest(id: Long = 1, userId: Long = 1, amount: Long = 10_000): DepositRequest =
