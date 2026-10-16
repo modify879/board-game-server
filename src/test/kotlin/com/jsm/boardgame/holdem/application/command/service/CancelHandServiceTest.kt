@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
@@ -107,7 +108,7 @@ class CancelHandServiceTest {
 
     private fun startAndStoreHand(tableId: TableId, startingStacks: Map<Int, Chips>): Hand {
         val table = tables.findById(tableId)!!
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         val buttonSeatNo = table.buttonSeatNo!!
         val seatNos = startingStacks.keys.sorted()
         fun nextSeatNo(from: Int): Int = seatNos[(seatNos.indexOf(from) + 1) % seatNos.size]

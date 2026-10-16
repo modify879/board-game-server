@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.persistence.adapter
 
+import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
@@ -86,7 +87,7 @@ class HoldemTableRepositoryAdapterIntegrationTest {
         val userId = uniqueUserId()
         val table = HoldemTable.create("t2")
         table.sitDown(userId, buyIn)
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
 
         val saved = tables.save(table)
         val found = tables.findById(saved.id!!)

@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
 import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.FakeHandHistory
@@ -105,7 +106,7 @@ class ExpireTurnServiceTest {
         for ((seatNo, buyIn) in stacks) {
             table.sitDown(userId = UserId(seatNo * 1000L), buyIn = Chips.of(buyIn))
         }
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         table = tables.save(table)
 
         val handStacks = stacks.associate { (seatNo, buyIn) -> seatNo to Chips.of(buyIn) }

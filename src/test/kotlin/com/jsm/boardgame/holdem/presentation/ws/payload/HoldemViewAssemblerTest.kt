@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.presentation.ws.payload
 
+import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Card
@@ -74,7 +75,7 @@ class HoldemViewAssemblerTest {
     @Test
     fun `좌석 A 의 개인 뷰에는 좌석 B 의 카드가 들어가지 않는다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         // 버튼=1(SB) 이라 딜은 2(BB)부터 시작한다 — 1=2s,4s 를 유지하려면 2보다 먼저 딜에 놓아야 한다.
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
@@ -97,7 +98,7 @@ class HoldemViewAssemblerTest {
     @Test
     fun `폴드한 좌석은 공개 뷰에서 FOLDED 로 표시되고 핸드는 계속 진행 중이며 홀카드가 노출되지 않는다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
-        table.moveButtonToNextOccupiedSeat() // null -> 1
+        table.placeButtonAtFirstSeat() // null -> 1
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)),
             table.buttonSeatNo!!,
@@ -128,7 +129,7 @@ class HoldemViewAssemblerTest {
     @Test
     fun `블라인드만으로 양쪽이 올인되면 런아웃 중이라 보드는 비어 있고 두 좌석의 패가 공개된다`() {
         val table = tableWithSeats(1 to 8_000L, 2 to 8_000L)
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         val hand = Hand.start(
             mapOf(1 to Chips.of(100), 2 to Chips.of(100)),
             table.buttonSeatNo!!,
@@ -158,7 +159,7 @@ class HoldemViewAssemblerTest {
     @Test
     fun `런아웃이 아닌 진행 중 핸드의 공개 뷰는 revealedHands 가 비어 있다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
             table.buttonSeatNo!!,
@@ -175,7 +176,7 @@ class HoldemViewAssemblerTest {
     @Test
     fun `폴드로 끝난 핸드의 공개 뷰는 이긴 좌석만 담고 shownHands 는 비어 있으며 어느 좌석의 홀카드도 노출되지 않는다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
             table.buttonSeatNo!!,
@@ -204,7 +205,7 @@ class HoldemViewAssemblerTest {
     @Test
     fun `리버에 A 가 베팅하고 B 가 콜해 B 가 이기면 둘 다 공개된다(A 가 순서상 먼저)`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         // 딜 순서(버튼(1) 다음인 2부터, 버튼이 마지막): seat2=Ah,Ad(AA)  seat1=Kh,Kd(KK)  보드=2s,7d,9c,Tc,Jh
         val shuffler = fixedShuffler("Ah", "Kh", "Ad", "Kd", "2s", "7d", "9c", "Tc", "Jh")
         val hand = Hand.start(
@@ -242,7 +243,7 @@ class HoldemViewAssemblerTest {
     @Test
     fun `리버에 A 가 베팅하고 B 가 콜했는데 A 가 이겨도 진 B 의 패가 그대로 공개된다(머크 없음)`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         // 딜 순서(버튼(1) 다음인 2부터, 버튼이 마지막): seat2=Kh,Kd(KK)  seat1=Ah,Ad(AA)  보드=2s,7d,9c,Tc,Jh
         val shuffler = fixedShuffler("Kh", "Ah", "Kd", "Ad", "2s", "7d", "9c", "Tc", "Jh")
         val hand = Hand.start(
@@ -284,7 +285,7 @@ class HoldemViewAssemblerTest {
     @Test
     fun `리버 베팅 없이 체크로 끝나면 공개 순서는 버튼 다음 좌석부터고 쇼다운까지 간 좌석은 순서대로 전원 공개된다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        table.moveButtonToNextOccupiedSeat() // button=1(=SB), BB=2
+        table.placeButtonAtFirstSeat() // button=1(=SB), BB=2
         // 딜 순서(버튼(1) 다음인 2부터, 버튼이 마지막): seat2=Kh,Kd(KK)  seat1=Ah,Ad(AA)  보드=2s,7d,9c,Tc,Jh — 전부 체크로 통과
         val shuffler = fixedShuffler("Kh", "Ah", "Kd", "Ad", "2s", "7d", "9c", "Tc", "Jh")
         val hand = Hand.start(
@@ -320,7 +321,7 @@ class HoldemViewAssemblerTest {
     @Test
     fun `삼자 체크다운은 순서대로 셋 다 공개된다(머크 없음)`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
-        table.moveButtonToNextOccupiedSeat() // button=1, SB=2, BB=3
+        table.placeButtonAtFirstSeat() // button=1, SB=2, BB=3
         // 딜 순서(버튼(1) 다음인 2부터 시계방향, 버튼이 마지막): seat2=Jh,Jd(JJ)  seat3=Qh,Qd(QQ)  seat1=Kh,Kd(KK)  보드=2d,7c,9h,4s,5c
         val shuffler = fixedShuffler("Jh", "Qh", "Kh", "Jd", "Qd", "Kd", "2d", "7c", "9h", "4s", "5c")
         val hand = Hand.start(
@@ -359,7 +360,7 @@ class HoldemViewAssemblerTest {
     @Test
     fun `삼자 체크다운에서 두 번째 패가 첫 번째보다 약해도 전원 공개된다(머크 없음)`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
-        table.moveButtonToNextOccupiedSeat() // button=1, SB=2, BB=3
+        table.placeButtonAtFirstSeat() // button=1, SB=2, BB=3
         // 딜 순서(버튼(1) 다음인 2부터 시계방향, 버튼이 마지막): seat2=Qh,Qd(QQ)  seat3=Jh,Jd(JJ)  seat1=Kh,Kd(KK)  보드=2d,7c,9h,4s,5c
         val shuffler = fixedShuffler("Qh", "Jh", "Kh", "Qd", "Jd", "Kd", "2d", "7c", "9h", "4s", "5c")
         val hand = Hand.start(
@@ -446,7 +447,7 @@ class HoldemViewAssemblerTest {
     @Test
     fun `차례인 좌석의 개인 뷰에는 availableActions 가 담기고 다른 좌석은 null 이다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)),
             table.buttonSeatNo!!,
@@ -469,7 +470,7 @@ class HoldemViewAssemblerTest {
     @Test
     fun `핸드가 끝나면 개인 뷰의 availableActions 는 null 이다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
             table.buttonSeatNo!!,
@@ -496,7 +497,7 @@ class HoldemViewAssemblerTest {
     }
 
     private fun handInProgress(table: HoldemTable): Hand {
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         return Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
             table.buttonSeatNo!!,
@@ -549,7 +550,7 @@ class HoldemViewAssemblerTest {
     @Test
     fun `seq 인자는 공개 뷰와 개인 뷰에 그대로 실린다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
             table.buttonSeatNo!!,
@@ -594,7 +595,7 @@ class HoldemViewAssemblerTest {
     @Test
     fun `핸드가 있으면 직전 결과는 무시한다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
             table.buttonSeatNo!!,
@@ -616,7 +617,7 @@ class HoldemViewAssemblerTest {
     @Test
     fun `끝난 핸드는 넘겨받은 직전 결과를 그대로 쓴다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
             table.buttonSeatNo!!,
@@ -638,7 +639,7 @@ class HoldemViewAssemblerTest {
     @Test
     fun `끝난 핸드의 공개 뷰 스택은 합산이 반영된 좌석 값이고 진행 중 핸드는 핸드의 스택이다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
             table.buttonSeatNo!!,

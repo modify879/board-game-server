@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.HandStore
@@ -107,7 +108,7 @@ class StartScheduledHandServiceTest {
     fun `이미 진행 중인 핸드가 있으면 아무 일도 하지 않는다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         val table = tables.findById(tableId)!!
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
             buttonSeatNo = table.buttonSeatNo!!,
