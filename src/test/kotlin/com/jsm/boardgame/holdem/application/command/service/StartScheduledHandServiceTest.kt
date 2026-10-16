@@ -1,11 +1,11 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
+import com.jsm.boardgame.holdem.application.port.FakeHandStore
+import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
+import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
-import com.jsm.boardgame.holdem.application.port.HandStore
-import com.jsm.boardgame.holdem.application.port.LastHandResult
-import com.jsm.boardgame.holdem.application.port.LastHandResultStore
-import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
@@ -16,7 +16,6 @@ import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.transaction.support.TransactionOperations
-import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -50,23 +49,6 @@ private class StartScheduledHandFakeTableRepository : HoldemTableRepository {
     }
 }
 
-private class StartScheduledHandFakeHandStore : HandStore {
-    val stored = mutableMapOf<Long, Hand>()
-
-    override fun find(tableId: TableId): Hand? = stored[tableId.value]
-    override fun save(tableId: TableId, hand: Hand) { stored[tableId.value] = hand }
-    override fun remove(tableId: TableId) { stored.remove(tableId.value) }
-    override fun findAllInProgress(): List<TableId> = stored.keys.map { TableId(it) }
-}
-
-private class StartScheduledHandFakeNextHandCountdown : NextHandCountdown {
-    val restarted = mutableListOf<TableId>()
-    val cancelled = mutableListOf<TableId>()
-    override fun restart(tableId: TableId) { restarted += tableId }
-    override fun cancel(tableId: TableId) { cancelled += tableId }
-    override fun remaining(tableId: TableId): Duration? = null
-}
-
 private class StartScheduledHandFakeWalletTransfer : WalletTransfer {
     var touched = false
 
@@ -77,12 +59,12 @@ private class StartScheduledHandFakeWalletTransfer : WalletTransfer {
 class StartScheduledHandServiceTest {
 
     private val tables = StartScheduledHandFakeTableRepository()
-    private val handStore = StartScheduledHandFakeHandStore()
+    private val handStore = FakeHandStore()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
     private val walletTransfer = StartScheduledHandFakeWalletTransfer()
-    private val countdown = StartScheduledHandFakeNextHandCountdown()
-    private val handStarter = HandStarter(tables, handStore, StartScheduledHandServiceFakeLastHandResultStore(), FakeFoldWinnerCards(), identityShuffler, eventPublisher, countdown)
+    private val countdown = FakeNextHandCountdown()
+    private val handStarter = HandStarter(tables, handStore, FakeLastHandResultStore(), FakeFoldWinnerCards(), identityShuffler, eventPublisher, countdown)
     private val service = StartScheduledHandService(
         tables, handStore, handStarter, TransactionOperations.withoutTransaction(),
     )
@@ -107,7 +89,7 @@ class StartScheduledHandServiceTest {
     fun `이미 진행 중인 핸드가 있으면 아무 일도 하지 않는다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         val table = tables.findById(tableId)!!
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
             buttonSeatNo = table.buttonSeatNo!!,
@@ -154,9 +136,3 @@ class StartScheduledHandServiceTest {
     }
 }
 
-private class StartScheduledHandServiceFakeLastHandResultStore : LastHandResultStore {
-    val store = mutableMapOf<Long, LastHandResult>()
-    override fun find(tableId: TableId): LastHandResult? = store[tableId.value]
-    override fun save(tableId: TableId, result: LastHandResult) { store[tableId.value] = result }
-    override fun remove(tableId: TableId) { store.remove(tableId.value) }
-}

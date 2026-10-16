@@ -1,14 +1,14 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.port.FakeHandStore
+import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
 import com.jsm.boardgame.common.error.BusinessException
 import com.jsm.boardgame.holdem.application.command.usecase.ShowHandCommand
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.FakeHandHistory
 import com.jsm.boardgame.holdem.application.port.FoldWinnerCards.FoldWinner
-import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResult
-import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
@@ -33,21 +33,6 @@ private class ShowHandFakeTableRepository(private val table: HoldemTable) : Hold
     override fun findAllTableIds(): List<TableId> = listOfNotNull(table.id)
 }
 
-private class ShowHandFakeHandStore : HandStore {
-    val store = mutableMapOf<Long, Hand>()
-    override fun find(tableId: TableId): Hand? = store[tableId.value]
-    override fun save(tableId: TableId, hand: Hand) { store[tableId.value] = hand }
-    override fun remove(tableId: TableId) { store.remove(tableId.value) }
-    override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
-}
-
-private class ShowHandFakeLastHandResultStore : LastHandResultStore {
-    val store = mutableMapOf<Long, LastHandResult>()
-    override fun find(tableId: TableId): LastHandResult? = store[tableId.value]
-    override fun save(tableId: TableId, result: LastHandResult) { store[tableId.value] = result }
-    override fun remove(tableId: TableId) { store.remove(tableId.value) }
-}
-
 class ShowHandServiceTest {
 
     private val tableId = TableId(1)
@@ -62,9 +47,9 @@ class ShowHandServiceTest {
             Seat.reconstitute(it, userId = UserId(it * 1000L), stack = Chips.of(10_000), presence = SeatPresence.SEATED)
         },
     )
-    private val handStore = ShowHandFakeHandStore()
+    private val handStore = FakeHandStore()
     private val foldWinnerCards = FakeFoldWinnerCards()
-    private val lastHandResults = ShowHandFakeLastHandResultStore()
+    private val lastHandResults = FakeLastHandResultStore()
     private val handHistory = FakeHandHistory()
     private val events = mutableListOf<Any>()
     private val service = ShowHandService(

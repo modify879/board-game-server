@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
@@ -65,7 +66,7 @@ class CancelHandIntegrationTest {
         val userIds = List(3) { userWithBuyIn(10_000) }
         var table = HoldemTable.create("cancel-${System.nanoTime()}")
         userIds.forEach { table.sitDown(UserId(it), Chips.of(10_000)) }
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         val tableId = tables.save(table).id!!
         userIds.forEach { walletTransfer.toGame(UserId(it), 10_000, tableId, "holdem") }
         table = tables.findById(tableId)!!

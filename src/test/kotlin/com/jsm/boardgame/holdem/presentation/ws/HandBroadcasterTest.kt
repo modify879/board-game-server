@@ -1,8 +1,8 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
+import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
-import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.application.port.TurnCountdown
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -46,12 +46,6 @@ private class HandBroadcasterFakeTurnCountdown : TurnCountdown {
     override fun remaining(tableId: TableId): Duration? = null
 }
 
-private class HandBroadcasterFakeNextHandCountdown : NextHandCountdown {
-    override fun restart(tableId: TableId) {}
-    override fun cancel(tableId: TableId) {}
-    override fun remaining(tableId: TableId): Duration? = null
-}
-
 private class HandBroadcasterThrowingChannel : MessageChannel {
     override fun send(message: Message<*>): Boolean = throw IllegalStateException("boom")
     override fun send(message: Message<*>, timeout: Long): Boolean = send(message)
@@ -71,7 +65,7 @@ class HandBroadcasterTest {
             SimpMessagingTemplate(channel),
             HandBroadcasterFakeUserRegistry(),
             TableViewSequence(),
-            HandBroadcasterFakeNextHandCountdown(),
+            FakeNextHandCountdown(),
             HandBroadcasterFakeTurnCountdown(),
             HandBroadcasterFakeLastHandResultStore(stored),
         )
@@ -91,7 +85,7 @@ class HandBroadcasterTest {
             SimpMessagingTemplate(HandBroadcasterThrowingChannel()),
             HandBroadcasterFakeUserRegistry(),
             TableViewSequence(),
-            HandBroadcasterFakeNextHandCountdown(),
+            FakeNextHandCountdown(),
             HandBroadcasterFakeTurnCountdown(),
             HandBroadcasterFakeLastHandResultStore(null),
         )

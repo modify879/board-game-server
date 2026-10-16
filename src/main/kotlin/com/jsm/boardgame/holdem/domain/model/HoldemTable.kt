@@ -136,20 +136,6 @@ class HoldemTable private constructor(
     /** 후보 = 점유 좌석 중 스택이 양수인 것. HandStarter 와 카운트다운 리셋 판단이 이 정의를 공유한다. */
     fun candidateSeatNos(): Set<Int> = occupiedSeats().filter { it.stack.isPositive() }.map { it.seatNo }.toSet()
 
-    fun moveButtonToNextOccupiedSeat() {
-        val occupiedSeatNos = seats.keys.sorted()
-        if (occupiedSeatNos.isEmpty()) {
-            error("점유된 좌석이 없는 테이블에서 버튼을 옮길 수 없다")
-        }
-
-        val current = buttonSeatNo
-        buttonSeatNo = if (current == null) {
-            occupiedSeatNos.first()
-        } else {
-            occupiedSeatNos.firstOrNull { it > current } ?: occupiedSeatNos.first()
-        }
-    }
-
     /** 다음 핸드에서 실제로 쓸 포지션. [smallBlindSeatNo] 가 `null` 이면 아무도 스몰 블라인드를 내지 않는다(dead small blind). */
     data class HandPositions(val buttonSeatNo: Int, val smallBlindSeatNo: Int?, val bigBlindSeatNo: Int) {
         /** 실제 참가자 기준으로 좁힌 이번 핸드의 포지션. 테이블에 저장되는 회전값(명목 포지션)은 바꾸지 않는다. */

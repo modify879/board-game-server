@@ -1,45 +1,17 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
 import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceCommand
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
-import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
-import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-private class UpdateSeatPresenceFakeHoldemTableRepository : HoldemTableRepository {
-    val stored = mutableMapOf<Long, HoldemTable>()
-    private var sequence = 0L
-
-    override fun findById(id: TableId): HoldemTable? = stored[id.value]
-
-    override fun findByUserId(userId: UserId): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
-
-    override fun findAllSeatedUserIds(): List<UserId> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
-
-    override fun findAllTableIds(): List<TableId> = stored.values.mapNotNull { it.id }
-
-    override fun save(table: HoldemTable): HoldemTable {
-        val id = table.id ?: run { sequence += 1; TableId(sequence) }
-        val saved = HoldemTable.reconstitute(
-            id = id,
-            name = table.name,
-            smallBlind = table.smallBlind,
-            bigBlind = table.bigBlind,
-            buttonSeatNo = table.buttonSeatNo,
-            seats = table.occupiedSeats().associateBy { it.seatNo },
-        )
-        stored[id.value] = saved
-        return saved
-    }
-}
-
 class UpdateSeatPresenceServiceTest {
 
-    private val tables = UpdateSeatPresenceFakeHoldemTableRepository()
+    private val tables = FakeHoldemTableRepository()
     private val service = UpdateSeatPresenceService(tables)
 
     @Test

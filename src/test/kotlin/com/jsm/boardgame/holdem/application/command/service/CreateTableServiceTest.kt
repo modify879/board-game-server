@@ -1,11 +1,12 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
+import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.command.usecase.CreateTableCommand
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
 import com.jsm.boardgame.holdem.application.exception.NotConnectedException
 import com.jsm.boardgame.holdem.application.exception.InsufficientBalanceException
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
-import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.UserConnections
 import com.jsm.boardgame.holdem.application.port.WalletBalance
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
@@ -14,9 +15,7 @@ import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
-import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
-import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import com.jsm.boardgame.holdem.infrastructure.queue.InMemoryJoinQueue
 import org.springframework.context.ApplicationEventPublisher
@@ -25,42 +24,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
-
-private class CreateTableFakeHoldemTableRepository : HoldemTableRepository {
-    val stored = mutableMapOf<Long, HoldemTable>()
-    private var sequence = 0L
-
-    override fun findById(id: TableId): HoldemTable? = stored[id.value]
-
-    override fun findByUserId(userId: UserId): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
-
-    override fun findAllSeatedUserIds(): List<UserId> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
-
-    override fun findAllTableIds(): List<TableId> = stored.values.mapNotNull { it.id }
-
-    override fun save(table: HoldemTable): HoldemTable {
-        val id = table.id ?: run { sequence += 1; TableId(sequence) }
-        val saved = HoldemTable.reconstitute(
-            id = id,
-            name = table.name,
-            smallBlind = table.smallBlind,
-            bigBlind = table.bigBlind,
-            buttonSeatNo = table.buttonSeatNo,
-            seats = table.occupiedSeats().associateBy { it.seatNo },
-        )
-        stored[id.value] = saved
-        return saved
-    }
-}
-
-private class CreateTableFakeHandStore : HandStore {
-    val stored = mutableMapOf<Long, Hand>()
-
-    override fun find(tableId: TableId): Hand? = stored[tableId.value]
-    override fun save(tableId: TableId, hand: Hand) { stored[tableId.value] = hand }
-    override fun remove(tableId: TableId) { stored.remove(tableId.value) }
-    override fun findAllInProgress(): List<TableId> = stored.keys.map { TableId(it) }
-}
 
 private class CreateTableFakeUserConnections : UserConnections {
     val connected = mutableSetOf<UserId>()
@@ -78,8 +41,8 @@ private class CreateTableFakeWalletBalance : WalletBalance {
 
 class CreateTableServiceTest {
 
-    private val tables = CreateTableFakeHoldemTableRepository()
-    private val handStore = CreateTableFakeHandStore()
+    private val tables = FakeHoldemTableRepository()
+    private val handStore = FakeHandStore()
     private val joinQueue = InMemoryJoinQueue()
     private val userConnections = CreateTableFakeUserConnections().apply { connected += UserId(1L) }
     private val walletBalance = CreateTableFakeWalletBalance().apply { balances[UserId(1L)] = 8_000 }

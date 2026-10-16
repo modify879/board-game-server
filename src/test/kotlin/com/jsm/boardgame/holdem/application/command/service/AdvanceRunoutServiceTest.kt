@@ -1,5 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
+import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
 import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutCommand
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
@@ -7,9 +9,6 @@ import com.jsm.boardgame.holdem.application.port.FakeHandHistory
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.FakeWalletTransfer
 import com.jsm.boardgame.holdem.application.port.HandStore
-import com.jsm.boardgame.holdem.application.port.LastHandResult
-import com.jsm.boardgame.holdem.application.port.LastHandResultStore
-import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
@@ -19,7 +18,6 @@ import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
-import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -46,31 +44,18 @@ private class AdvanceRunoutFakeHandStore : HandStore {
     override fun findAllInProgress(): List<TableId> = store.keys.map { TableId(it) }
 }
 
-private class AdvanceRunoutFakeLastHandResultStore : LastHandResultStore {
-    val store = mutableMapOf<Long, LastHandResult>()
-    override fun find(tableId: TableId): LastHandResult? = store[tableId.value]
-    override fun save(tableId: TableId, result: LastHandResult) { store[tableId.value] = result }
-    override fun remove(tableId: TableId) { store.remove(tableId.value) }
-}
-
 private class AdvanceRunoutFakeEventPublisher : ApplicationEventPublisher {
     val events = mutableListOf<Any>()
     override fun publishEvent(event: Any) { events += event }
-}
-
-private class AdvanceRunoutFakeNextHandCountdown : NextHandCountdown {
-    override fun restart(tableId: TableId) {}
-    override fun cancel(tableId: TableId) {}
-    override fun remaining(tableId: TableId): Duration? = null
 }
 
 class AdvanceRunoutServiceTest {
 
     private val tables = AdvanceRunoutFakeTableRepository()
     private val handStore = AdvanceRunoutFakeHandStore()
-    private val lastHandResults = AdvanceRunoutFakeLastHandResultStore()
+    private val lastHandResults = FakeLastHandResultStore()
     private val eventPublisher = AdvanceRunoutFakeEventPublisher()
-    private val handSettler = HandSettler(tables, handStore, lastHandResults, FakeFoldWinnerCards(), eventPublisher, AdvanceRunoutFakeNextHandCountdown(), FakeRecentDepartures(), FakeHandHistory(), LeaveReservations(FakeRecentDepartures(), FakeWalletTransfer()))
+    private val handSettler = HandSettler(tables, handStore, lastHandResults, FakeFoldWinnerCards(), eventPublisher, FakeNextHandCountdown(), FakeRecentDepartures(), FakeHandHistory(), LeaveReservations(FakeRecentDepartures(), FakeWalletTransfer()))
     private val service = AdvanceRunoutService(tables, handStore, handSettler, eventPublisher)
 
     private fun tableWithHand(allIn: Boolean): TableId {

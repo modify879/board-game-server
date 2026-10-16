@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.recovery
 
+import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.common.error.ErrorCode
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.event.TableClosed
@@ -224,7 +225,7 @@ class HandRecoveryTest {
             table.sitDown(userId = UserId(seatNo * 1000L), buyIn = Chips.of(10_000))
         }
         tables.save(table)
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         val stacks = seatNos.associateWith { Chips.of(10_000) }
         return Hand.start(
             stacks = stacks,

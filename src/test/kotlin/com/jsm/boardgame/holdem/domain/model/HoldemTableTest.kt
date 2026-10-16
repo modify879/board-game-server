@@ -213,34 +213,6 @@ class HoldemTableTest {
     }
 
     @Test
-    fun `moveButtonToNextOccupiedSeat 은 null 에서 최소 좌석으로, 이후 다음 좌석으로, 마지막에서 최소로 순환한다`() {
-        val table = HoldemTable.reconstitute(
-            id = TableId(1),
-            name = "t",
-            smallBlind = HoldemTable.SMALL_BLIND,
-            bigBlind = HoldemTable.BIG_BLIND,
-            buttonSeatNo = null,
-            seats = mapOf(
-                2 to Seat.reconstitute(2, UserId(1L), Chips.of(10_000), SeatPresence.SEATED),
-                5 to Seat.reconstitute(5, UserId(2L), Chips.of(10_000), SeatPresence.SEATED),
-                9 to Seat.reconstitute(9, UserId(3L), Chips.of(10_000), SeatPresence.SEATED),
-            ),
-        )
-
-        table.moveButtonToNextOccupiedSeat()
-        assertEquals(2, table.buttonSeatNo)
-
-        table.moveButtonToNextOccupiedSeat()
-        assertEquals(5, table.buttonSeatNo)
-
-        table.moveButtonToNextOccupiedSeat()
-        assertEquals(9, table.buttonSeatNo)
-
-        table.moveButtonToNextOccupiedSeat()
-        assertEquals(2, table.buttonSeatNo)
-    }
-
-    @Test
     fun `applyStacks 은 점유되지 않은 좌석 번호가 들어오면 예외를 던진다`() {
         val table = newTable()
         table.sitDown(userId = UserId(1L), buyIn = Chips.of(10_000))

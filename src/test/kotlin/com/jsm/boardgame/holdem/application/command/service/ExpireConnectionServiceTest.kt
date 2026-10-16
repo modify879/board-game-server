@@ -1,55 +1,19 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
+import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpResult
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpUseCase
-import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
-import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
-import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-
-private class ExpireConnectionFakeHoldemTableRepository : HoldemTableRepository {
-    val stored = mutableMapOf<Long, HoldemTable>()
-    private var sequence = 0L
-
-    override fun findById(id: TableId): HoldemTable? = stored[id.value]
-
-    override fun findByUserId(userId: UserId): HoldemTable? = stored.values.find { it.seatOf(userId) != null }
-
-    override fun findAllSeatedUserIds(): List<UserId> = stored.values.flatMap { it.occupiedSeats() }.map { it.userId }
-
-    override fun findAllTableIds(): List<TableId> = stored.values.mapNotNull { it.id }
-
-    override fun save(table: HoldemTable): HoldemTable {
-        val id = table.id ?: run { sequence += 1; TableId(sequence) }
-        val saved = HoldemTable.reconstitute(
-            id = id,
-            name = table.name,
-            smallBlind = table.smallBlind,
-            bigBlind = table.bigBlind,
-            buttonSeatNo = table.buttonSeatNo,
-            seats = table.occupiedSeats().associateBy { it.seatNo },
-        )
-        stored[id.value] = saved
-        return saved
-    }
-}
-
-private class ExpireConnectionFakeHandStore : HandStore {
-    val stored = mutableMapOf<Long, Hand>()
-    override fun find(tableId: TableId): Hand? = stored[tableId.value]
-    override fun save(tableId: TableId, hand: Hand) { stored[tableId.value] = hand }
-    override fun remove(tableId: TableId) { stored.remove(tableId.value) }
-    override fun findAllInProgress(): List<TableId> = stored.keys.map { TableId(it) }
-}
 
 private class ExpireConnectionFakeStandUpUseCase : StandUpUseCase {
     val calls = mutableListOf<StandUpCommand>()
@@ -62,8 +26,8 @@ private class ExpireConnectionFakeStandUpUseCase : StandUpUseCase {
 
 class ExpireConnectionServiceTest {
 
-    private val tables = ExpireConnectionFakeHoldemTableRepository()
-    private val handStore = ExpireConnectionFakeHandStore()
+    private val tables = FakeHoldemTableRepository()
+    private val handStore = FakeHandStore()
     private val standUpUseCase = ExpireConnectionFakeStandUpUseCase()
     private val service = ExpireConnectionService(tables, handStore, standUpUseCase)
 

@@ -10,9 +10,10 @@ import com.jsm.boardgame.wallet.application.command.usecase.RequestWithdrawalUse
 import com.jsm.boardgame.wallet.application.query.service.DepositRequestQueryService
 import com.jsm.boardgame.wallet.application.query.service.WalletQueryService
 import com.jsm.boardgame.wallet.application.query.service.WithdrawalRequestQueryService
-import com.jsm.boardgame.wallet.presentation.config.DepositAccountResolver
+import com.jsm.boardgame.wallet.presentation.config.DepositAccountProperties
 import com.jsm.boardgame.wallet.presentation.rest.request.RequestDepositRequest
 import com.jsm.boardgame.wallet.presentation.rest.request.RequestWithdrawalRequest
+import com.jsm.boardgame.wallet.presentation.rest.response.DepositAccountResponse
 import com.jsm.boardgame.wallet.presentation.rest.response.DepositRequestCreatedResponse
 import com.jsm.boardgame.wallet.presentation.rest.response.DepositRequestResponse
 import com.jsm.boardgame.wallet.presentation.rest.response.LedgerEntryResponse
@@ -44,7 +45,7 @@ class WalletController(
     private val walletQueryService: WalletQueryService,
     private val depositRequestQueryService: DepositRequestQueryService,
     private val withdrawalRequestQueryService: WithdrawalRequestQueryService,
-    private val depositAccountResolver: DepositAccountResolver,
+    private val depositAccountProperties: DepositAccountProperties,
 ) {
 
     @GetMapping
@@ -63,7 +64,7 @@ class WalletController(
         @RequestHeader("Idempotency-Key", required = false) idempotencyKey: String?,
     ): DepositRequestCreatedResponse {
         val requestId = requestDepositUseCase.request(request.toCommand(jwt.requireUserId(), idempotencyKey))
-        return DepositRequestCreatedResponse.from(requestId.value, depositAccountResolver.resolve())
+        return DepositRequestCreatedResponse.from(requestId.value, DepositAccountResponse.from(depositAccountProperties))
     }
 
     @GetMapping("/deposit-requests")

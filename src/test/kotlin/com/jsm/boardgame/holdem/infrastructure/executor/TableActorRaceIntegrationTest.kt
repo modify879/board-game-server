@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.executor
 
+import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
@@ -81,7 +82,7 @@ class TableActorRaceIntegrationTest {
         var table = HoldemTable.create("race-${System.nanoTime()}")
         table.sitDown(uniqueUserId(), Chips.of(10_000))
         table.sitDown(uniqueUserId(), Chips.of(10_000))
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         val tableId = tables.save(table).id!!
         table = tables.findById(tableId)!!
 

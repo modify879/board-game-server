@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.timer
 
+import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
@@ -114,7 +115,7 @@ class TurnTimerTest {
         for ((seatNo, buyIn) in stacks) {
             table.sitDown(userId = UserId(seatNo * 1000L), buyIn = Chips.of(buyIn))
         }
-        table.moveButtonToNextOccupiedSeat()
+        table.placeButtonAtFirstSeat()
         val handStacks = stacks.associate { (seatNo, buyIn) -> seatNo to Chips.of(buyIn) }
         val buttonSeatNo = table.buttonSeatNo!!
         val seatNos = handStacks.keys.sorted()

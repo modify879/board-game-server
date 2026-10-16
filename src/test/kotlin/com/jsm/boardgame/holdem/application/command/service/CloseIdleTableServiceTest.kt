@@ -1,8 +1,8 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.command.usecase.CloseIdleTableCommand
 import com.jsm.boardgame.holdem.application.event.TableClosed
-import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -51,20 +51,11 @@ private class CloseIdleFakeHoldemTableRepository : HoldemTableRepository {
     }
 }
 
-private class CloseIdleFakeHandStore : HandStore {
-    val stored = mutableMapOf<Long, Hand>()
-
-    override fun find(tableId: TableId): Hand? = stored[tableId.value]
-    override fun save(tableId: TableId, hand: Hand) { stored[tableId.value] = hand }
-    override fun remove(tableId: TableId) { stored.remove(tableId.value) }
-    override fun findAllInProgress(): List<TableId> = stored.keys.map { TableId(it) }
-}
-
 class CloseIdleTableServiceTest {
 
     private val now = Instant.parse("2026-01-01T00:00:00Z")
     private val tables = CloseIdleFakeHoldemTableRepository()
-    private val handStore = CloseIdleFakeHandStore()
+    private val handStore = FakeHandStore()
     private val joinQueue = InMemoryJoinQueue()
     private val events = mutableListOf<Any>()
     private val service = CloseIdleTableService(
