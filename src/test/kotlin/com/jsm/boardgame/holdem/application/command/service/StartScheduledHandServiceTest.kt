@@ -64,7 +64,7 @@ class StartScheduledHandServiceTest {
     private val eventPublisher = ApplicationEventPublisher { }
     private val walletTransfer = StartScheduledHandFakeWalletTransfer()
     private val countdown = FakeNextHandCountdown()
-    private val handStarter = HandStarter(tables, handStore, FakeLastHandResultStore(), FakeFoldWinnerCards(), identityShuffler, eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, FakeLastHandResultStore(), FakeFoldWinnerCards(), { _, _, _ -> identityShuffler }, eventPublisher, countdown)
     private val service = StartScheduledHandService(
         tables, handStore, handStarter, TransactionOperations.withoutTransaction(),
     )
