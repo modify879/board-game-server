@@ -138,7 +138,7 @@ class TurnTimerTest {
     fun `차례가 있으면 30초 뒤로 예약된다`() {
         val scheduler = TurnTimerFakeTaskScheduler()
         val useCase = TurnTimerFakeExpireTurnUseCase()
-        val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase())
+        val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase(), Duration.ofSeconds(30))
         val hand = handWithToAct(1 to 10_000L, 2 to 10_000L)
 
         timer.commit(event(hand))
@@ -151,7 +151,7 @@ class TurnTimerTest {
     fun `다음 이벤트가 오면 이전 예약이 취소되고 다시 잡힌다`() {
         val scheduler = TurnTimerFakeTaskScheduler()
         val useCase = TurnTimerFakeExpireTurnUseCase()
-        val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase())
+        val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase(), Duration.ofSeconds(30))
         val hand = handWithToAct(1 to 10_000L, 2 to 10_000L)
 
         timer.commit(event(hand))
@@ -164,7 +164,7 @@ class TurnTimerTest {
 
     @Test
     fun `remaining 은 예약 전에는 null 이고 차례가 예약되면 남은 시간을 돌려주고 차례가 없어지면 다시 null 이다`() {
-        val timer = TurnTimer(TurnTimerFakeTaskScheduler(), clock, TurnTimerFakeExpireTurnUseCase(), TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase())
+        val timer = TurnTimer(TurnTimerFakeTaskScheduler(), clock, TurnTimerFakeExpireTurnUseCase(), TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase(), Duration.ofSeconds(30))
         val tableId = TableId(1L)
         assertNull(timer.remaining(tableId))
 
@@ -179,7 +179,7 @@ class TurnTimerTest {
     fun `핸드가 null 이면 예약하지 않는다`() {
         val scheduler = TurnTimerFakeTaskScheduler()
         val useCase = TurnTimerFakeExpireTurnUseCase()
-        val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase())
+        val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase(), Duration.ofSeconds(30))
 
         timer.commit(event(null))
 
@@ -190,7 +190,7 @@ class TurnTimerTest {
     fun `토큰이 바뀐 뒤 깨어난 stale 작업은 유스케이스를 부르지 않는다`() {
         val scheduler = TurnTimerFakeTaskScheduler()
         val useCase = TurnTimerFakeExpireTurnUseCase()
-        val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase())
+        val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase(), Duration.ofSeconds(30))
         val tableId = TableId(1L)
         val hand = handWithToAct(1 to 10_000L, 2 to 10_000L)
 
@@ -223,7 +223,7 @@ class TurnTimerTest {
             }
             override fun post(tableId: TableId, task: () -> Unit) = task()
         }
-        timer = TurnTimer(scheduler, clock, useCase, executor, TurnTimerFakeCancelHandUseCase())
+        timer = TurnTimer(scheduler, clock, useCase, executor, TurnTimerFakeCancelHandUseCase(), Duration.ofSeconds(30))
         timer.commit(event(hand, tableId))
 
         scheduler.scheduledCalls[0].task.run()
@@ -238,7 +238,7 @@ class TurnTimerTest {
             override fun expire(command: ExpireTurnCommand) = throw IllegalStateException("db down")
         }
         val cancelUseCase = TurnTimerFakeCancelHandUseCase()
-        val timer = TurnTimer(scheduler, clock, failing, TurnTimerFakeTableExecutor(), cancelUseCase)
+        val timer = TurnTimer(scheduler, clock, failing, TurnTimerFakeTableExecutor(), cancelUseCase, Duration.ofSeconds(30))
         val tableId = TableId(1L)
 
         timer.commit(event(handWithToAct(1 to 10_000L, 2 to 10_000L), tableId))
@@ -262,7 +262,7 @@ class TurnTimerTest {
             override fun expire(command: ExpireTurnCommand) = throw IllegalStateException("db down")
         }
         val cancelUseCase = TurnTimerFakeCancelHandUseCase()
-        val timer = TurnTimer(scheduler, clock, failing, TurnTimerFakeTableExecutor(), cancelUseCase)
+        val timer = TurnTimer(scheduler, clock, failing, TurnTimerFakeTableExecutor(), cancelUseCase, Duration.ofSeconds(30))
         val tableId = TableId(1L)
         val hand = handWithToAct(1 to 10_000L, 2 to 10_000L)
 
@@ -285,7 +285,7 @@ class TurnTimerTest {
             override fun expire(command: ExpireTurnCommand) = throw IllegalStateException("db down")
         }
         val cancelUseCase = TurnTimerFakeCancelHandUseCase()
-        val timer = TurnTimer(scheduler, clock, failing, TurnTimerFakeTableExecutor(), cancelUseCase)
+        val timer = TurnTimer(scheduler, clock, failing, TurnTimerFakeTableExecutor(), cancelUseCase, Duration.ofSeconds(30))
         val tableId = TableId(1L)
 
         timer.commit(event(handWithToAct(1 to 10_000L, 2 to 10_000L), tableId))
@@ -312,7 +312,7 @@ class TurnTimerTest {
                 if (++cancelAttempts == 1) throw IllegalStateException("db down")
             }
         }
-        val timer = TurnTimer(scheduler, clock, failing, TurnTimerFakeTableExecutor(), flakyCancel)
+        val timer = TurnTimer(scheduler, clock, failing, TurnTimerFakeTableExecutor(), flakyCancel, Duration.ofSeconds(30))
 
         timer.commit(event(handWithToAct(1 to 10_000L, 2 to 10_000L)))
         scheduler.scheduledCalls[0].task.run()
@@ -328,7 +328,7 @@ class TurnTimerTest {
     fun `테이블이 닫히면 걸린 예약을 취소하고 낡은 실행을 무시하게 만든다`() {
         val scheduler = TurnTimerFakeTaskScheduler()
         val useCase = TurnTimerFakeExpireTurnUseCase()
-        val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase())
+        val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase(), Duration.ofSeconds(30))
         timer.commit(event(handWithToAct(1 to 10_000L, 2 to 10_000L)))
 
         timer.onTableClosed(TableClosed(TableId(1L)))

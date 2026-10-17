@@ -32,7 +32,7 @@ class RecentDeparturesAdapterIntegrationTest {
 
     private val start = Instant.parse("2026-10-11T00:00:00Z")
     private val clock = RecentDeparturesMutableClock(start)
-    private val departures by lazy { RecentDeparturesAdapter(jpa, clock) }
+    private val departures by lazy { RecentDeparturesAdapter(jpa, clock, Duration.ofMinutes(30)) }
 
     // FK 가 없는 합성 userId — 다른 테스트의 실제 IDENTITY 와 겹치지 않는 대역(1조부터)
     private val user = UserId(1_000_000_000_000L + ids.getAndIncrement())

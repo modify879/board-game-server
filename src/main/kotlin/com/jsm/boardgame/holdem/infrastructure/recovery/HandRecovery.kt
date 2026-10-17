@@ -16,6 +16,7 @@ import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.infrastructure.timer.ConnectionTimer
 import com.jsm.boardgame.holdem.infrastructure.timer.runRetrying
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
@@ -87,6 +88,8 @@ class HandRecovery(
     private val nextHandCountdown: NextHandCountdown,
     private val tableExecutor: TableExecutor,
     private val userConnections: UserConnections,
+    // turn-timeout·connection-timeout 과 기본값이 같아도 설정을 공유하지 않는다 — 재는 대상이 다르다(그 둘은 개별 사용자·차례, 이건 테이블 전체의 복구 유예다).
+    @Value("\${app.holdem.recovery-timeout}") private val recoveryTimeout: Duration,
 ) {
     private class PendingRecovery(
         val allUserIds: Set<UserId>,
@@ -157,7 +160,7 @@ class HandRecovery(
         val token = tokens.computeIfAbsent(tableId) { AtomicLong() }.incrementAndGet()
         val future = taskScheduler.schedule(
             { onRecoveryTimeout(tableId, token) },
-            Instant.now(clock).plus(RECOVERY_TIMEOUT),
+            Instant.now(clock).plus(recoveryTimeout),
         )
         pending[tableId] = PendingRecovery(
             allUserIds = allUserIds,
@@ -258,9 +261,5 @@ class HandRecovery(
 
     companion object {
         private val log = LoggerFactory.getLogger(HandRecovery::class.java)
-
-        // TurnTimer.TURN_TIMEOUT/ConnectionTimer.CONNECTION_TIMEOUT 과 값은 같지만 상수를 공유하지
-        // 않는다 - 재는 대상이 다르다(그 둘은 개별 사용자·차례, 이건 테이블 전체의 복구 유예다).
-        private val RECOVERY_TIMEOUT: Duration = Duration.ofMinutes(3)
     }
 }

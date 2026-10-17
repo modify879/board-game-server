@@ -7,6 +7,7 @@ import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.application.query.port.HoldemTableQueryRepository
 import com.jsm.boardgame.holdem.domain.model.TableId
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.scheduling.TaskScheduler
@@ -18,7 +19,7 @@ import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * 좌석이 비어 [IDLE_TABLE_TTL] 이상 지난 테이블을 닫는다. `ApplicationReadyEvent` 부터 [SWEEP_INTERVAL]
+ * 좌석이 비어 `idle-table-ttl` 이상 지난 테이블을 닫는다. `ApplicationReadyEvent` 부터 `idle-sweep-interval`
  * 간격으로 돈다(HandRecovery 와 같은 이유로 컨텍스트가 다 뜬 뒤). `@EnableScheduling` 없이 기존 `taskScheduler`
  * 에 직접 건다 — 타이머들과 같은 방식이다.
  *
@@ -39,12 +40,14 @@ class IdleTableSweeper(
     private val closeIdleTableUseCase: CloseIdleTableUseCase,
     private val tableExecutor: TableExecutor,
     private val clock: Clock,
+    @Value("\${app.holdem.idle-table-ttl}") private val idleTableTtl: Duration,
+    @Value("\${app.holdem.idle-sweep-interval}") private val sweepInterval: Duration,
 ) {
     private val emptySince = ConcurrentHashMap<TableId, Instant>()
 
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
-        taskScheduler.scheduleWithFixedDelay(::sweep, SWEEP_INTERVAL)
+        taskScheduler.scheduleWithFixedDelay(::sweep, sweepInterval)
     }
 
     fun sweep() {
@@ -59,7 +62,7 @@ class IdleTableSweeper(
         for (id in candidates) {
             val tableId = TableId(id)
             val since = emptySince.computeIfAbsent(tableId) { now }
-            if (Duration.between(since, now) < IDLE_TABLE_TTL) continue
+            if (Duration.between(since, now) < idleTableTtl) continue
             tableExecutor.post(tableId) {
                 try {
                     if (!closeIdleTableUseCase.close(CloseIdleTableCommand(id))) emptySince.remove(tableId)
@@ -76,8 +79,6 @@ class IdleTableSweeper(
     }
 
     companion object {
-        val IDLE_TABLE_TTL: Duration = Duration.ofMinutes(1)
-        val SWEEP_INTERVAL: Duration = Duration.ofSeconds(15)
         private val log = LoggerFactory.getLogger(IdleTableSweeper::class.java)
     }
 }

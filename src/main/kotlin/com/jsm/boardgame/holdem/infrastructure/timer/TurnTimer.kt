@@ -10,6 +10,7 @@ import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.application.port.TurnCountdown
 import com.jsm.boardgame.holdem.domain.model.TableId
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.Ordered
 import org.springframework.core.task.TaskRejectedException
 import org.springframework.scheduling.TaskScheduler
@@ -42,6 +43,7 @@ class TurnTimer(
     private val expireTurnUseCase: ExpireTurnUseCase,
     private val tableExecutor: TableExecutor,
     private val cancelHandUseCase: CancelHandUseCase,
+    @Value("\${app.holdem.turn-timeout}") private val turnTimeout: Duration,
 ) : TurnCountdown {
     private class ScheduledExpiry(val future: ScheduledFuture<*>, val token: Long)
 
@@ -83,7 +85,7 @@ class TurnTimer(
         val seatNo = event.hand?.toActSeatNo ?: return
         val future = taskScheduler.schedule(
             { onExpire(event.tableId, seatNo, token) },
-            Instant.now(clock).plus(TURN_TIMEOUT),
+            Instant.now(clock).plus(turnTimeout),
         )
         scheduled[event.tableId] = ScheduledExpiry(future, token)
     }
@@ -127,8 +129,5 @@ class TurnTimer(
 
     companion object {
         private val log = LoggerFactory.getLogger(TurnTimer::class.java)
-
-        // 계획서: 테이블 설정값이 될 자리. 지금은 전역 상수.
-        private val TURN_TIMEOUT: Duration = Duration.ofSeconds(30)
     }
 }
