@@ -1,3 +1,5 @@
+import java.util.zip.ZipFile
+
 plugins {
     kotlin("jvm") version "2.3.21"
     kotlin("plugin.spring") version "2.3.21"
@@ -106,3 +108,28 @@ tasks.register<org.springframework.boot.gradle.tasks.run.BootRun>("qaBootRun") {
     systemProperty("spring.profiles.active", "qa")
     environment("APP_JWT_SECRET", localJwtSecret)
 }
+
+// 운영 jar(bootJar·plain jar)에 qa 소스셋 출력물이 하나라도 섞이면 빌드를 실패시킨다. 판정은 qa 출력물의 상대 경로 기준.
+val verifyNoQaInJars = tasks.register("verifyNoQaInJars") {
+    group = "verification"
+    description = "bootJar·jar 에 QA 전용 클래스·리소스가 없는지 검사한다."
+    dependsOn(tasks.bootJar, tasks.jar, qa.classesTaskName)
+    val qaTree = qa.output.asFileTree
+    val jars = listOf(tasks.bootJar, tasks.jar).map { it.flatMap { j -> j.archiveFile } }
+    inputs.files(qaTree)
+    inputs.files(jars)
+    doLast {
+        val qaPaths = mutableSetOf<String>()
+        qaTree.visit { if (!isDirectory) qaPaths += relativePath.pathString }
+        val leaked = jars.flatMap { jar ->
+            ZipFile(jar.get().asFile).use { zip ->
+                zip.entries().asSequence().map { it.name.removePrefix("BOOT-INF/classes/") }
+                    .filter { it in qaPaths }.map { "${jar.get().asFile.name}: $it" }.toList()
+            }
+        }
+        if (leaked.isNotEmpty()) {
+            throw GradleException("운영 jar 에 QA 전용 코드가 들어갔다 — 덱 고정 API 는 운영에 존재하면 안 된다:\n" + leaked.joinToString("\n"))
+        }
+    }
+}
+tasks.check { dependsOn(verifyNoQaInJars) }
