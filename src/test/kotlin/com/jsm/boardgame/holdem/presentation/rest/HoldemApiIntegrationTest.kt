@@ -294,6 +294,18 @@ class HoldemApiIntegrationTest {
     }
 
     @Test
+    fun `테이블 목록은 핸드 진행 중인 테이블에 handInProgress true 를 싣는다`() {
+        val busy = seatedWithHandInProgress()
+        val idle = seatedWithoutHand()
+        val (_, viewer) = signUpAndLogin()
+
+        authGet("/api/holdem/tables?size=2000", viewer)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.content[?(@.tableId==${busy.tableId})].handInProgress").value(true))
+            .andExpect(jsonPath("$.content[?(@.tableId==${idle.tableId})].handInProgress").value(false))
+    }
+
+    @Test
     fun `미착석 사용자의 테이블 목록 조회는 200을 응답한다`() {
         val (_, accessToken) = signUpAndLogin()
 

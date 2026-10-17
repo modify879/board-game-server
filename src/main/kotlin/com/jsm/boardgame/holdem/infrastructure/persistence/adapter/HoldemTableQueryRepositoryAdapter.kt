@@ -44,6 +44,7 @@ class HoldemTableQueryRepositoryAdapter(
                 path(HoldemTableJpaEntity::name),
                 intLiteral(0),
                 intLiteral(HoldemTable.MAX_SEATS),
+                booleanLiteral(false),
             ).from(entity(HoldemTableJpaEntity::class))
                 .where(path(HoldemTableJpaEntity::closedAt).isNull())
                 .orderBy(path(HoldemTableJpaEntity::id).asc())
