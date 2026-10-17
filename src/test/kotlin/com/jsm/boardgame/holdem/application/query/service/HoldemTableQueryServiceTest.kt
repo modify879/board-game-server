@@ -38,12 +38,22 @@ class HoldemTableQueryServiceTest {
     @Test
     fun `핸드가 진행 중이 아니면 테이블 목록을 돌려준다`() {
         tableQuery.location = null
-        tableQuery.tables = listOf(TableSummaryView(1L, "table-1", 2, 9))
+        tableQuery.tables = listOf(TableSummaryView(1L, "table-1", 2, 9, false))
 
         val page = service.findAll(1L, PageRequest.of(0, 10))
 
         assertEquals(1, page.totalElements.toInt())
         assertEquals("table-1", page.content[0].name)
+    }
+
+    @Test
+    fun `목록의 handInProgress 는 핸드가 있는 테이블만 true 다`() {
+        tableQuery.tables = listOf(TableSummaryView(1L, "t1", 2, 9, false), TableSummaryView(2L, "t2", 0, 9, false))
+        handStore.put(1L, sampleHand())
+
+        val page = service.findAll(1L, PageRequest.of(0, 10))
+
+        assertEquals(listOf(true, false), page.content.map { it.handInProgress })
     }
 
     @Test

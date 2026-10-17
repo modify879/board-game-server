@@ -22,6 +22,11 @@ class HoldemTableQueryService(
         if (location != null && handStore.find(TableId(location.tableId)) != null) {
             throw HandInProgressException("진행 중인 핸드가 있어 로비를 볼 수 없습니다: userId=$userId, tableId=${location.tableId}")
         }
-        return holdemTableQuery.findAllTables(pageable)
+        // ponytail: 페이지 크기만큼 HandStore 단건 조회를 반복한다(Redis GET N번). 페이지가 커지면 일괄 조회 메서드를 포트에 둔다.
+        return holdemTableQuery.findAllTables(pageable).map {
+            // 공개 뷰와 같은 근거: 핸드가 있고 끝나지 않았다(HoldemViewAssembler)
+            val hand = handStore.find(TableId(it.tableId))
+            it.copy(handInProgress = hand != null && !hand.isFinished)
+        }
     }
 }
