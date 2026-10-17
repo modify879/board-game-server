@@ -86,3 +86,23 @@ tasks.register<Test>("unitTest") {
 tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
     environment("APP_JWT_SECRET", localJwtSecret)
 }
+
+// QA 전용 코드(src/qa). 별도 소스셋이라 bootJar·jar 에 들어가지 않는다 — 운영 jar 에 실제 입출금과 연결된
+// 게임의 덱 고정 API 가 존재하면 안 된다. 기동은 `./gradlew qaBootRun`.
+val qa: SourceSet by sourceSets.creating
+configurations["qaImplementation"].extendsFrom(configurations.implementation.get())
+configurations["qaRuntimeOnly"].extendsFrom(configurations.runtimeOnly.get())
+dependencies {
+    "qaImplementation"(sourceSets.main.get().output)
+    // qa 컨트롤러·셔플러를 단위·통합 테스트에서 쓴다. 테스트 클래스패스에 있어도 @Profile("qa") 로 기본은 안 뜬다.
+    testImplementation(qa.output)
+}
+
+tasks.register<org.springframework.boot.gradle.tasks.run.BootRun>("qaBootRun") {
+    description = "qa 프로필 + 덱 고정 API 로 서버를 띄운다."
+    group = "application"
+    mainClass.set(tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun").flatMap { it.mainClass })
+    classpath = qa.runtimeClasspath + configurations.developmentOnly.get()
+    systemProperty("spring.profiles.active", "qa")
+    environment("APP_JWT_SECRET", localJwtSecret)
+}

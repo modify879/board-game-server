@@ -4,12 +4,12 @@ import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.FoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
+import com.jsm.boardgame.holdem.application.port.NewHandShuffler
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
-import com.jsm.boardgame.holdem.domain.service.Shuffler
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
 
@@ -28,7 +28,7 @@ class HandStarter(
     private val handStore: HandStore,
     private val lastHandResults: LastHandResultStore,
     private val foldWinnerCards: FoldWinnerCards,
-    private val shuffler: Shuffler,
+    private val newHandShuffler: NewHandShuffler,
     private val eventPublisher: ApplicationEventPublisher,
     private val countdown: NextHandCountdown,
 ) {
@@ -93,7 +93,7 @@ class HandStarter(
             bigBlindSeatNo = actual.bigBlindSeatNo,
             smallBlind = table.smallBlind,
             bigBlind = table.bigBlind,
-            shuffler = shuffler,
+            shuffler = newHandShuffler.shufflerFor(tableId, stacks.keys.sorted(), actual.buttonSeatNo),
             extraPostSeatNos = extraPostSeatNos,
         )
 

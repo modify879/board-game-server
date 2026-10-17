@@ -86,7 +86,7 @@ class AdmitJoinRequestServiceTest {
     private val eventPublisher = ApplicationEventPublisher { }
     private val walletTransfer = AdmitJoinRequestFakeWalletTransfer()
     private val countdown = FakeNextHandCountdown()
-    private val handStarter = HandStarter(tables, handStore, FakeLastHandResultStore(), FakeFoldWinnerCards(), identityShuffler, eventPublisher, countdown)
+    private val handStarter = HandStarter(tables, handStore, FakeLastHandResultStore(), FakeFoldWinnerCards(), { _, _, _ -> identityShuffler }, eventPublisher, countdown)
     private val service = AdmitJoinRequestService(tables, handStore, walletTransfer, handStarter)
 
     /** 특정 좌석 번호에 특정 버이인으로 미리 앉혀 둔다 — sitDown 은 좌석을 고르지 않으므로
