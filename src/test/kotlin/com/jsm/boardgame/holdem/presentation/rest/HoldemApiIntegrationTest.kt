@@ -55,7 +55,7 @@ import java.util.concurrent.TimeUnit
  * 디스패치된다(`JoinRequestsProcessor`) — 202 응답이 돌아온 시점에 아직 착석이 안 끝났을 수 있다.
  * 실제 착석·지갑 차감 결과를 확인해야 하는 곳은 `awaitSeated()` 로 폴링해 기다린다.
  *
- * build.gradle.kts 가 테스트 전역으로 1h 를 준다 — 실제 5초 타이머가 테스트 도중 우연히
+ * build.gradle.kts 가 테스트 전역으로 1h 를 준다 — 실제 10초 타이머가 테스트 도중 우연히
  * 발화하지 않는다. 핸드 시작은 startHand() 헬퍼가 StartScheduledHandUseCase 를 직접 불러
  * 결정적으로 일으킨다.
  */

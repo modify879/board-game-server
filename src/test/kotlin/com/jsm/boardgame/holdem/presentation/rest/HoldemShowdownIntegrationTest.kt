@@ -71,7 +71,7 @@ import java.util.concurrent.TimeUnit
  * 있는 카드를 그 순서대로 앞에 두고 나머지를 뒤에 붙인다. 이러면 몇 번을 다시 섞어도(재구성해도)
  * 우선순위 카드들의 상대 순서가 항상 그대로 유지된다.
  *
- * build.gradle.kts 가 테스트 전역으로 1h 를 준다 — 실제 5초 타이머가 우연히 발화하지 않는다.
+ * build.gradle.kts 가 테스트 전역으로 1h 를 준다 — 실제 10초 타이머가 우연히 발화하지 않는다.
  * 다른 holdem 통합 테스트와 같은 이유(HoldemApiIntegrationTest 참고).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)

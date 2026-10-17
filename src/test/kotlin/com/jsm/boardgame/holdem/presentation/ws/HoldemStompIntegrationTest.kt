@@ -64,7 +64,7 @@ import jakarta.servlet.http.Cookie
  * 타이머는 다음 조각이라 여기서 다루지 않는다 —
  * 여기는 CONNECT 관문과 구독 인가만 검증한다.
  *
- * build.gradle.kts 가 테스트 전역으로 1h 를 준다 — 실제 5초 타이머가 테스트 도중 우연히 발화하지
+ * build.gradle.kts 가 테스트 전역으로 1h 를 준다 — 실제 10초 타이머가 테스트 도중 우연히 발화하지
  * 않는다. 핸드 시작은 startHandRest() 헬퍼가 StartScheduledHandUseCase 를 직접 불러 결정적으로
  * 일으킨다.
  */
