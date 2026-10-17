@@ -13,6 +13,7 @@ import com.jsm.boardgame.holdem.application.port.UserConnections
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
@@ -32,7 +33,7 @@ import java.util.concurrent.atomic.AtomicLong
  * 연결 끊김 타이머.
  *
  * 연결이 끊기는 것 자체는 표시(DISCONNECTED)만 바꾼다. 핸드 중에는 턴 타임아웃([TurnTimer])이 처리한다.
- * 핸드가 없을 때 [CONNECTION_TIMEOUT](3분) 동안 끊겨 있으면 퇴장시킨다. 만료 시점에 핸드가 진행 중이면
+ * 핸드가 없을 때 `connection-timeout`(기본 3분) 동안 끊겨 있으면 퇴장시킨다. 만료 시점에 핸드가 진행 중이면
  * 퇴장시키지 않고 감시를 다시 건다(going south 방지, 핸드가 끝난 뒤의 만료가 퇴장시킨다).
  *
  * [TurnTimer] 와 예약/토큰 패턴은 같다 - TaskScheduler 로 예약하고, 단조 증가 토큰으로 cancel()이
@@ -72,6 +73,8 @@ class ConnectionTimer(
     private val joinQueueNotifier: JoinQueueNotifier,
     private val userConnections: UserConnections,
     private val tableExecutor: TableExecutor,
+    // turn-timeout 과 설정을 공유하지 않는다 — 클래스 KDoc 참고.
+    @Value("\${app.holdem.connection-timeout}") private val connectionTimeout: Duration,
 ) {
     private class ScheduledExpiry(val future: ScheduledFuture<*>, val token: Long)
 
@@ -127,7 +130,7 @@ class ConnectionTimer(
     }
 
     /**
-     * 연결 감시를 (다시) 건다 - DISCONNECTED 로 표시하고 [CONNECTION_TIMEOUT] 뒤로 만료를 예약한다.
+     * 연결 감시를 (다시) 건다 - DISCONNECTED 로 표시하고 `connection-timeout` 뒤로 만료를 예약한다.
      * 일반적인 연결 끊김, 부팅 시딩, 복구 유예가 끝났는데 안 돌아온 사용자 셋 다 이 경로를 탄다.
      */
     fun beginWatch(userId: UserId) {
@@ -143,7 +146,7 @@ class ConnectionTimer(
         try {
             val future = taskScheduler.schedule(
                 { onExpire(userId, token) },
-                Instant.now(clock).plus(CONNECTION_TIMEOUT),
+                Instant.now(clock).plus(connectionTimeout),
             )
             scheduled[userId] = ScheduledExpiry(future, token)
         } catch (e: TaskRejectedException) {
@@ -198,8 +201,5 @@ class ConnectionTimer(
 
     companion object {
         private val log = LoggerFactory.getLogger(ConnectionTimer::class.java)
-
-        // TurnTimer.TURN_TIMEOUT(30초)과 값이 다르고 상수를 공유하지 않는다 - 클래스 KDoc 참고.
-        private val CONNECTION_TIMEOUT: Duration = Duration.ofMinutes(3)
     }
 }

@@ -170,7 +170,7 @@ class ConnectionTimerTest {
         val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
         val joinQueue = InMemoryJoinQueue()
         val notifier = ConnectionTimerFakeJoinQueueNotifier()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, tables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, tables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
 
         timer.onSessionDisconnect(disconnectEvent(42L))
 
@@ -192,7 +192,7 @@ class ConnectionTimerTest {
         val tableId = TableId(5L)
         joinQueue.enqueue(tableId, UserId(42L), false, Chips.of(8_000))
         joinQueue.enqueue(tableId, UserId(43L), false, Chips.of(8_000))
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, tables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, tables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
 
         timer.onSessionDisconnect(disconnectEvent(42L))
 
@@ -212,7 +212,7 @@ class ConnectionTimerTest {
         val userConnections = ConnectionTimerFakeUserConnections().apply { hasOtherSessionUserIds += UserId(42L) }
         val tableId = TableId(5L)
         joinQueue.enqueue(tableId, UserId(42L), false, Chips.of(8_000))
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, tables, joinQueue, notifier, userConnections, ConnectionTimerFakeTableExecutor())
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, tables, joinQueue, notifier, userConnections, ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
 
         timer.onSessionDisconnect(disconnectEvent(42L))
 
@@ -230,7 +230,7 @@ class ConnectionTimerTest {
         val userConnections = ConnectionTimerFakeUserConnections()
         val tableId = TableId(5L)
         joinQueue.enqueue(tableId, UserId(42L), false, Chips.of(8_000))
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, tables, joinQueue, notifier, userConnections, ConnectionTimerFakeTableExecutor())
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, tables, joinQueue, notifier, userConnections, ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
 
         timer.onSessionDisconnect(disconnectEvent(42L))
 
@@ -245,7 +245,7 @@ class ConnectionTimerTest {
         val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
         val joinQueue = InMemoryJoinQueue()
         val notifier = ConnectionTimerFakeJoinQueueNotifier()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, tables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, tables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
 
         timer.onSessionDisconnect(disconnectEvent(42L))
         val scheduledExpiry = scheduler.scheduledCalls[0]
@@ -266,7 +266,7 @@ class ConnectionTimerTest {
         val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
         val joinQueue = InMemoryJoinQueue()
         val notifier = ConnectionTimerFakeJoinQueueNotifier()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, tables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, tables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
 
         timer.onSessionDisconnect(disconnectEvent(null))
 
@@ -281,7 +281,7 @@ class ConnectionTimerTest {
         val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
         val joinQueue = InMemoryJoinQueue()
         val notifier = ConnectionTimerFakeJoinQueueNotifier()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, tables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, tables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
 
         timer.onSessionDisconnect(disconnectEvent(42L))
         val stale = scheduler.scheduledCalls[0]
@@ -302,7 +302,7 @@ class ConnectionTimerTest {
         val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
         val joinQueue = InMemoryJoinQueue()
         val notifier = ConnectionTimerFakeJoinQueueNotifier()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, ConnectionTimerFakeHoldemTableRepository(), joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, ConnectionTimerFakeHoldemTableRepository(), joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
 
         timer.suspendWatch(setOf(UserId(42L)))
         timer.onSessionDisconnect(disconnectEvent(42L))
@@ -319,7 +319,7 @@ class ConnectionTimerTest {
         val bootTables = ConnectionTimerFakeHoldemTableRepository().apply { seatedUserIds += listOf(UserId(11L), UserId(22L)) }
         val joinQueue = InMemoryJoinQueue()
         val notifier = ConnectionTimerFakeJoinQueueNotifier()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, bootTables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, bootTables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
 
         timer.onApplicationReady()
 
@@ -337,7 +337,7 @@ class ConnectionTimerTest {
         val bootTables = ConnectionTimerFakeHoldemTableRepository().apply { seatedUserIds += UserId(99L) }
         val joinQueue = InMemoryJoinQueue()
         val notifier = ConnectionTimerFakeJoinQueueNotifier()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, bootTables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, bootTables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
 
         timer.onApplicationReady()
         scheduler.scheduledCalls[0].task.run()
@@ -354,7 +354,7 @@ class ConnectionTimerTest {
         val bootTables = ConnectionTimerFakeHoldemTableRepository().apply { seatedUserIds += UserId(42L) }
         val joinQueue = InMemoryJoinQueue()
         val notifier = ConnectionTimerFakeJoinQueueNotifier()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, bootTables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, bootTables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
 
         timer.onApplicationReady()
         val scheduledExpiry = scheduler.scheduledCalls[0]
@@ -375,7 +375,7 @@ class ConnectionTimerTest {
         val bootTables = ConnectionTimerFakeHoldemTableRepository().apply { seatedUserIds += listOf(UserId(1L), UserId(2L)) }
         val joinQueue = InMemoryJoinQueue()
         val notifier = ConnectionTimerFakeJoinQueueNotifier()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, bootTables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, bootTables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
 
         timer.suspendWatch(setOf(UserId(1L)))
         timer.onApplicationReady()
@@ -394,7 +394,7 @@ class ConnectionTimerTest {
         val joinQueue = InMemoryJoinQueue()
         val notifier = ConnectionTimerFakeJoinQueueNotifier()
         val userConnections = ConnectionTimerFakeUserConnections()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, bootTables, joinQueue, notifier, userConnections, ConnectionTimerFakeTableExecutor())
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, bootTables, joinQueue, notifier, userConnections, ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
 
         // Ready 전에 재접속이 먼저 처리된 순서 - 연결 이벤트 다음에 부팅 시딩이 돈다.
         userConnections.connectedUserIds += UserId(42L)
@@ -412,7 +412,7 @@ class ConnectionTimerTest {
     fun `만료 처리가 실패하면 연결 감시를 다시 건다`() {
         val scheduler = ConnectionTimerFakeTaskScheduler()
         val presenceUseCase = ConnectionTimerFakeUpdateSeatPresenceUseCase()
-        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, ConnectionTimerFailingExpireConnectionUseCase(), tables, InMemoryJoinQueue(), ConnectionTimerFakeJoinQueueNotifier(), ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, ConnectionTimerFailingExpireConnectionUseCase(), tables, InMemoryJoinQueue(), ConnectionTimerFakeJoinQueueNotifier(), ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
 
         timer.onSessionDisconnect(disconnectEvent(42L))
         scheduler.scheduledCalls[0].task.run()
@@ -426,7 +426,7 @@ class ConnectionTimerTest {
     fun `만료 처리가 실패해도 이미 재접속한 사용자의 감시는 다시 걸지 않는다`() {
         val scheduler = ConnectionTimerFakeTaskScheduler()
         val connections = ConnectionTimerFakeUserConnections()
-        val timer = ConnectionTimer(scheduler, clock, ConnectionTimerFakeUpdateSeatPresenceUseCase(), ConnectionTimerFailingExpireConnectionUseCase(), tables, InMemoryJoinQueue(), ConnectionTimerFakeJoinQueueNotifier(), connections, ConnectionTimerFakeTableExecutor())
+        val timer = ConnectionTimer(scheduler, clock, ConnectionTimerFakeUpdateSeatPresenceUseCase(), ConnectionTimerFailingExpireConnectionUseCase(), tables, InMemoryJoinQueue(), ConnectionTimerFakeJoinQueueNotifier(), connections, ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
 
         timer.onSessionDisconnect(disconnectEvent(42L))
         connections.connectedUserIds += UserId(42L)
@@ -441,7 +441,7 @@ class ConnectionTimerTest {
         val failingPresence = object : UpdateSeatPresenceUseCase {
             override fun update(command: UpdateSeatPresenceCommand) = throw IllegalStateException("db down")
         }
-        val timer = ConnectionTimer(scheduler, clock, failingPresence, ConnectionTimerFakeExpireConnectionUseCase(null), tables, InMemoryJoinQueue(), ConnectionTimerFakeJoinQueueNotifier(), ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor())
+        val timer = ConnectionTimer(scheduler, clock, failingPresence, ConnectionTimerFakeExpireConnectionUseCase(null), tables, InMemoryJoinQueue(), ConnectionTimerFakeJoinQueueNotifier(), ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
 
         assertFailsWith<IllegalStateException> { timer.beginWatch(UserId(42L)) }
 
@@ -455,7 +455,7 @@ class ConnectionTimerTest {
         expire: ExpireConnectionUseCase,
         connections: UserConnections = ConnectionTimerFakeUserConnections(),
         executor: TableExecutor = ConnectionTimerFakeTableExecutor(),
-    ) = ConnectionTimer(scheduler, clock, presence, expire, tables, InMemoryJoinQueue(), ConnectionTimerFakeJoinQueueNotifier(), connections, executor)
+    ) = ConnectionTimer(scheduler, clock, presence, expire, tables, InMemoryJoinQueue(), ConnectionTimerFakeJoinQueueNotifier(), connections, executor, Duration.ofMinutes(3))
 
     @Test
     fun `다른 세션이 살아 있으면 연결이 끊겨도 DISCONNECTED 표시도 만료 예약도 하지 않는다`() {

@@ -6,6 +6,7 @@ import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.infrastructure.persistence.entity.RecentDepartureJpaEntity
 import com.jsm.boardgame.holdem.infrastructure.persistence.entity.RecentDepartureJpaRepository
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Repository
 import java.time.Clock
 import java.time.Duration
@@ -18,6 +19,7 @@ import java.time.Duration
 class RecentDeparturesAdapter(
     private val jpa: RecentDepartureJpaRepository,
     private val clock: Clock,
+    @Value("\${app.holdem.rejoin-obligation-window}") private val window: Duration,
 ) : RecentDepartures {
 
     override fun record(userId: UserId, amount: Chips) {
@@ -25,7 +27,7 @@ class RecentDeparturesAdapter(
             jpa.deleteById(userId.value)
             return
         }
-        val expiresAt = clock.instant().plus(WINDOW)
+        val expiresAt = clock.instant().plus(window)
         val entity = jpa.findById(userId.value).orElse(null)?.apply {
             this.amount = amount.amount
             this.expiresAt = expiresAt
@@ -37,9 +39,5 @@ class RecentDeparturesAdapter(
         val row = jpa.findById(userId.value).orElse(null) ?: return null
         if (!row.expiresAt.isAfter(clock.instant())) return null
         return Departure(Chips.of(row.amount), row.expiresAt)
-    }
-
-    companion object {
-        private val WINDOW = Duration.ofMinutes(30)
     }
 }

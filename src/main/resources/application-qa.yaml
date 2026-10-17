@@ -1,0 +1,18 @@
+# 클라이언트 라이브 테스트 전용 프로필. :8080 서버와 컨테이너·DB·Redis 가 완전히 분리된다(compose-qa.yaml, 프로젝트 board-game-qa).
+# 기동: SPRING_PROFILES_ACTIVE=qa ./gradlew bootRun   시드: scripts/qa-seed.sh
+spring:
+  docker:
+    compose:
+      file: compose-qa.yaml
+
+server:
+  port: 8081
+
+app:
+  holdem:
+    next-hand-delay: 1s
+    turn-timeout: 8s
+    idle-table-ttl: 15s
+  profile-image:
+    base-url: "http://localhost:8081/images/profiles/"
+    default-url: "http://localhost:8081/images/profiles/default.png"

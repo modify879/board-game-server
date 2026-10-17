@@ -53,7 +53,7 @@ class IdleTableSweeperTest {
     private val clock = IdleSweeperMutableClock(Instant.parse("2026-01-01T00:00:00Z"))
     private val queries = IdleSweeperFakeQueries()
     private val closeUseCase = IdleSweeperFakeCloseUseCase()
-    private val sweeper = IdleTableSweeper(SimpleAsyncTaskScheduler(), queries, closeUseCase, IdleSweeperFakeTableExecutor(), clock)
+    private val sweeper = IdleTableSweeper(SimpleAsyncTaskScheduler(), queries, closeUseCase, IdleSweeperFakeTableExecutor(), clock, Duration.ofMinutes(1), Duration.ofSeconds(15))
 
     private fun advance(d: Duration) { clock.now = clock.now.plus(d) }
 
