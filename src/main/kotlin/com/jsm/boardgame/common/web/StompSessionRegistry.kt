@@ -33,8 +33,12 @@ import java.util.concurrent.ScheduledFuture
  * — HoldemStompIntegrationTest 에서 두 맵의 키가 겹치는 것으로 확인한다. 다르다면 여기서 닫을
  * 소켓을 못 찾아 조용히 아무 일도 안 한다.
  *
- * ponytail: Entry 필드 변경은 전부 인스턴스 락(`@Synchronized`) 하나로 막는다. 세션 수가 커져
- * 경합이 보이면 세션별 락으로 쪼갠다.
+ * 락 안에서는 맵 조작과 예약(schedule/cancel)만 한다. 소켓 I/O 는 응답 없는 클라이언트 앞에서
+ * 오래 막힐 수 있으므로([CloseStatus] 전송), 다른 사용자와 공유하는 락·스레드를 쥔 채 하지 않는다 —
+ * 실제 `close()` 는 세션마다 새 가상 스레드에서 한다. 스케줄러 스레드는 닫을 시점을 디스패치만 한다.
+ *
+ * ponytail: Entry 필드 변경은 전부 인스턴스 락(`@Synchronized`) 하나로 막는다(락 안은 메모리 작업뿐).
+ * 세션 수가 커져 경합이 보이면 세션별 락으로 쪼갠다.
  */
 @Component
 class StompSessionRegistry(
@@ -72,8 +76,8 @@ class StompSessionRegistry(
     /**
      * 그 사용자로 연결된 세션을 전부 지금 닫는다. jti 가 아니라 userId 로 찾는다 — 인밴드 갱신이
      * [replaceToken] 으로 세션의 jti 를 이미 옮긴 뒤라면 옛 jti 로는 그 세션을 찾지 못해 놓친다.
-     * 실제 소켓 종료는 [stompSessionScheduler] 에서 하도록 예약만 한다 — 호출자(로그인/로그아웃
-     * 요청 스레드)가 소켓 I/O 로 블로킹되지 않게 한다.
+     * 실제 소켓 종료는 [stompSessionScheduler] 가 디스패치하고 세션별 가상 스레드에서 돈다 —
+     * 호출자(로그인/로그아웃 요청 스레드)는 락 안에서 맵·예약만 만지므로 소켓 I/O 로 블로킹되지 않는다.
      */
     @Synchronized
     fun closeAllOf(userId: Long) {
@@ -115,12 +119,23 @@ class StompSessionRegistry(
     private fun scheduleCloseAt(sessionId: String, at: Instant): ScheduledFuture<*> =
         stompSessionScheduler.schedule({ closeSession(sessionId) }, at)
 
-    @Synchronized
+    /** 락 안에서는 entry·session 을 꺼내기만 한다(중복 종료 방지). 소켓 I/O 는 락 밖 세션별 가상 스레드. */
     private fun closeSession(sessionId: String) {
-        val entry = entries.remove(sessionId) ?: return
-        val session = sessionsBySessionId.remove(sessionId)
-        session?.close(CloseStatus.POLICY_VIOLATION.withReason(AUTHENTICATION_REQUIRED_REASON))
-        log.info("stomp session closed, sessionId={}, userId={}", sessionId, entry.userId)
+        val (userId, session) = takeForClose(sessionId) ?: return
+        Thread.ofVirtual().name("stomp-close-", 0).start {
+            try {
+                session?.close(CloseStatus.POLICY_VIOLATION.withReason(AUTHENTICATION_REQUIRED_REASON))
+                log.info("stomp session closed, sessionId={}, userId={}", sessionId, userId)
+            } catch (e: Exception) {
+                log.warn("stomp session close failed, sessionId={}, userId={}", sessionId, userId, e)
+            }
+        }
+    }
+
+    @Synchronized
+    private fun takeForClose(sessionId: String): Pair<Long, WebSocketSession?>? {
+        val entry = entries.remove(sessionId) ?: return null
+        return entry.userId to sessionsBySessionId.remove(sessionId)
     }
 
     @Synchronized
