@@ -18,26 +18,35 @@ import com.jsm.boardgame.user.domain.service.PasswordHasher
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
 /**
  * 로그인 실패가 짧은 시간 안에 누적되면 계정을 영구히 잠근다: DB(`User.lockedAt`)에 잠금 시각을
- * 기록하고, 15분 안에 비밀번호 5회 실패(카운터는 Redis, [LoginAttemptLimiter])면 잠근다. 관리자의
+ * 기록하고, 설정된 시간(`app.auth.login-failure-window`) 안에 비밀번호 실패가 `app.auth.login-max-failures` 회 쌓이면(카운터는 Redis, [LoginAttemptLimiter])면 잠근다. 관리자의
  * `POST /api/admin/users/{id}/unlock` 로만 풀린다. 잠긴 계정은 로그인·리프레시 모두
  * `ACCOUNT_LOCKED` 로 거부된다(`RefreshTokenService` 도 같은 검사를 한다).
  *
  * 없는 아이디는 세지 않는다 — 잠글 대상(User 행)이 없어서다. 그 대가로 잠금 응답이 계정 존재를
  * 드러내는 것은 받아들인 트레이드오프다(응답 시간으로 아이디 존재가 새는 것과 같은 종류의 판단).
  *
- * readOnly 가 아니다 — 잠글 때 `users.save(user)` 로 실제 커밋해야 한다(UserRepositoryAdapter.save
- * 는 saveAndFlush 라 UPDATE 자체는 즉시 나가지만, 트랜잭션이 롤백되면 그 변경은 커밋되지 않는다).
+ * 이 서비스는 트랜잭션을 열지 않는다 — Redis 호출 동안 DB 커넥션을 쥐지 않기 위해서다. DB 접근은
+ * 호출마다 자기 트랜잭션을 갖는 `users.findByUsername`(읽기)과 `users.save`(saveAndFlush, 반환 시 커밋)뿐이다.
+ * 예전의 `noRollbackFor`(잠근 직후 예외를 던져도 잠금이 롤백되면 안 된다)는 바깥 트랜잭션이 없으니
+ * 같은 의도가 그대로 성립한다: 잠금 save 는 예외를 던지기 전에 이미 커밋돼 있다.
+ *
+ * 순서와 중간 실패 시 남는 상태(모두 fail-closed):
+ * | 단계 | 실패하면 |
+ * |---|---|
+ * | 1. 사용자 조회·잠금 확인 (DB) | 로그인 안 됨 |
+ * | 2. 비밀번호 실패 시 recordFailure (Redis) | 오류 응답, 로그인 안 됨. 카운트가 안 올라가 잠금이 늦어질 뿐이다 |
+ * | 3. 임계 도달 시 lock + save (DB, 단독 커밋) | 오류 응답, 로그인 안 됨. 카운터는 이미 임계라 다음 실패가 다시 잠근다 |
+ * | 4. 성공: reset (Redis) | 오류 응답, 로그인 안 됨 |
+ * | 5. 이전 토큰 블랙리스트 → 소켓 종료 (Redis) | 오류 응답, 새 세션 없음. 이전 토큰이 아직 살아 있을 수 있으나 새 권한이 생기지 않았다 |
+ * | 6. 토큰 발급 → 세션 시작 (Redis) | 이전 토큰은 이미 무효이고 새 세션은 없다 — 재로그인하면 된다 |
  */
 @Service
-// 잠근 직후 예외를 던지므로 기본 롤백이면 잠금이 사라진다 — 그래서 이 두 예외는 롤백하지 않는다.
-@Transactional(noRollbackFor = [LoginFailedException::class, AccountLockedException::class])
 class LoginService(
     private val users: UserRepository,
     private val passwordHasher: PasswordHasher,
@@ -47,6 +56,8 @@ class LoginService(
     private val loginAttemptLimiter: LoginAttemptLimiter,
     // JwtProperties 는 infrastructure 타입이라 application 이 참조할 수 없다. 값만 @Value 로 받는다.
     @Value("\${app.jwt.access-token-ttl}") private val accessTokenTtl: Duration,
+    @Value("\${app.auth.login-max-failures}") private val maxFailures: Int,
+    @Value("\${app.auth.login-failure-window}") private val failureWindow: Duration,
     private val clock: Clock,
 ) : LoginUseCase {
 
@@ -68,7 +79,7 @@ class LoginService(
         }
 
         if (!passwordHasher.matches(rawPassword, user.passwordHash)) {
-            val reachedThreshold = loginAttemptLimiter.recordFailure(username, MAX_FAILURES, FAILURE_WINDOW)
+            val reachedThreshold = loginAttemptLimiter.recordFailure(username, maxFailures, failureWindow)
             if (reachedThreshold) {
                 user.lock(Instant.now(clock))
                 users.save(user)
@@ -85,7 +96,6 @@ class LoginService(
         val previous = sessions.currentAccessTokenId(userId)
         previous?.let { previousAccessTokenId ->
             sessions.blacklistAccessToken(previousAccessTokenId, Instant.now(clock).plus(accessTokenTtl))
-            // 소켓을 닫는 것은 상태 방송이 아니다 — 커밋 전에 불러도 규칙 6을 어기지 않는다.
             realtimeConnections.closeAllOf(userId)
         }
 
@@ -102,7 +112,5 @@ class LoginService(
 
     companion object {
         private val log = LoggerFactory.getLogger(LoginService::class.java)
-        const val MAX_FAILURES = 5
-        val FAILURE_WINDOW: Duration = Duration.ofMinutes(15)
     }
 }

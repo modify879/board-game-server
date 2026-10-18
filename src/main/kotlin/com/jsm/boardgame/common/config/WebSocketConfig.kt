@@ -5,6 +5,7 @@ import com.jsm.boardgame.common.web.StompAuthenticationInterceptor
 import com.jsm.boardgame.common.web.StompDestinationGuard
 import com.jsm.boardgame.common.web.StompErrorHandler
 import jakarta.annotation.PreDestroy
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Configuration
 import org.springframework.messaging.converter.JacksonJsonMessageConverter
 import org.springframework.messaging.converter.MessageConverter
@@ -16,6 +17,7 @@ import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBr
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer
 import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration
+import java.time.Duration
 
 /**
  * CONNECT 인증은 StompAuthenticationInterceptor, 오류 응답 계약은 StompErrorHandler 가 맡는다.
@@ -33,6 +35,7 @@ class WebSocketConfig(
     private val stompDestinationGuard: StompDestinationGuard,
     private val stompErrorHandler: StompErrorHandler,
     private val capturingWebSocketHandlerDecoratorFactory: CapturingWebSocketHandlerDecoratorFactory,
+    @Value("\${app.stomp.heartbeat-interval}") private val heartbeatInterval: Duration,
 ) : WebSocketMessageBrokerConfigurer {
 
     // 하트비트 전용. 빈으로 노출하면 TaskScheduler 를 타입으로 주입받는 holdem 타이머들이 모호해지고,
@@ -52,11 +55,11 @@ class WebSocketConfig(
     }
 
     override fun configureMessageBroker(registry: MessageBrokerRegistry) {
-        // 서버→클라이언트 하트비트만 10초 간격으로 보낸다. 클라이언트 하트비트는 기대하지 않는다(0) —
+        // 서버→클라이언트 하트비트만 `app.stomp.heartbeat-interval` 간격으로 보낸다. 클라이언트 하트비트는 기대하지 않는다(0) —
         // 숨겨진 브라우저 탭에서는 Godot Web 메인 루프가 멈춰 하트비트를 못 보내고, 기대하면 플레이어가
         // 끊겨 참가 대기열에서 빠진다. TaskScheduler 가 없으면 스프링은 하트비트 설정을 무시한다.
         registry.enableSimpleBroker("/topic", "/queue")
-            .setHeartbeatValue(longArrayOf(10_000, 0))
+            .setHeartbeatValue(longArrayOf(heartbeatInterval.toMillis(), 0))
             .setTaskScheduler(heartbeatScheduler)
         registry.setApplicationDestinationPrefixes("/app")
         registry.setUserDestinationPrefix("/user")

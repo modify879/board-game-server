@@ -58,6 +58,12 @@ logging:
     level: "%5p [%X{traceId:-}]"
 
 app:
+  auth:
+    login-max-failures: 5
+    login-failure-window: 15m
+    stomp-rotation-grace: 30s
+  stomp:
+    heartbeat-interval: 10s
   holdem:
     next-hand-delay: 10s
     runout-step-delay: 2s

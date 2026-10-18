@@ -15,6 +15,7 @@ import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.domain.model.UserRole
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -75,7 +76,10 @@ private class ChangeRoleFakeUserRepository : UserRepository {
     }
 
     override fun findByUsername(username: Username): User? = stored.values.find { it.username == username }
-    override fun findById(id: UserId): User? = stored[id.value]
+    // 실제 어댑터처럼 조회마다 새 인스턴스를 돌려준다 — save 전의 메모리 변경이 저장소에 새지 않는다.
+    override fun findById(id: UserId): User? = stored[id.value]?.let {
+        User.reconstitute(it.id!!, it.username, it.passwordHash, it.nickname, null, it.role)
+    }
     override fun existsByUsername(username: Username): Boolean = stored.values.any { it.username == username }
     override fun existsByNickname(nickname: Nickname): Boolean = stored.values.any { it.nickname == nickname }
     override fun save(user: User): User {
@@ -84,12 +88,46 @@ private class ChangeRoleFakeUserRepository : UserRepository {
     }
 }
 
+private class ChangeRoleProbeUsers(
+    private val inner: UserRepository,
+    private val failAt: Set<String>,
+) : UserRepository by inner {
+    override fun save(user: User): User {
+        if ("save" in failAt) throw IllegalStateException("db down: save")
+        return inner.save(user)
+    }
+}
+
+private class ChangeRoleProbeSessions(
+    private val inner: AuthSessionStore,
+    private val log: MutableList<String>,
+    private val failAt: Set<String>,
+) : AuthSessionStore by inner {
+    override fun blacklistAccessToken(accessTokenId: String, expiresAt: Instant) {
+        log += "blacklist" + if (TransactionSynchronizationManager.isActualTransactionActive()) ":tx" else ":none"
+        if ("blacklist" in failAt) throw IllegalStateException("redis down: blacklist")
+        inner.blacklistAccessToken(accessTokenId, expiresAt)
+    }
+}
+
+private class ChangeRoleProbeRealtime(
+    private val inner: RealtimeConnections,
+    private val log: MutableList<String>,
+) : RealtimeConnections by inner {
+    override fun closeAllOf(userId: UserId) {
+        log += "closeAllOf" + if (TransactionSynchronizationManager.isActualTransactionActive()) ":tx" else ":none"
+        inner.closeAllOf(userId)
+    }
+}
+
 class ChangeUserRoleServiceTest {
 
     private val sessions = ChangeRoleFakeAuthSessionStore()
     private val realtimeConnections = ChangeRoleFakeRealtimeConnections()
     private val users = ChangeRoleFakeUserRepository()
-    private val service = ChangeUserRoleService(users, sessions, realtimeConnections, Duration.ofMinutes(30), Clock.systemUTC())
+    private val txLog = mutableListOf<String>()
+    private val failAt = mutableSetOf<String>()
+    private val service = ChangeUserRoleService(ChangeRoleProbeUsers(users, failAt), ChangeRoleProbeSessions(sessions, txLog, failAt), ChangeRoleProbeRealtime(realtimeConnections, txLog), Duration.ofMinutes(30), Clock.systemUTC())
 
     @Test
     fun `대상 사용자의 역할이 바뀌고 저장된다`() {
@@ -167,5 +205,39 @@ class ChangeUserRoleServiceTest {
         service.changeRole(ChangeUserRoleCommand(1L, " admin "))
 
         assertEquals(UserRole.ADMIN, users.findById(UserId(1L))!!.role)
+    }
+
+    @Test
+    fun `Redis 호출은 DB 트랜잭션 밖에서 일어난다`() {
+        users.put(1L, UserRole.ADMIN)
+        sessions.start(UserId(1L), AuthSession("jti-1", "refresh-1", Instant.now().plusSeconds(1_000)))
+
+        service.changeRole(ChangeUserRoleCommand(1L, "USER"))
+
+        assertTrue(txLog.contains("blacklist:none") && txLog.contains("closeAllOf:none"))
+        assertTrue(txLog.none { it.endsWith(":tx") }, "트랜잭션 안에서 Redis 호출: $txLog")
+    }
+
+    @Test
+    fun `블랙리스트가 실패하면 역할은 저장되지 않는다`() {
+        users.put(1L, UserRole.ADMIN)
+        sessions.start(UserId(1L), AuthSession("jti-1", "refresh-1", Instant.now().plusSeconds(1_000)))
+        failAt += "blacklist"
+
+        assertFailsWith<IllegalStateException> { service.changeRole(ChangeUserRoleCommand(1L, "USER")) }
+
+        assertEquals(UserRole.ADMIN, users.findById(UserId(1L))!!.role)
+        assertFalse(sessions.isAccessTokenBlacklisted("jti-1"))
+    }
+
+    @Test
+    fun `save 가 실패해도 옛 권한 토큰은 이미 무효다`() {
+        users.put(1L, UserRole.ADMIN)
+        sessions.start(UserId(1L), AuthSession("jti-1", "refresh-1", Instant.now().plusSeconds(1_000)))
+        failAt += "save"
+
+        assertFailsWith<IllegalStateException> { service.changeRole(ChangeUserRoleCommand(1L, "USER")) }
+
+        assertTrue(sessions.isAccessTokenBlacklisted("jti-1"))
     }
 }

@@ -16,6 +16,7 @@ import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.domain.model.UserRole
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -166,13 +167,44 @@ private class RefreshFakeUserRepository : UserRepository {
     override fun save(user: User): User = user
 }
 
+private class RefreshProbeSessions(
+    private val inner: AuthSessionStore,
+    private val log: MutableList<String>,
+    private val failAt: Set<String>,
+) : AuthSessionStore by inner {
+    private fun probe(op: String) {
+        log += op + if (TransactionSynchronizationManager.isActualTransactionActive()) ":tx" else ":none"
+        if (op in failAt) throw IllegalStateException("redis down: $op")
+    }
+    override fun blacklistAccessToken(accessTokenId: String, expiresAt: Instant) { probe("blacklist"); inner.blacklistAccessToken(accessTokenId, expiresAt) }
+    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession): RotationResult { probe("rotate"); return inner.rotate(userId, presentedRefreshToken, next) }
+    override fun clear(userId: UserId) { probe("clear"); inner.clear(userId) }
+    override fun userIdForRefreshToken(refreshToken: String): UserId? { probe("userId"); return inner.userIdForRefreshToken(refreshToken) }
+}
+
+private class RefreshProbeRealtime(
+    private val inner: RealtimeConnections,
+    private val log: MutableList<String>,
+) : RealtimeConnections by inner {
+    override fun closeAllOf(userId: UserId) {
+        log += "closeAllOf" + if (TransactionSynchronizationManager.isActualTransactionActive()) ":tx" else ":none"
+        inner.closeAllOf(userId)
+    }
+    override fun closeAfterGrace(accessTokenId: String) {
+        log += "closeAfterGrace" + if (TransactionSynchronizationManager.isActualTransactionActive()) ":tx" else ":none"
+        inner.closeAfterGrace(accessTokenId)
+    }
+}
+
 class RefreshTokenServiceTest {
 
     private val tokenIssuer = RefreshFakeAuthTokenIssuer()
     private val sessions = RefreshInMemoryAuthSessionStore()
     private val realtimeConnections = RefreshFakeRealtimeConnections()
     private val users = RefreshFakeUserRepository()
-    private val service = RefreshTokenService(tokenIssuer, sessions, realtimeConnections, users, Duration.ofMinutes(30), Clock.systemUTC())
+    private val txLog = mutableListOf<String>()
+    private val failAt = mutableSetOf<String>()
+    private val service = RefreshTokenService(tokenIssuer, RefreshProbeSessions(sessions, txLog, failAt), RefreshProbeRealtime(realtimeConnections, txLog), users, Duration.ofMinutes(30), Clock.systemUTC())
 
     private fun loginSession(userId: Long, role: UserRole = UserRole.USER): IssuedTokens {
         users.put(userId, role)
@@ -335,5 +367,40 @@ class RefreshTokenServiceTest {
             service.refresh(RefreshTokenCommand(tokens.refreshToken))
         }
         assertEquals(UserErrorCode.REFRESH_TOKEN_INVALID, e.errorCode)
+    }
+
+    @Test
+    fun `Redis 호출은 DB 트랜잭션 밖에서 일어난다 - 회전 경로와 재사용 탐지 경로`() {
+        val first = loginSession(20L)
+        val rotated = service.refresh(RefreshTokenCommand(first.refreshToken))
+        service.refresh(RefreshTokenCommand(rotated.refreshToken))
+        runCatching { service.refresh(RefreshTokenCommand(first.refreshToken)) }
+
+        assertTrue(txLog.isNotEmpty())
+        assertTrue(txLog.none { it.endsWith(":tx") }, "트랜잭션 안에서 Redis 호출: $txLog")
+    }
+
+    @Test
+    fun `회전 뒤 블랙리스트가 실패하면 오류이고 세션은 새 토큰으로 회전돼 있다`() {
+        val first = loginSession(21L)
+        failAt += "blacklist"
+
+        assertFailsWith<IllegalStateException> { service.refresh(RefreshTokenCommand(first.refreshToken)) }
+
+        assertNotEquals(first.accessTokenId, sessions.currentAccessTokenId(UserId(21L)))
+    }
+
+    @Test
+    fun `재사용 탐지에서 블랙리스트가 실패하면 clear 로 넘어가지 않고 다음 시도가 같은 폐기를 이어간다`() {
+        val first = loginSession(22L)
+        val rotated = service.refresh(RefreshTokenCommand(first.refreshToken))
+        service.refresh(RefreshTokenCommand(rotated.refreshToken))
+        failAt += "blacklist"
+        assertFailsWith<IllegalStateException> { service.refresh(RefreshTokenCommand(first.refreshToken)) }
+        assertNotNull(sessions.currentAccessTokenId(UserId(22L)))
+
+        failAt.clear()
+        assertFailsWith<InvalidRefreshTokenException> { service.refresh(RefreshTokenCommand(first.refreshToken)) }
+        assertNull(sessions.currentAccessTokenId(UserId(22L)))
     }
 }
