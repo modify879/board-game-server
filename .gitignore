@@ -46,3 +46,6 @@ out/
 
 ### Kotlin ###
 .kotlin
+
+### server logs ###
+logs/
