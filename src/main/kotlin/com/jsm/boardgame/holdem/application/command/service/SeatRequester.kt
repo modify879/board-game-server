@@ -41,7 +41,7 @@ class SeatRequester(
         val tableId = table.id!!
         val seatedTable = tables.findByUserId(userId)
         if (seatedTable != null) {
-            if (handStore.find(seatedTable.id!!) != null) {
+            if (handStore.findInProgress(seatedTable.id!!) != null) {
                 throw HandInProgressException("이미 앉은 테이블에서 핸드가 진행 중입니다: userId=$userId")
             }
             throw AlreadySeatedException("이미 다른 테이블에 앉아 있는 사용자입니다: userId=$userId")

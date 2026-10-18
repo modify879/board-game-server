@@ -43,7 +43,7 @@ class AdmitJoinRequestService(
         val table = tables.findById(tableId)
             ?: throw TableNotFoundException("존재하지 않는 테이블입니다: tableId=${command.tableId}")
 
-        if (handStore.find(tableId) != null) return AdmitJoinRequestResult.Blocked
+        if (handStore.findInProgress(tableId) != null) return AdmitJoinRequestResult.Blocked
         if (!table.hasEmptySeat()) return AdmitJoinRequestResult.Blocked
 
         if (tables.findByUserId(UserId(command.userId)) != null) {

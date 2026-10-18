@@ -2,9 +2,14 @@ package com.jsm.boardgame.holdem.application.port
 
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.isInProgress
 
 interface HandStore {
     fun find(tableId: TableId): Hand?
+
+    /** 진행 중인 핸드만([isInProgress]). "진행 중인가" 를 묻는 곳은 [find] 대신 이것을 쓴다. */
+    fun findInProgress(tableId: TableId): Hand? = find(tableId)?.takeIf { it.isInProgress }
+
     fun save(tableId: TableId, hand: Hand)
     fun remove(tableId: TableId)
 

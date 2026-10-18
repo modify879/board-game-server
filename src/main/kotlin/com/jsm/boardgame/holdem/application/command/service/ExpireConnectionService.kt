@@ -35,7 +35,7 @@ class ExpireConnectionService(
         val table = tables.findByUserId(UserId(command.userId)) ?: return null
         val tableId = table.id!!
 
-        if (handStore.find(tableId) != null) {
+        if (handStore.findInProgress(tableId) != null) {
             log.info(
                 "연결 만료 - 핸드 진행 중이라 퇴장하지 않고 감시를 다시 겁니다: userId={}, tableId={}",
                 command.userId,
