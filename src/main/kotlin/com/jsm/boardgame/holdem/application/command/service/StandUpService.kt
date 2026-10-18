@@ -18,9 +18,9 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * 핸드가 진행 중이면 바로 일어서지 않는다(going south 방지) — 좌석에 퇴장 예약을 걸고
- * [StandUpResult.RESERVED] 를 돌려준다. 예약은 DB 에 남고 핸드가 끝날 때 [LeaveReservations] 가 기립시킨다.
- * 연결 끊김 타이머는 홀덤 WS 몫이다. 즉시 기립은 핸드가 없을 때만 일어나므로, 그 뒤
+ * 좌석이 진행 중인 핸드의 참가자이면 바로 일어서지 않는다(going south 방지) — 좌석에 퇴장 예약을 걸고
+ * [StandUpResult.RESERVED] 를 돌려준다. 핸드가 있어도 참가자가 아닌 좌석은 즉시 기립한다. 예약은 DB 에 남고 핸드가 끝날 때 [LeaveReservations] 가 기립시킨다.
+ * 연결 끊김 타이머는 홀덤 WS 몫이다. 즉시 기립 뒤에는
  * HandStarter.rescheduleOnExit 를 불러 카운트다운을 정리한다(후보 2명 미만이면 취소, 아니면
  * 그대로 둔다 — 기립은 카운트다운을 리셋하지 않는다).
  *
@@ -44,8 +44,10 @@ class StandUpService(
             ?: throw NotSeatedException("어느 테이블에도 앉아 있지 않은 사용자입니다: userId=${command.userId}")
         val tableId = table.id!!
 
-        val hand = handStore.find(tableId)
-        if (hand != null) {
+        // 핸드 참가자만 예약한다. 핸드 도중 앉아 이번 핸드에 참가하지 않은 좌석은 핸드와 무관하다 —
+        // 칩이 핸드에 걸려 있지 않아 going south 가 아니고, 예약하면 개인 뷰가 안 나가 종류를 볼 수도 없다.
+        val hand = handStore.findInProgress(tableId)
+        if (hand != null && table.seatOf(UserId(command.userId))!!.seatNo in hand.seatNos) {
             val requested = LeaveReservation.valueOf(command.after)
             if (table.seatOf(UserId(command.userId))!!.leaveReservation != requested) {
                 table.reserveLeave(UserId(command.userId), requested)
@@ -63,7 +65,7 @@ class StandUpService(
             // LedgerReferenceType.GAME_TABLE 엔 게임 이름이 없다. 표시 문구를 넣지 않는다(규칙 8, 문구는 클라이언트가 만든다).
             walletTransfer.fromGame(UserId(command.userId), returned.amount, tableId, memo = "holdem")
         }
-        handStarter.rescheduleOnExit(tableId, table)
+        handStarter.rescheduleOnExit(tableId, table, hand)
         eventPublisher.publishEvent(JoinRequestsDue(tableId))
         log.info("기립했습니다: userId={}, tableId={}, returnedChips={}", command.userId, tableId.value, returned.amount)
         return StandUpResult.STOOD_UP

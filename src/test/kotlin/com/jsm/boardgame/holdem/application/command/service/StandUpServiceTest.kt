@@ -109,6 +109,24 @@ class StandUpServiceTest {
     }
 
     @Test
+    fun `핸드 중이라도 참가하지 않은 좌석은 즉시 기립한다`() {
+        val tableId = tableWithHandInProgress()
+        // 핸드는 1·2번 좌석이 참가자다 — 2번에 사용자 2, 3번에 사용자 3 이 앉아 있으면 3번은 핸드와 무관하다.
+        val table = tables.findById(tableId)!!
+        table.sitDown(UserId(2), Chips.of(8_000))
+        table.sitDown(UserId(3), Chips.of(8_000))
+        tables.save(table)
+
+        val result = service.standUp(StandUpCommand(userId = 3))
+
+        assertEquals(StandUpResult.STOOD_UP, result)
+        assertNull(tables.findById(tableId)!!.seatOf(UserId(3)))
+        assertEquals(8_000L, walletTransfer.fromGameCalls.single().amount)
+        // 핸드가 진행 중이므로 브로드캐스트는 핸드를 실어야 한다(null 이면 공개 뷰가 핸드를 잃는다)
+        assertTrue(eventPublisher.events.filterIsInstance<HandBroadcastRequested>().all { it.hand != null })
+    }
+
+    @Test
     fun `다른 종류로 다시 요청하면 종류가 바뀌고 브로드캐스트한다`() {
         val tableId = tableWithHandInProgress()
         service.standUp(StandUpCommand(userId = 1))

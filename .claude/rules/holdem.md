@@ -37,7 +37,8 @@ paths: ["**/holdem/**"]
   **그 예외 밖에서 카드 성격의 필드를 추가하는 순간 관전이 곧 정보 유출이 된다**
 - **올인으로 더 베팅할 수 없으면 남은 보드를 한 번에 깔지 않는다.** `RunoutTimer` 가 `runout-step-delay` 간격으로 한 스트리트씩
   진행한다 — 공개 → 플랍/턴/리버 → 쇼다운 순(사용자 결정)
-- **퇴장 예약(핸드 뒤 일어나기, 하우스 룰 13)은 DB 에 저장한다.** `DELETE /api/holdem/seat` 가 핸드 중이면 `HandInProgressException` 대신 좌석의 `leaveReserved`(`holdem_seats.leave_after_hand`)를
+- **"핸드가 진행 중인가" 는 `Hand?.isInProgress`(핸드가 있고 결과가 없다) / `HandStore.findInProgress` 하나로 묻는다.** 정산·액션·복원처럼 핸드 객체가 필요한 곳만 `find` 를 쓴다. 판단 지점마다 `find != null` 과 `!isFinished` 를 따로 쓰지 않는다
+- **퇴장 예약(핸드 뒤 일어나기, 하우스 룰 13)은 DB 에 저장한다.** `DELETE /api/holdem/seat` 가 핸드 중이면(그 좌석이 핸드 참가자일 때만 — 핸드 도중 앉아 참가하지 않은 좌석은 핸드와 무관하므로 즉시 기립 204) `HandInProgressException` 대신 좌석의 `leaveReserved`(`holdem_seats.leave_after_hand`)를
   켜고 **202**(멱등), 핸드가 없으면 즉시 기립 204. 실행은 `LeaveReservations.standUpAll` — `HandSettler.settle`(0칩 기립 뒤, 후보 수 판단·`JoinRequestsDue` 앞)과
   `CancelHandService` 가 부른다. StandUpService 와 같이 재착석 의무 기록·지갑 환급을 한다. 좌석이 어떤 이유로든 사라지면 예약도 함께 사라진다.
   예약에는 종류가 있다 — `DELETE /api/holdem/seat?after=SPECTATE|LEAVE`(기본 SPECTATE, 잘못된 값은 400 `REQUEST_INVALID`). 서버 실행은 종류와 무관하고 클라이언트가 기립 뒤 행동(관전 유지 / 방 목록 이동)을 정하는 데만 쓴다.
