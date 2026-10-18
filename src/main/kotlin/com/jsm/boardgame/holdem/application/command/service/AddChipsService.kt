@@ -35,7 +35,7 @@ class AddChipsService(
         val table = tables.findByUserId(userId)
             ?: throw NotSeatedException("어느 테이블에도 앉아 있지 않은 사용자입니다: userId=${command.userId}")
         val tableId = table.id!!
-        if (handStore.find(tableId) != null) {
+        if (handStore.findInProgress(tableId) != null) {
             throw HandInProgressException("핸드가 진행 중인 테이블에서는 칩을 추가할 수 없습니다: userId=${command.userId}")
         }
 

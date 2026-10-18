@@ -413,6 +413,23 @@ class HoldemApiIntegrationTest {
     }
 
     @Test
+    fun `핸드 중이라도 이번 핸드에 참가하지 않은 좌석의 기립은 204 로 즉시 일어서 스택이 지갑으로 돌아온다`() {
+        val ctx = seatedWithHandInProgress()
+        val (spectatorId, spectatorToken) = signUpAndLogin()
+        // 핸드가 시작될 때 이미 앉아 있었지만 딜인되지 않은 좌석(예: BB 대기)을 저장소로 직접 만든다.
+        val table = holdemTableRepository.findById(TableId(ctx.tableId))!!
+        table.sitDown(UserId(spectatorId), Chips.of(10_000))
+        holdemTableRepository.save(table)
+
+        authDelete("/api/holdem/seat", spectatorToken).andExpect(status().isNoContent)
+
+        assertThat(holdemTableRepository.findByUserId(UserId(spectatorId))).isNull()
+        assertThat(balanceOf(spectatorId)).isEqualTo(10_000L)
+        // 진행 중이던 핸드의 참가자는 그대로다
+        assertThat(holdemTableRepository.findByUserId(UserId(ctx.userId))).isNotNull()
+    }
+
+    @Test
     fun `after=LEAVE 로 기립하면 202 이고 종류가 LEAVE 로 저장된다`() {
         val ctx = seatedWithHandInProgress()
 

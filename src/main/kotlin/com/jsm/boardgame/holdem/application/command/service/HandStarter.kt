@@ -106,7 +106,7 @@ class HandStarter(
         return true
     }
 
-    /** 착석처럼 "들어오는" 좌석 변화 뒤에 부른다(호출 전에 핸드가 없음을 호출자가 확인한다).
+    /** 착석처럼 "들어오는" 좌석 변화 뒤에 부른다(핸드가 있으면 [hand] 로 넘긴다).
      *  후보가 2명 이상이면 카운트다운을 지금부터 전체 지연만큼 리셋한다(사용자 결정: 카운트다운
      *  도중 새 참가자가 들어오면 처음부터 다시 센다) — 이미 걸려 있던 예약도 덮어쓴다. 저장과
      *  브로드캐스트는 이 메서드가 계속 책임진다. */
@@ -118,14 +118,15 @@ class HandStarter(
         eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, null))
     }
 
-    /** 기립처럼 "나가는" 좌석 변화 뒤에 부른다(호출 전에 핸드가 없음을 호출자가 확인한다).
+    /** 기립처럼 "나가는" 좌석 변화 뒤에 부른다(핸드가 있으면 [hand] 로 넘긴다).
      *  후보가 2명 미만으로 떨어지면 취소하고, 아니면 이미 돌고 있는 카운트다운을 그대로 둔다 —
-     *  나가는 쪽은 카운트다운을 건드리지 않는다(남은 사람들의 대기 시간을 부당하게 늘리지 않는다). */
-    fun rescheduleOnExit(tableId: TableId, table: HoldemTable) {
+     *  나가는 쪽은 카운트다운을 건드리지 않는다(남은 사람들의 대기 시간을 부당하게 늘리지 않는다).
+     *  [hand] 는 진행 중인 핸드(참가하지 않은 좌석이 도중에 일어난 경우)다 — 공개 뷰가 핸드를 잃지 않게 그대로 싣는다. */
+    fun rescheduleOnExit(tableId: TableId, table: HoldemTable, hand: Hand? = null) {
         if (table.candidateSeatNos().size < 2) {
             countdown.cancel(tableId)
         }
         tables.save(table)
-        eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, null))
+        eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand))
     }
 }

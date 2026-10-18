@@ -39,7 +39,7 @@ class ShowHandService(
         val tableId = TableId(command.tableId)
         val table = tables.findById(tableId)
             ?: throw TableNotFoundException("테이블을 찾을 수 없습니다: tableId=${command.tableId}")
-        if (handStore.find(tableId) != null) {
+        if (handStore.findInProgress(tableId) != null) {
             throw HandInProgressException("핸드가 진행 중이라 보여 줄 수 없습니다: tableId=${command.tableId}")
         }
         val winner = foldWinnerCards.find(tableId)?.takeIf { it.userId == UserId(command.userId) }
