@@ -51,7 +51,9 @@ do_start() {
   mkdir -p "$WT/logs"
   [[ -f $LOG ]] && mv -f "$LOG" "$LOG.1"
   echo "[$TARGET] $TASK 기동 중 (최대 300초 대기)"
-  (cd "$WT" && setsid nohup ./gradlew "$TASK" > "$LOG" 2>&1 < /dev/null &)
+  # 하위 셸 전체의 입출력을 끊고 exec 로 gradle 이 그 셸을 대신한다 — 아니면 백그라운드 셸이 호출자의 stdout 을
+  # 쥔 채 gradle 을 기다려, 출력을 파이프로 받는 호출자(`... | grep`, 자동화)가 서버가 떠도 끝나지 않는다.
+  (cd "$WT" && exec setsid nohup ./gradlew "$TASK") > "$LOG" 2>&1 < /dev/null &
   local i
   for ((i = 0; i < 300; i++)); do
     if grep -qE 'Started BoardGameApplication' "$LOG" 2>/dev/null; then
