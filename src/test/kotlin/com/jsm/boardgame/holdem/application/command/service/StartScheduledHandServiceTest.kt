@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
 import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
@@ -37,8 +38,7 @@ private class StartScheduledHandFakeTableRepository : HoldemTableRepository {
         val saved = HoldemTable.reconstitute(
             id = id,
             name = table.name,
-            smallBlind = table.smallBlind,
-            bigBlind = table.bigBlind,
+            policy = table.policy,
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
             smallBlindSeatNo = table.smallBlindSeatNo,
@@ -70,7 +70,7 @@ class StartScheduledHandServiceTest {
     )
 
     private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): TableId {
-        var table = HoldemTable.create("test-table")
+        var table = HoldemTable.create("test-table", TestTablePolicy)
         table = tables.save(table)
         for ((seatNo, buyIn) in buyIns) {
             table.sitDown(userId = UserId(seatNo.toLong()), buyIn = Chips.of(buyIn))

@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.command.usecase.AddChipsCommand
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
@@ -53,7 +54,7 @@ class AddChipsServiceTest {
     private val user = UserId(1L)
 
     private fun seatedTable(stack: Long = 10_000): TableId {
-        val table = tables.save(HoldemTable.create("테스트 테이블"))
+        val table = tables.save(HoldemTable.create("테스트 테이블", TestTablePolicy))
         table.sitDown(user, Chips.of(stack))
         return tables.save(table).id!!
     }
@@ -69,7 +70,7 @@ class AddChipsServiceTest {
         val tableId = seatedTable()
         handStore.save(
             tableId,
-            Hand.start(mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, HoldemTable.SMALL_BLIND, HoldemTable.BIG_BLIND, Shuffler { it }),
+            Hand.start(mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, TestTablePolicy.smallBlind, TestTablePolicy.bigBlind, Shuffler { it }),
         )
         wallet.balance = 50_000
 

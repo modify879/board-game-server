@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.infrastructure.executor
 
 import com.jsm.boardgame.holdem.application.event.TableClosed
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
@@ -25,7 +26,7 @@ import kotlin.test.assertTrue
 private class SerialExecutorFakeHoldemTableRepository : HoldemTableRepository {
     val absent = mutableSetOf<TableId>()
 
-    override fun findById(id: TableId): HoldemTable? = if (id in absent) null else HoldemTable.create("t")
+    override fun findById(id: TableId): HoldemTable? = if (id in absent) null else HoldemTable.create("t", TestTablePolicy)
     override fun findByUserId(userId: UserId): HoldemTable? = null
     override fun findAllSeatedUserIds(): List<UserId> = emptyList()
     override fun findAllTableIds(): List<TableId> = emptyList()

@@ -23,6 +23,7 @@ class IllegalHandStateException(
 ) : BusinessException(code, logMessage)
 
 class InvalidTableNameException(logMessage: String) : BusinessException(HoldemErrorCode.TABLE_NAME_INVALID, logMessage)
+class InvalidTablePolicyException(logMessage: String) : BusinessException(HoldemErrorCode.TABLE_POLICY_INVALID, logMessage)
 class SeatTakenException(logMessage: String) : BusinessException(HoldemErrorCode.SEAT_TAKEN, logMessage)
 class AlreadySeatedException(logMessage: String) : BusinessException(HoldemErrorCode.ALREADY_SEATED, logMessage)
 class NotSeatedException(logMessage: String) : BusinessException(HoldemErrorCode.NOT_SEATED, logMessage)

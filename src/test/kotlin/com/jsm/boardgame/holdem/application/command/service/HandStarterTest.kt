@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
 import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
@@ -46,8 +47,7 @@ private class HandStarterFakeTableRepository : HoldemTableRepository {
         HoldemTable.reconstitute(
             id = id,
             name = table.name,
-            smallBlind = table.smallBlind,
-            bigBlind = table.bigBlind,
+            policy = table.policy,
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
             smallBlindSeatNo = table.smallBlindSeatNo,
@@ -72,7 +72,7 @@ class HandStarterTest {
     }
 
     private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): TableId {
-        var table = HoldemTable.create("test-table")
+        var table = HoldemTable.create("test-table", TestTablePolicy)
         table = tables.save(table)
         for ((seatNo, buyIn) in buyIns) {
             table.sitDown(userId = UserId(seatNo.toLong()), buyIn = Chips.of(buyIn))
@@ -200,9 +200,9 @@ class HandStarterTest {
         start(tableId)
 
         val hand = handStore.find(tableId)!!
-        assertEquals(Chips.of(10_000) - HoldemTable.BIG_BLIND, hand.stackOf(1))
+        assertEquals(Chips.of(10_000) - TestTablePolicy.bigBlind, hand.stackOf(1))
         assertEquals(Chips.of(10_000), hand.stackOf(2))
-        assertEquals(Chips.of(10_000) - HoldemTable.SMALL_BLIND, hand.stackOf(3))
+        assertEquals(Chips.of(10_000) - TestTablePolicy.smallBlind, hand.stackOf(3))
 
         val savedTable = tables.findById(tableId)!!
         assertFalse(savedTable.seatAt(1)!!.awaitingBigBlind)
@@ -244,7 +244,7 @@ class HandStarterTest {
         val savedTable = tables.findById(tableId)!!
         assertEquals(4, savedTable.bigBlindSeatNo)
         val hand = handStore.find(tableId)!!
-        assertEquals(Chips.of(10_000) - HoldemTable.BIG_BLIND, hand.stackOf(4))
+        assertEquals(Chips.of(10_000) - TestTablePolicy.bigBlind, hand.stackOf(4))
         assertFalse(tables.findById(tableId)!!.seatAt(4)!!.awaitingBigBlind)
     }
 
@@ -261,7 +261,7 @@ class HandStarterTest {
         val savedTable = tables.findById(tableId)!!
         assertEquals(2, savedTable.bigBlindSeatNo)
         val hand = handStore.find(tableId)!!
-        assertEquals(Chips.of(10_000) - HoldemTable.BIG_BLIND, hand.stackOf(4))
+        assertEquals(Chips.of(10_000) - TestTablePolicy.bigBlind, hand.stackOf(4))
         assertFalse(tables.findById(tableId)!!.seatAt(4)!!.owesImmediatePost)
     }
 
@@ -345,8 +345,8 @@ class HandStarterTest {
         start(tableId)
 
         val hand = handStore.find(tableId)!!
-        assertEquals(Chips.of(10_000) - HoldemTable.SMALL_BLIND, hand.stackOf(1))
-        assertEquals(Chips.of(10_000) - HoldemTable.BIG_BLIND, hand.stackOf(2))
+        assertEquals(Chips.of(10_000) - TestTablePolicy.smallBlind, hand.stackOf(1))
+        assertEquals(Chips.of(10_000) - TestTablePolicy.bigBlind, hand.stackOf(2))
 
         val savedTable = tables.findById(tableId)!!
         assertFalse(savedTable.seatAt(1)!!.awaitingBigBlind)
@@ -422,8 +422,8 @@ class HandStarterTest {
 
         var hand = handStore.find(tableId)!!
         assertEquals(3, hand.buttonSeatNo)
-        assertEquals(Chips.of(10_000) - HoldemTable.SMALL_BLIND, hand.stackOf(3))
-        assertEquals(Chips.of(10_000) - HoldemTable.BIG_BLIND, hand.stackOf(1))
+        assertEquals(Chips.of(10_000) - TestTablePolicy.smallBlind, hand.stackOf(3))
+        assertEquals(Chips.of(10_000) - TestTablePolicy.bigBlind, hand.stackOf(1))
         assertFailsWith<NoSuchElementException> { hand.stackOf(2) }
         handStore.remove(tableId)
 
@@ -459,7 +459,7 @@ class HandStarterTest {
 
         hand = handStore.find(tableId)!!
         assertEquals(2, tables.findById(tableId)!!.bigBlindSeatNo)
-        assertEquals(Chips.of(10_000) - HoldemTable.BIG_BLIND, hand.stackOf(2))
+        assertEquals(Chips.of(10_000) - TestTablePolicy.bigBlind, hand.stackOf(2))
         assertFalse(tables.findById(tableId)!!.seatAt(2)!!.owesImmediatePost)
     }
 
@@ -471,7 +471,7 @@ class HandStarterTest {
         start(tableId) // 1핸드: 버튼=2, SB=3, BB=1 (완화로 전원 참가)
 
         val hand = handStore.find(tableId)!!
-        assertEquals(Chips.of(10_000) - HoldemTable.SMALL_BLIND, hand.stackOf(3))
+        assertEquals(Chips.of(10_000) - TestTablePolicy.smallBlind, hand.stackOf(3))
         assertFalse(tables.findById(tableId)!!.seatAt(3)!!.owesImmediatePost)
 
         hand.act(2, BettingAction.Call)
@@ -534,7 +534,7 @@ class HandStarterTest {
 
         start(tableId) // 5핸드: 딜인, 추가 BB 포스팅
         hand = handStore.find(tableId)!!
-        assertEquals(Chips.of(10_000) - HoldemTable.BIG_BLIND, hand.stackOf(2))
+        assertEquals(Chips.of(10_000) - TestTablePolicy.bigBlind, hand.stackOf(2))
         assertFalse(tables.findById(tableId)!!.seatAt(2)!!.owesImmediatePost)
     }
 }

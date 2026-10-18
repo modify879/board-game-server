@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.qa
 
 import com.jayway.jsonpath.JsonPath
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
@@ -121,7 +122,7 @@ class QaDeckIntegrationTest {
         val (_, adminToken) = signUpAndLogin(admin = true)
         val players = List(3) { signUpAndLogin() }
         players.forEach { fundWallet(it.first, 10_000) }
-        val tableId = holdemTableRepository.save(HoldemTable.create("qa-${UUID.randomUUID().toString().take(8)}")).id!!.value
+        val tableId = holdemTableRepository.save(HoldemTable.create("qa-${UUID.randomUUID().toString().take(8)}", TestTablePolicy)).id!!.value
         players.forEach { (id, token) -> sitDownAndAwait(id, token, tableId) }
         val tokenBySeat = players.associate { (id, token) -> holdemTableRepository.findByUserId(UserId(id))!!.seatOf(UserId(id))!!.seatNo to token }
 

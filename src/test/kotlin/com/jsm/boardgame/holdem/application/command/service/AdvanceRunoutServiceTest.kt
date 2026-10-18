@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
 import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutCommand
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
@@ -59,7 +60,7 @@ class AdvanceRunoutServiceTest {
     private val service = AdvanceRunoutService(tables, handStore, handSettler, eventPublisher)
 
     private fun tableWithHand(allIn: Boolean): TableId {
-        val table = HoldemTable.reconstitute(TableId(1), "t", Chips.of(100), Chips.of(200), 1, emptyMap())
+        val table = HoldemTable.reconstitute(TableId(1), "t", TestTablePolicy, 1, emptyMap())
         table.sitDown(UserId(1000L), Chips.of(10_000))
         table.sitDown(UserId(2000L), Chips.of(10_000))
         tables.save(table)

@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.infrastructure.persistence.adapter
 
 import com.jsm.boardgame.UniqueNames
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.query.port.HoldemTableQueryRepository
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -51,7 +52,7 @@ class HoldemTableQueryRepositoryAdapterIntegrationTest {
     @Test
     fun `findSeatOf - 사용자가 앉아 있으면 tableId, seatNo 를 반환한다`() {
         val userId = uniqueUserId()
-        val table = HoldemTable.create("q1")
+        val table = HoldemTable.create("q1", TestTablePolicy)
         table.sitDown(userId, buyIn)
         val saved = tables.save(table)
 
@@ -74,12 +75,12 @@ class HoldemTableQueryRepositoryAdapterIntegrationTest {
         val userA = uniqueUserId()
         val userB = uniqueUserId()
 
-        val table1 = HoldemTable.create("q2")
+        val table1 = HoldemTable.create("q2", TestTablePolicy)
         table1.sitDown(userA, buyIn)
         table1.sitDown(userB, buyIn)
         val saved1 = tables.save(table1)
 
-        val table2 = HoldemTable.create("q3")
+        val table2 = HoldemTable.create("q3", TestTablePolicy)
         val saved2 = tables.save(table2)
 
         val summaries = mutableListOf<TableSummaryView>()

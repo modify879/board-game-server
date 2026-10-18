@@ -24,6 +24,7 @@ enum class HoldemErrorCode(override val kind: ErrorKind) : ErrorCode {
     NOT_ENOUGH_PLAYERS(ErrorKind.INVALID),
 
     TABLE_NAME_INVALID(ErrorKind.INVALID),
+    TABLE_POLICY_INVALID(ErrorKind.INVALID),
     SEAT_TAKEN(ErrorKind.CONFLICT),
     ALREADY_SEATED(ErrorKind.CONFLICT),
     // 없는 리소스가 아니라 앉은 적 없는 사용자의 기립 요청이라 404 다.
@@ -33,6 +34,7 @@ enum class HoldemErrorCode(override val kind: ErrorKind) : ErrorCode {
     CHIP_ADD_OUT_OF_RANGE(ErrorKind.INVALID),
     TABLE_NOT_FOUND(ErrorKind.NOT_FOUND),
     TABLE_FULL(ErrorKind.CONFLICT),
+    JOIN_QUEUE_FULL(ErrorKind.CONFLICT),
     TABLE_NOT_EMPTY(ErrorKind.CONFLICT),
     HAND_IN_PROGRESS(ErrorKind.CONFLICT),
     HAND_NOT_FOUND(ErrorKind.NOT_FOUND),

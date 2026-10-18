@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestCommand
@@ -33,8 +34,7 @@ private class AdmitJoinRequestFakeTableRepository : HoldemTableRepository {
     private fun reconstituteFrom(saved: HoldemTable): HoldemTable = HoldemTable.reconstitute(
         id = saved.id!!,
         name = saved.name,
-        smallBlind = saved.smallBlind,
-        bigBlind = saved.bigBlind,
+        policy = saved.policy,
         buttonSeatNo = saved.buttonSeatNo,
         seats = saved.occupiedSeats().associateBy { it.seatNo },
     )
@@ -49,8 +49,7 @@ private class AdmitJoinRequestFakeTableRepository : HoldemTableRepository {
         val saved = HoldemTable.reconstitute(
             id = id,
             name = table.name,
-            smallBlind = table.smallBlind,
-            bigBlind = table.bigBlind,
+            policy = table.policy,
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
         )
@@ -92,7 +91,7 @@ class AdmitJoinRequestServiceTest {
     /** 특정 좌석 번호에 특정 버이인으로 미리 앉혀 둔다 — sitDown 은 좌석을 고르지 않으므로
      *  reconstitute 로 원하는 좌석 배치를 직접 만든다. */
     private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): TableId {
-        var table = HoldemTable.create("test-table")
+        var table = HoldemTable.create("test-table", TestTablePolicy)
         table = tables.save(table)
         val seats = buyIns.associate { (seatNo, buyIn) ->
             seatNo to Seat.reconstitute(seatNo, userId = UserId(seatNo.toLong()), stack = Chips.of(buyIn), presence = SeatPresence.SEATED)
@@ -100,8 +99,7 @@ class AdmitJoinRequestServiceTest {
         val seeded = HoldemTable.reconstitute(
             id = table.id!!,
             name = table.name,
-            smallBlind = table.smallBlind,
-            bigBlind = table.bigBlind,
+            policy = table.policy,
             buttonSeatNo = table.buttonSeatNo,
             seats = seats,
         )
@@ -175,7 +173,7 @@ class AdmitJoinRequestServiceTest {
     fun `이미 다른 테이블에 앉은 사용자의 참가는 AlreadySeatedException 을 던진다`() {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
 
-        var otherTable = HoldemTable.create("other-table")
+        var otherTable = HoldemTable.create("other-table", TestTablePolicy)
         otherTable = tables.save(otherTable)
         otherTable.sitDown(UserId(9004L), Chips.of(8_000))
         tables.save(otherTable)

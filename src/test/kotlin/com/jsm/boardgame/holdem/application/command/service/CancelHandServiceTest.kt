@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.FakeCopyingHoldemTableRepository
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.FakeWalletTransfer
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
@@ -35,7 +36,7 @@ class CancelHandServiceTest {
     private val service = CancelHandService(tables, handStore, walletTransfer, countdown, LeaveReservations(departures, walletTransfer), eventPublisher)
 
     private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): TableId {
-        var table = HoldemTable.create("test-table")
+        var table = HoldemTable.create("test-table", TestTablePolicy)
         table = tables.save(table)
         for ((seatNo, buyIn) in buyIns) {
             table.sitDown(userId = UserId(seatNo.toLong()), buyIn = Chips.of(buyIn))

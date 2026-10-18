@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceCommand
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -16,7 +17,7 @@ class UpdateSeatPresenceServiceTest {
 
     @Test
     fun `착석한 사용자의 좌석 연결 상태를 바꾼다`() {
-        val table = tables.save(HoldemTable.create("테스트 테이블"))
+        val table = tables.save(HoldemTable.create("테스트 테이블", TestTablePolicy))
         table.sitDown(UserId(1), Chips.of(8_000))
         val saved = tables.save(table)
 

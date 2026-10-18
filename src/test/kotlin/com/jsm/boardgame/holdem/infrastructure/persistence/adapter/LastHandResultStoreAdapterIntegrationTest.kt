@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.infrastructure.persistence.adapter
 
 import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -24,7 +25,7 @@ class LastHandResultStoreAdapterIntegrationTest {
     @Autowired
     private lateinit var tables: HoldemTableRepository
 
-    private fun newTableId(): TableId = tables.save(HoldemTable.create("t-${System.nanoTime()}")).id!!
+    private fun newTableId(): TableId = tables.save(HoldemTable.create("t-${System.nanoTime()}", TestTablePolicy)).id!!
 
     private fun result(amount: Long) = LastHandResult(
         board = listOf("As", "Kd", "7c", "2h", "9s"),

@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.infrastructure.timer
 
 import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
@@ -111,7 +112,7 @@ class TurnTimerTest {
     private val identityShuffler = Shuffler { it }
 
     private fun handWithToAct(vararg stacks: Pair<Int, Long>): Hand {
-        val table = HoldemTable.create("test-table")
+        val table = HoldemTable.create("test-table", TestTablePolicy)
         for ((seatNo, buyIn) in stacks) {
             table.sitDown(userId = UserId(seatNo * 1000L), buyIn = Chips.of(buyIn))
         }
@@ -130,7 +131,7 @@ class TurnTimerTest {
     }
 
     private fun event(hand: Hand?, tableId: TableId = TableId(1L)): HandBroadcastRequested {
-        val table = HoldemTable.create("test-table")
+        val table = HoldemTable.create("test-table", TestTablePolicy)
         return HandBroadcastRequested(tableId, table, hand)
     }
 

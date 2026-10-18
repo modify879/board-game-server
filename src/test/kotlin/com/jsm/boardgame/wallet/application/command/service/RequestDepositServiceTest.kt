@@ -1,5 +1,6 @@
 package com.jsm.boardgame.wallet.application.command.service
 
+import com.jsm.boardgame.wallet.application.config.WalletProperties
 import com.jsm.boardgame.wallet.application.command.usecase.RequestDepositCommand
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import java.time.Clock
@@ -18,7 +19,7 @@ class RequestDepositServiceTest {
     private val depositRequests = FakeDepositRequestRepository()
     private val wallets = FakeWalletRepository()
     private val clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
-    private val service = RequestDepositService(depositRequests, clock)
+    private val service = RequestDepositService(depositRequests, clock, WalletProperties(1_000, 1_000))
 
     @Test
     fun `요청이 저장되고 id 가 반환된다`() {
@@ -33,5 +34,18 @@ class RequestDepositServiceTest {
         service.request(RequestDepositCommand(userId = 1, amount = 10_000, idempotencyKey = "key"))
 
         assertTrue(wallets.stored.isEmpty())
+    }
+
+    @Test
+    fun `최소액은 설정값을 따른다`() {
+        val strict = RequestDepositService(depositRequests, clock, WalletProperties(5_000, 1_000))
+
+        val e = kotlin.test.assertFailsWith<com.jsm.boardgame.wallet.domain.exception.InvalidDepositAmountException> {
+            strict.request(RequestDepositCommand(userId = 1, amount = 4_000, idempotencyKey = "k1"))
+        }
+        assertEquals(com.jsm.boardgame.wallet.domain.exception.WalletErrorCode.DEPOSIT_AMOUNT_INVALID, e.errorCode)
+        strict.request(RequestDepositCommand(userId = 1, amount = 5_000, idempotencyKey = "k2"))
+        // 같은 4,000 이 기본 설정(1,000)에서는 통과한다.
+        service.request(RequestDepositCommand(userId = 1, amount = 4_000, idempotencyKey = "k3"))
     }
 }

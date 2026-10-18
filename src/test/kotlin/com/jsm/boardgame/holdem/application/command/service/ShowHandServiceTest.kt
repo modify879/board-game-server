@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
 import com.jsm.boardgame.common.error.BusinessException
 import com.jsm.boardgame.holdem.application.command.usecase.ShowHandCommand
@@ -40,8 +41,7 @@ class ShowHandServiceTest {
     private val table = HoldemTable.reconstitute(
         id = tableId,
         name = "t",
-        smallBlind = Chips.of(100),
-        bigBlind = Chips.of(200),
+        policy = TestTablePolicy,
         buttonSeatNo = 1,
         seats = (1..2).associateWith {
             Seat.reconstitute(it, userId = UserId(it * 1000L), stack = Chips.of(10_000), presence = SeatPresence.SEATED)

@@ -16,14 +16,16 @@ import java.time.Instant
 class HoldemTable private constructor(
     val id: TableId?,
     val name: String,
-    val smallBlind: Chips,
-    val bigBlind: Chips,
+    val policy: TablePolicy,
     buttonSeatNo: Int?,
     smallBlindSeatNo: Int?,
     bigBlindSeatNo: Int?,
     seats: Map<Int, Seat>,
     closedAt: Instant?,
 ) {
+    val smallBlind: Chips get() = policy.smallBlind
+    val bigBlind: Chips get() = policy.bigBlind
+
     var buttonSeatNo: Int? = buttonSeatNo
         private set
 
@@ -61,8 +63,8 @@ class HoldemTable private constructor(
             throw AlreadySeatedException("이미 이 테이블에 앉아 있는 사용자입니다: userId=$userId")
         }
         // 상한은 application 이 본다 — 재착석 의무가 100BB 를 넘을 수 있어 도메인은 하한만 안다.
-        if (buyIn < bigBlind * MIN_BUY_IN_BIG_BLINDS) {
-            throw BuyInOutOfRangeException("바이인은 ${MIN_BUY_IN_BIG_BLINDS}BB(${bigBlind * MIN_BUY_IN_BIG_BLINDS}) 이상이어야 합니다: $buyIn")
+        if (buyIn < policy.minBuyIn) {
+            throw BuyInOutOfRangeException("바이인은 ${policy.minBuyInBigBlinds}BB(${policy.minBuyIn}) 이상이어야 합니다: $buyIn")
         }
         val seatNo = (1..MAX_SEATS).firstOrNull { it !in seats }
             ?: throw TableFullException("빈 좌석이 없습니다: tableId=$id")
@@ -72,13 +74,13 @@ class HoldemTable private constructor(
     }
 
     /**
-     * 바이인으로 고를 수 있는 범위. 재착석 의무([obligation])가 하한을 올리고, 100BB 를 넘으면 상한도 같이 올린다 —
+     * 바이인으로 고를 수 있는 범위. 재착석 의무([obligation])가 하한을 올리고, 상한을 넘으면 상한도 같이 올린다 —
      * 의무가 상한보다 우선한다(하우스 룰 7).
      */
-    fun buyInRange(obligation: Chips): ClosedRange<Chips> = buyInRange(bigBlind, obligation)
+    fun buyInRange(obligation: Chips): ClosedRange<Chips> = policy.buyInRange(obligation)
 
-    /** 칩 추가로 채울 수 있는 스택 상한(100BB). 바이인 상한과 같다. */
-    fun maxStack(): Chips = maxStack(bigBlind)
+    /** 칩 추가로 채울 수 있는 스택 상한(정책의 최대 바이인 BB). 바이인 상한과 같다. */
+    fun maxStack(): Chips = policy.maxStack
 
     /**
      * 좌석 스택에 [amount] 를 더한다(칩 추가). 결과가 [maxStack] 을 넘으면 거부한다 — 플레이 중 스택이 100BB 를 넘는 건
@@ -251,22 +253,9 @@ class HoldemTable private constructor(
 
     companion object {
         const val MAX_SEATS = 9
-        const val MIN_BUY_IN_BIG_BLINDS = 20
-        const val MAX_BUY_IN_BIG_BLINDS = 100
         private const val MAX_NAME_LENGTH = 30
 
-        // 블라인드는 지금 테이블마다 다르게 할 요구가 없어 고정값이다. 필드로 들고 있는 건
-        // 나중에 테이블별로 블라인드를 달리할 자리를 남겨두기 위해서다. 별도 Blinds VO 는 아직 안 만든다.
-        val SMALL_BLIND: Chips = Chips.of(100)
-        val BIG_BLIND: Chips = Chips.of(200)
-
-        /** 테이블이 아직 없을 때도 같은 규칙으로 범위를 구하도록 companion 에 둔다. */
-        fun buyInRange(bigBlind: Chips, obligation: Chips): ClosedRange<Chips> =
-            maxOf(bigBlind * MIN_BUY_IN_BIG_BLINDS, obligation)..maxOf(maxStack(bigBlind), obligation)
-
-        fun maxStack(bigBlind: Chips): Chips = bigBlind * MAX_BUY_IN_BIG_BLINDS
-
-        fun create(name: String): HoldemTable {
+        fun create(name: String, policy: TablePolicy): HoldemTable {
             val trimmed = name.trim()
             if (trimmed.isEmpty() || trimmed.codePointCount(0, trimmed.length) > MAX_NAME_LENGTH) {
                 throw InvalidTableNameException("테이블 이름이 올바르지 않습니다: '$name'")
@@ -274,8 +263,7 @@ class HoldemTable private constructor(
             return HoldemTable(
                 id = null,
                 name = trimmed,
-                smallBlind = SMALL_BLIND,
-                bigBlind = BIG_BLIND,
+                policy = policy,
                 buttonSeatNo = null,
                 smallBlindSeatNo = null,
                 bigBlindSeatNo = null,
@@ -288,13 +276,12 @@ class HoldemTable private constructor(
         fun reconstitute(
             id: TableId,
             name: String,
-            smallBlind: Chips,
-            bigBlind: Chips,
+            policy: TablePolicy,
             buttonSeatNo: Int?,
             seats: Map<Int, Seat>,
             smallBlindSeatNo: Int? = null,
             bigBlindSeatNo: Int? = null,
             closedAt: Instant? = null,
-        ): HoldemTable = HoldemTable(id, name, smallBlind, bigBlind, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, seats, closedAt)
+        ): HoldemTable = HoldemTable(id, name, policy, buttonSeatNo, smallBlindSeatNo, bigBlindSeatNo, seats, closedAt)
     }
 }

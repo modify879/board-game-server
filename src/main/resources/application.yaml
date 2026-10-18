@@ -11,6 +11,9 @@ spring:
     hikari:
       # 모든 DB 대기에 상한을 둬 테이블 스레드가 영영 걸리지 않게 한다. lock_timeout < statement_timeout 이라
       # 락 대기는 락 오류로 드러난다. idle_in_transaction 은 앱이 락을 쥔 채 트랜잭션 중간에 멈췄을 때의 안전망이다.
+      # 테이블 실행기(테이블당 직렬 스레드)·요청 스레드가 동시에 DB 를 쓰므로 풀이 그 합보다 작으면 대기가 생긴다.
+      # 값을 올리면 Postgres max_connections(기본 100) 안에서 올린다.
+      maximum-pool-size: 10
       data-source-properties:
         options: "-c lock_timeout=3s -c statement_timeout=10s -c idle_in_transaction_session_timeout=30s"
 
@@ -25,6 +28,9 @@ spring:
         # Page 를 그대로 직렬화하면 응답 JSON 이 PageImpl 의 내부 구조에 묶여 계약이 불안정해진다.
         # PagedModel 로 감싸 content 와 page 메타를 분리한다.
         serialization-mode: via_dto
+        # size 를 클라이언트가 무한히 키우지 못하게 상한을 둔다(초과 요청은 상한으로 잘린다).
+        default-page-size: 20
+        max-page-size: 100
 
   jpa:
     hibernate:
@@ -63,11 +69,21 @@ app:
     rejoin-obligation-window: 30m
     hand-history-retention: 90d
     hand-history-purge-interval: 1d
+    # 테이블별 참가 대기열 길이 상한. 넘으면 JOIN_QUEUE_FULL(409). 인메모리라 메모리를 지키는 한계다.
+    join-queue-max-length: 50
+    # 새 테이블에 적용할 정책. 테이블은 생성 시점의 값을 저장하므로 바꿔도 열린 테이블은 그대로다.
+    table-policy:
+      small-blind: 100
+      big-blind: 200
+      min-buy-in-big-blinds: 20
+      max-buy-in-big-blinds: 100
   profile-image:
     # 실제 CDN 이 붙기 전까지의 로컬 기본값
     base-url: "http://localhost:8080/images/profiles/"
     default-url: "http://localhost:8080/images/profiles/default.png"
   wallet:
+    min-deposit-amount: 1000
+    min-withdrawal-amount: 1000
     deposit-account:
       # 실제 계좌가 붙기 전까지의 로컬 기본값
       bank-name: "국민은행"

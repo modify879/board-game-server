@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
@@ -64,7 +65,7 @@ class CancelHandIntegrationTest {
     @Test
     fun `만료 폴드로 기립한 좌석이 있어도 취소는 성공하고 그 사용자는 시작 스택 전부를 지갑으로 돌려받는다`() {
         val userIds = List(3) { userWithBuyIn(10_000) }
-        var table = HoldemTable.create("cancel-${System.nanoTime()}")
+        var table = HoldemTable.create("cancel-${System.nanoTime()}", TestTablePolicy)
         userIds.forEach { table.sitDown(UserId(it), Chips.of(10_000)) }
         table.placeButtonAtFirstSeat()
         val tableId = tables.save(table).id!!

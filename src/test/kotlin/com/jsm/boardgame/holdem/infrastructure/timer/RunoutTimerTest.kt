@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.infrastructure.timer
 
 import com.jsm.boardgame.holdem.application.event.TableClosed
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutCommand
 import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
@@ -118,7 +119,7 @@ class RunoutTimerTest {
         return hand
     }
 
-    private fun event(hand: Hand?) = HandBroadcastRequested(tableId, HoldemTable.create("test-table"), hand)
+    private fun event(hand: Hand?) = HandBroadcastRequested(tableId, HoldemTable.create("test-table", TestTablePolicy), hand)
 
     @Test
     fun `런아웃 중인 핸드만 stepDelay 뒤로 예약한다`() {
