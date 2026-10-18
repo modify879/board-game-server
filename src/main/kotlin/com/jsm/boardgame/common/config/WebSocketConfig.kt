@@ -10,6 +10,7 @@ import org.springframework.messaging.converter.JacksonJsonMessageConverter
 import org.springframework.messaging.converter.MessageConverter
 import org.springframework.messaging.simp.config.ChannelRegistration
 import org.springframework.messaging.simp.config.MessageBrokerRegistry
+import org.springframework.core.task.SimpleAsyncTaskExecutor
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry
@@ -59,8 +60,10 @@ class WebSocketConfig(
             .setTaskScheduler(heartbeatScheduler)
         registry.setApplicationDestinationPrefixes("/app")
         registry.setUserDestinationPrefix("/user")
-        // clientOutboundChannel 은 스레드풀이라 기본값으로는 같은 세션으로 보낸 메시지도 순서가
-        // 섞일 수 있다(Spring 문서 "Order of Messages") — 세션별 발행 순서를 보존한다.
+        // clientOutboundChannel 은 여러 스레드에서 처리하므로 기본값으로는 같은 세션으로 보낸 메시지도
+        // 순서가 섞일 수 있다(Spring 문서 "Order of Messages") — 세션별 발행 순서를 보존한다.
+        // SimpleBrokerMessageHandler 가 세션별로 한 번에 하나만 채널에 넣는 방식이라 실행기 종류와
+        // 무관하게(가상 스레드 포함) 순서가 유지된다(MessageBrokerRegistry.setPreservePublishOrder KDoc).
         registry.setPreservePublishOrder(true)
     }
 
@@ -68,7 +71,17 @@ class WebSocketConfig(
         registration.interceptors(stompAuthenticationInterceptor, stompDestinationGuard)
     }
 
+    override fun configureClientOutboundChannel(registration: ChannelRegistration) {
+        // 실제 소켓 쓰기가 이 실행기 스레드에서 일어난다. 고정 크기 풀이면 응답 없는 클라이언트에 막힌
+        // 스레드가 쌓여 전체 전송이 멈추므로, 전송마다 가상 스레드를 쓴다 — 막혀도 그 전송만 막힌다.
+        registration.executor(SimpleAsyncTaskExecutor("ws-out-").apply { setVirtualThreads(true) })
+    }
+
     override fun configureWebSocketTransport(registry: WebSocketTransportRegistration) {
+        // 느린 소비자 정책(값은 Spring 기본값과 같다, 명시만 한다): 한 세션의 전송이 10초 넘게 걸리거나
+        // 전송 대기 버퍼가 512KB 를 넘으면 ConcurrentWebSocketSessionDecorator 가 그 세션을 끊는다.
+        registry.setSendTimeLimit(10_000)
+        registry.setSendBufferSizeLimit(512 * 1024)
         registry.addDecoratorFactory(capturingWebSocketHandlerDecoratorFactory)
     }
 
