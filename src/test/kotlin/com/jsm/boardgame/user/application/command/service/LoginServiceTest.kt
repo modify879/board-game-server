@@ -20,6 +20,7 @@ import com.jsm.boardgame.user.domain.model.UserRole
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import com.jsm.boardgame.user.domain.service.PasswordHasher
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -150,6 +151,43 @@ private class LoginInMemoryAuthSessionStore : AuthSessionStore {
     }
 }
 
+private class LoginProbeSessions(
+    private val inner: AuthSessionStore,
+    private val log: MutableList<String>,
+    private val failAt: Set<String>,
+) : AuthSessionStore by inner {
+    private fun probe(op: String) {
+        log += op + if (TransactionSynchronizationManager.isActualTransactionActive()) ":tx" else ":none"
+        if (op in failAt) throw IllegalStateException("redis down: $op")
+    }
+    override fun blacklistAccessToken(accessTokenId: String, expiresAt: Instant) { probe("blacklist"); inner.blacklistAccessToken(accessTokenId, expiresAt) }
+    override fun start(userId: UserId, session: AuthSession) { probe("start"); inner.start(userId, session) }
+    override fun currentAccessTokenId(userId: UserId): String? { probe("current"); return inner.currentAccessTokenId(userId) }
+}
+
+private class LoginProbeRealtime(
+    private val inner: RealtimeConnections,
+    private val log: MutableList<String>,
+) : RealtimeConnections by inner {
+    override fun closeAllOf(userId: UserId) {
+        log += "closeAllOf" + if (TransactionSynchronizationManager.isActualTransactionActive()) ":tx" else ":none"
+        inner.closeAllOf(userId)
+    }
+}
+
+private class LoginProbeLimiter(
+    private val inner: LoginAttemptLimiter,
+    private val log: MutableList<String>,
+    private val failAt: Set<String>,
+) : LoginAttemptLimiter by inner {
+    private fun probe(op: String) {
+        log += op + if (TransactionSynchronizationManager.isActualTransactionActive()) ":tx" else ":none"
+        if (op in failAt) throw IllegalStateException("redis down: $op")
+    }
+    override fun recordFailure(username: Username, maxFailures: Int, window: Duration): Boolean { probe("recordFailure"); return inner.recordFailure(username, maxFailures, window) }
+    override fun reset(username: Username) { probe("reset"); inner.reset(username) }
+}
+
 class LoginServiceTest {
 
     private val users = LoginFakeUserRepository()
@@ -158,7 +196,9 @@ class LoginServiceTest {
     private val sessions = LoginInMemoryAuthSessionStore()
     private val attemptLimiter = LoginFakeLoginAttemptLimiter()
     private val realtimeConnections = LoginFakeRealtimeConnections()
-    private val service = LoginService(users, passwordHasher, tokenIssuer, sessions, realtimeConnections, attemptLimiter, Duration.ofMinutes(30), Clock.systemUTC())
+    private val txLog = mutableListOf<String>()
+    private val failAt = mutableSetOf<String>()
+    private val service = LoginService(users, passwordHasher, tokenIssuer, LoginProbeSessions(sessions, txLog, failAt), LoginProbeRealtime(realtimeConnections, txLog), LoginProbeLimiter(attemptLimiter, txLog, failAt), Duration.ofMinutes(30), 5, Duration.ofMinutes(15), Clock.systemUTC())
 
     @Test
     fun `존재하지 않는 사용자명이면 LoginFailedException 이 발생한다`() {
@@ -269,5 +309,57 @@ class LoginServiceTest {
             }
             assertEquals(UserErrorCode.LOGIN_FAILED, e.errorCode)
         }
+    }
+
+    @Test
+    fun `Redis 호출은 DB 트랜잭션 밖에서 일어난다 - 성공 경로와 실패 경로 모두`() {
+        users.seed(id = 1, username = "user_01", rawPassword = "password1", nickname = "길동이")
+        service.login(LoginCommand(username = "user_01", password = "password1"))
+        service.login(LoginCommand(username = "user_01", password = "password1")) // 이전 세션 폐기 경로
+        runCatching { service.login(LoginCommand(username = "user_01", password = "wrong-password")) }
+
+        assertTrue(txLog.isNotEmpty())
+        assertTrue(txLog.none { it.endsWith(":tx") }, "트랜잭션 안에서 Redis 호출: $txLog")
+    }
+
+    @Test
+    fun `이전 세션 폐기 중 Redis 가 실패하면 로그인되지 않고 새 세션이 생기지 않는다`() {
+        users.seed(id = 1, username = "user_01", rawPassword = "password1", nickname = "길동이")
+        service.login(LoginCommand(username = "user_01", password = "password1"))
+        val previousJti = sessions.currentAccessTokenId(UserId(1))!!
+        failAt += "blacklist"
+
+        assertFailsWith<IllegalStateException> {
+            service.login(LoginCommand(username = "user_01", password = "password1"))
+        }
+
+        assertEquals(previousJti, sessions.currentAccessTokenId(UserId(1)))
+        assertTrue(realtimeConnections.closeAllOfCalls.isEmpty())
+    }
+
+    @Test
+    fun `세션 시작이 실패하면 이전 토큰은 이미 무효이고 새 세션은 없다`() {
+        users.seed(id = 1, username = "user_01", rawPassword = "password1", nickname = "길동이")
+        service.login(LoginCommand(username = "user_01", password = "password1"))
+        val previousJti = sessions.currentAccessTokenId(UserId(1))!!
+        failAt += "start"
+
+        assertFailsWith<IllegalStateException> {
+            service.login(LoginCommand(username = "user_01", password = "password1"))
+        }
+
+        assertTrue(sessions.isAccessTokenBlacklisted(previousJti))
+        assertEquals(previousJti, sessions.currentAccessTokenId(UserId(1))) // 새 jti 로 교체되지 않았다
+    }
+
+    @Test
+    fun `실패 카운터 기록이 실패하면 오류이고 로그인되지 않는다`() {
+        users.seed(id = 1, username = "user_01", rawPassword = "password1", nickname = "길동이")
+        failAt += "recordFailure"
+
+        assertFailsWith<IllegalStateException> {
+            service.login(LoginCommand(username = "user_01", password = "wrong-password"))
+        }
+        assertTrue(sessions.currentAccessTokenId(UserId(1)) == null)
     }
 }
