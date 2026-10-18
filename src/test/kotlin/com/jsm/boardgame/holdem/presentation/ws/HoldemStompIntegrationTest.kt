@@ -45,6 +45,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -724,6 +725,110 @@ class HoldemStompIntegrationTest {
         spectatorSession.disconnect()
         sessionA.disconnect()
         sessionB.disconnect()
+    }
+
+    private fun authDelete(url: String, accessToken: String): ResultActions =
+        mockMvc.perform(delete(url).header("Authorization", "Bearer $accessToken"))
+
+    /** 이미 본 seq(lastSeq) 이하의 메시지는 버리고 그보다 새로운 첫 메시지를 돌려준다. 구독마다 오는 중복 스냅샷은 같은 seq 라 걸러진다. */
+    private fun nextAfter(queue: LinkedBlockingQueue<String>, lastSeq: Long): String {
+        val deadline = System.currentTimeMillis() + 5_000
+        while (true) {
+            val remaining = deadline - System.currentTimeMillis()
+            val json = queue.poll(remaining.coerceAtLeast(1), TimeUnit.MILLISECONDS)
+                ?: error("seq > $lastSeq 인 메시지가 시간 안에 오지 않았습니다")
+            if (JsonPath.read<Number>(json, "$.seq").toLong() > lastSeq) return json
+        }
+    }
+
+    private fun seqOf(json: String): Long = JsonPath.read<Number>(json, "$.seq").toLong()
+
+    private fun leaveReservedBySeat(publicJson: String): Map<Int, Boolean> =
+        JsonPath.read<List<Map<String, Any>>>(publicJson, "$.seats").associate {
+            (it["seatNo"] as Number).toInt() to (it["leaveReserved"] as Boolean)
+        }
+
+    @Test
+    fun `핸드 참가자의 퇴장 예약, 종류 변경, 취소가 공개 토픽과 개인 큐로 각각 실린다`() {
+        val pair = seatTwoUsersAtSameTable()
+        startHandRest(pair.tableId)
+
+        val (session, _) = tryConnect(pair.a.accessToken)
+        checkNotNull(session)
+        val (publicHandler, publicQueue) = capturingFrameHandler()
+        val (privateHandler, privateQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.publicTopicOf(pair.tableId), publicHandler)
+        session.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandler)
+
+        val initialPrivate = checkNotNull(privateQueue.poll(5, TimeUnit.SECONDS))
+        val initialPublic = checkNotNull(publicQueue.poll(5, TimeUnit.SECONDS))
+        val mySeatNo = JsonPath.read<Int>(initialPrivate, "$.seatNo")
+        assertThat(JsonPath.read<String?>(initialPrivate, "$.leaveReservation")).isNull()
+        var publicSeq = seqOf(initialPublic)
+        var privateSeq = seqOf(initialPrivate)
+
+        // 1. LEAVE 예약
+        authDelete("/api/holdem/seat?after=LEAVE", pair.a.accessToken).andExpect(status().isAccepted)
+        var publicJson = nextAfter(publicQueue, publicSeq)
+        var privateJson = nextAfter(privateQueue, privateSeq)
+        publicSeq = seqOf(publicJson); privateSeq = seqOf(privateJson)
+        val reserved = leaveReservedBySeat(publicJson)
+        assertThat(reserved[mySeatNo]).isTrue()
+        assertThat(reserved.filterKeys { it != mySeatNo }.values).isNotEmpty.containsOnly(false)
+        assertThat(JsonPath.read<String>(privateJson, "$.leaveReservation")).isEqualTo("LEAVE")
+
+        // 2. 종류 변경
+        authDelete("/api/holdem/seat?after=SPECTATE", pair.a.accessToken).andExpect(status().isAccepted)
+        // 종류만 바뀌어도 공개 뷰가 한 번 더 나간다 — 다음 단계에서 오래된 것을 집지 않게 같이 소비한다.
+        publicJson = nextAfter(publicQueue, publicSeq)
+        privateJson = nextAfter(privateQueue, privateSeq)
+        publicSeq = seqOf(publicJson); privateSeq = seqOf(privateJson)
+        assertThat(JsonPath.read<String>(privateJson, "$.leaveReservation")).isEqualTo("SPECTATE")
+
+        // 3. 취소
+        authDelete("/api/holdem/seat/leave-reservation", pair.a.accessToken).andExpect(status().isNoContent)
+        publicJson = nextAfter(publicQueue, publicSeq)
+        privateJson = nextAfter(privateQueue, privateSeq)
+        assertThat(leaveReservedBySeat(publicJson).values).containsOnly(false)
+        assertThat(JsonPath.read<String?>(privateJson, "$.leaveReservation")).isNull()
+
+        session.disconnect()
+    }
+
+    @Test
+    fun `예약 상태에서 개인 큐를 새로 구독하면 스냅샷에 leaveReservation 이 실려 있다`() {
+        val pair = seatTwoUsersAtSameTable()
+        startHandRest(pair.tableId)
+        authDelete("/api/holdem/seat?after=LEAVE", pair.a.accessToken).andExpect(status().isAccepted)
+
+        val (session, _) = tryConnect(pair.a.accessToken)
+        checkNotNull(session)
+        val (privateHandler, privateQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandler)
+
+        val snapshot = checkNotNull(privateQueue.poll(5, TimeUnit.SECONDS))
+        assertThat(JsonPath.read<String>(snapshot, "$.leaveReservation")).isEqualTo("LEAVE")
+
+        session.disconnect()
+    }
+
+    @Test
+    fun `관전자는 공개 뷰에서 퇴장 예약 여부만 보고 예약 종류는 어디에도 없다`() {
+        val pair = seatTwoUsersAtSameTable()
+        startHandRest(pair.tableId)
+        authDelete("/api/holdem/seat?after=LEAVE", pair.a.accessToken).andExpect(status().isAccepted)
+
+        val (_, spectatorToken) = signUpAndLogin()
+        val (session, _) = tryConnect(spectatorToken)
+        checkNotNull(session)
+        val (publicHandler, publicQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.publicTopicOf(pair.tableId), publicHandler)
+
+        val publicJson = checkNotNull(publicQueue.poll(5, TimeUnit.SECONDS))
+        assertThat(leaveReservedBySeat(publicJson).values).contains(true)
+        assertThat(publicJson).doesNotContain("LEAVE").doesNotContain("SPECTATE").doesNotContain("leaveReservation")
+
+        session.disconnect()
     }
 
     @Test
