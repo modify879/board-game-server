@@ -1,3 +1,6 @@
+# 프로젝트 이름을 고정한다 — 없으면 디렉터리 이름이 프로젝트가 되어, 전용 실행 워크트리(board-game-run)에서 띄울 때 새 컨테이너·빈 DB 를 만들려다 포트 충돌로 실패한다.
+name: board-game
+
 services:
   postgres:
     image: postgres:18-alpine
