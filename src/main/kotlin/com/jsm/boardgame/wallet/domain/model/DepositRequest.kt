@@ -45,7 +45,7 @@ class DepositRequest private constructor(
     fun approve(adminUserId: UserId, creditedAmount: Long, at: Instant) {
         requirePending()
 
-        // 최소 금액(MIN_AMOUNT)을 여기서는 적용하지 않는다 — 관리자는 실제 입금된 금액
+        // 최소 금액(minAmount)을 여기서는 적용하지 않는다 — 관리자는 실제 입금된 금액
         // (예: 900원)을 그대로 채워줄 수 있어야 한다. 단위(MONEY_UNIT)는 그대로 지킨다.
         if (creditedAmount <= 0L || creditedAmount % MONEY_UNIT != 0L) {
             throw InvalidDepositAmountException("승인 금액이 유효하지 않음: creditedAmount=$creditedAmount")
@@ -86,10 +86,9 @@ class DepositRequest private constructor(
     }
 
     companion object {
-        private const val MIN_AMOUNT = 1_000L
-
-        fun request(userId: UserId, amount: Long, idempotencyKey: String, at: Instant): DepositRequest {
-            if (amount < MIN_AMOUNT || amount % MONEY_UNIT != 0L) {
+        /** [minAmount] 는 운영 정책이라 application 이 설정에서 읽어 넘긴다. */
+        fun request(userId: UserId, amount: Long, minAmount: Long, idempotencyKey: String, at: Instant): DepositRequest {
+            if (amount < minAmount || amount % MONEY_UNIT != 0L) {
                 throw InvalidDepositAmountException("충전 요청 금액이 유효하지 않음: amount=$amount")
             }
             return DepositRequest(

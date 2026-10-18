@@ -12,6 +12,7 @@ import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 class TableNotFoundException(logMessage: String) : BusinessException(HoldemErrorCode.TABLE_NOT_FOUND, logMessage)
 class HandInProgressException(logMessage: String) : BusinessException(HoldemErrorCode.HAND_IN_PROGRESS, logMessage)
 class JoinRequestNotFoundException(logMessage: String) : BusinessException(HoldemErrorCode.JOIN_REQUEST_NOT_FOUND, logMessage)
+class JoinQueueFullException(logMessage: String) : BusinessException(HoldemErrorCode.JOIN_QUEUE_FULL, logMessage)
 class NotConnectedException(logMessage: String) : BusinessException(HoldemErrorCode.NOT_CONNECTED, logMessage)
 class InsufficientBalanceException(logMessage: String) : BusinessException(HoldemErrorCode.INSUFFICIENT_BALANCE, logMessage)
 class ShowNotAllowedException(logMessage: String) : BusinessException(HoldemErrorCode.SHOW_NOT_ALLOWED, logMessage)

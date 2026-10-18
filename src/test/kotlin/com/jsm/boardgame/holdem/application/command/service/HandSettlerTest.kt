@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
@@ -71,8 +72,7 @@ class HandSettlerTest {
         val table = HoldemTable.reconstitute(
             id = TableId(1),
             name = "test-table",
-            smallBlind = Chips.of(100),
-            bigBlind = Chips.of(200),
+            policy = TestTablePolicy,
             buttonSeatNo = 1,
             seats = seats,
         )

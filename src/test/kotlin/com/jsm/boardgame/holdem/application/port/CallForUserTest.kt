@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.port
 
 import com.jsm.boardgame.holdem.domain.model.Chips
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
@@ -14,7 +15,7 @@ private class CallForUserFakeTables(private val answers: List<Long?>) : HoldemTa
     private var i = 0
     override fun findById(id: TableId): HoldemTable? = null
     override fun findByUserId(userId: UserId): HoldemTable? = answers[minOf(i++, answers.size - 1)]?.let {
-        HoldemTable.reconstitute(TableId(it), "t", Chips.of(100), Chips.of(200), null, emptyMap())
+        HoldemTable.reconstitute(TableId(it), "t", TestTablePolicy, null, emptyMap())
     }
     override fun findAllSeatedUserIds(): List<UserId> = emptyList()
     override fun findAllTableIds(): List<TableId> = emptyList()

@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.infrastructure.executor
 
 import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
@@ -79,7 +80,7 @@ class TableActorRaceIntegrationTest {
 
     @Test
     fun `차례 만료와 플레이어 액션이 같은 테이블에서 동시에 들어와도 충돌 없이 하나만 반영된다`() {
-        var table = HoldemTable.create("race-${System.nanoTime()}")
+        var table = HoldemTable.create("race-${System.nanoTime()}", TestTablePolicy)
         table.sitDown(uniqueUserId(), Chips.of(10_000))
         table.sitDown(uniqueUserId(), Chips.of(10_000))
         table.placeButtonAtFirstSeat()

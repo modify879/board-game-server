@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.rest
 
 import com.jsm.boardgame.UniqueNames
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutCommand
@@ -181,7 +182,7 @@ class HoldemShowdownIntegrationTest {
     // 저장소로 직접 만든다. accessToken 은 호출부 시그니처를 유지하려고 남겼다.
     @Suppress("UNUSED_PARAMETER")
     private fun createTable(accessToken: String, name: String = "t-${UUID.randomUUID().toString().take(8)}"): Long =
-        holdemTableRepository.save(HoldemTable.create(name)).id!!.value
+        holdemTableRepository.save(HoldemTable.create(name, TestTablePolicy)).id!!.value
 
     /** SitDownService 가 STOMP 연결이 없는 사용자를 대기열에 넣지 않는다(NOT_CONNECTED) — 실제
      *  STOMP CONNECT 를 열어 SimpUserRegistry 에 이 사용자를 등록시킨다. 구독은 필요 없다. */

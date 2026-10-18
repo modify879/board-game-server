@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.FakeCopyingHoldemTableRepository
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
@@ -39,7 +40,7 @@ class PlayActionServiceTest {
 
     /** userId = seatNo * 1000 으로 대응시킨다. */
     private fun tableWithHand(vararg stacks: Pair<Int, Long>): TableId {
-        var table = HoldemTable.create("test-table")
+        var table = HoldemTable.create("test-table", TestTablePolicy)
         table = tables.save(table)
         for ((seatNo, buyIn) in stacks) {
             table.sitDown(userId = UserId(seatNo * 1000L), buyIn = Chips.of(buyIn))
@@ -84,7 +85,7 @@ class PlayActionServiceTest {
 
     @Test
     fun `진행 중인 핸드가 없으면 거부한다`() {
-        var table = HoldemTable.create("no-hand")
+        var table = HoldemTable.create("no-hand", TestTablePolicy)
         table = tables.save(table)
         table.sitDown(userId = UserId(1000L), buyIn = Chips.of(10_000))
         tables.save(table)

@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.infrastructure.persistence.adapter
 
 import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
 import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
@@ -51,7 +52,7 @@ class HandInProgressStoreAdapterIntegrationTest {
     private lateinit var transactionManager: PlatformTransactionManager
 
     // fk_hand_in_progress_table 때문에 실제 holdem_tables 행이 있어야 한다.
-    private fun newTableId(): TableId = tables.save(HoldemTable.create("t-${System.nanoTime()}")).id!!
+    private fun newTableId(): TableId = tables.save(HoldemTable.create("t-${System.nanoTime()}", TestTablePolicy)).id!!
 
     private fun newHand(): Hand = Hand.start(
         stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)),

@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.query.service
 
 import com.jsm.boardgame.holdem.application.port.Departure
+import com.jsm.boardgame.holdem.application.config.TablePolicyProperties
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.WalletBalance
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -25,7 +26,7 @@ class BuyInQueryServiceTest {
     private val wallet = object : WalletBalance {
         override fun balanceOf(userId: UserId): Long = 10_000
     }
-    private val service = BuyInQueryService(tables, departures, wallet)
+    private val service = BuyInQueryService(tables, departures, wallet, TablePolicyProperties(100, 200, 20, 100))
 
     @Test
     fun `새 테이블 조회는 기본 블라인드의 20BB 에서 100BB 범위를 돌려준다`() {

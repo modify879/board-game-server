@@ -13,6 +13,7 @@ paths: ["**/wallet/**"]
   `ApproveWithdrawalRequestService` 에 `WalletRepository` 가 없는 것은 실수를 막기 위한 것이다
 - 지갑은 명령 경로에서 lazy 로 만들어진다. 조회 경로에서는 만들지 않는다
   (`GET /api/wallet` 은 잔액 0). 그래서 "지갑 없음" 에러 코드가 없다
+- 충전·환전 최소액은 설정 `app.wallet.min-deposit-amount`/`min-withdrawal-amount`(기본 1000)이다. `WalletProperties` 가 읽어 서비스가 도메인 팩토리에 값으로 넘기고, 100 단위(`MONEY_UNIT`)는 도메인 불변식이라 설정 최소액이 단위의 배수가 아니면 기동 실패한다
 - 충전·환전 *요청* 테이블에는 FK 가 없다 — 테스트에서 합성 userId 로 요청을 만들어도 된다
 - 지갑·요청을 바꾸는 조회는 `PESSIMISTIC_WRITE` 로 잠그고 읽기 전용 조회(JDSL)와 메서드를 아예
   나눈다. 잠그는 메서드는 반드시 트랜잭션 안에서 부른다 — 아니면 `TransactionRequiredException`

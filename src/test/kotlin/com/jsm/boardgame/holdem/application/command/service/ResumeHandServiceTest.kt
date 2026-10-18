@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandCommand
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.HandStore
@@ -53,7 +54,7 @@ class ResumeHandServiceTest {
 
     private fun storeHand(): Hand {
         val table = HoldemTable.reconstitute(
-            id = tableId, name = "t", smallBlind = Chips.of(100), bigBlind = Chips.of(200),
+            id = tableId, name = "t", policy = TestTablePolicy,
             buttonSeatNo = null, seats = emptyMap(),
         )
         table.sitDown(userId = UserId(1L), buyIn = Chips.of(10_000))

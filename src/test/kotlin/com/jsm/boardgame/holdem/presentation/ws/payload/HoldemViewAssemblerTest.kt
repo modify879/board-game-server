@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.ws.payload
 
 import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Card
@@ -32,7 +33,7 @@ private fun fixedShuffler(vararg notation: String): Shuffler {
 }
 
 private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): HoldemTable {
-    val table = HoldemTable.create("assembler-test")
+    val table = HoldemTable.create("assembler-test", TestTablePolicy)
     for ((seatNo, buyIn) in buyIns) {
         table.sitDown(userId = UserId(seatNo * 100L), buyIn = Chips.of(buyIn))
     }
@@ -75,7 +76,7 @@ class HoldemViewAssemblerTest {
 
     @Test
     fun `개인 뷰에는 좌석의 퇴장 예약 종류가 실린다`() {
-        val table = HoldemTable.create("t")
+        val table = HoldemTable.create("t", TestTablePolicy)
         table.sitDown(UserId(1), Chips.of(10_000))
         table.sitDown(UserId(2), Chips.of(10_000))
         table.placeButtonAtFirstSeat()

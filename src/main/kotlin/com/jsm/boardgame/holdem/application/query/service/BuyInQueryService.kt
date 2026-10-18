@@ -1,11 +1,12 @@
 package com.jsm.boardgame.holdem.application.query.service
 
+import com.jsm.boardgame.holdem.application.config.TablePolicyProperties
 import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
 import com.jsm.boardgame.holdem.application.port.RecentDepartures
 import com.jsm.boardgame.holdem.application.port.WalletBalance
 import com.jsm.boardgame.holdem.application.query.view.BuyInView
 import com.jsm.boardgame.holdem.domain.model.Chips
-import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.TablePolicy
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
@@ -19,23 +20,24 @@ class BuyInQueryService(
     private val tables: HoldemTableRepository,
     private val recentDepartures: RecentDepartures,
     private val walletBalance: WalletBalance,
+    private val properties: TablePolicyProperties,
 ) {
     fun find(tableId: Long, userId: Long): BuyInView {
         val table = tables.findById(TableId(tableId))
             ?: throw TableNotFoundException("존재하지 않는 테이블입니다: tableId=$tableId")
-        return viewOf(table.bigBlind, userId)
+        return viewOf(table.policy, userId)
     }
 
-    /** 테이블을 만들기 전(생성 화면)용 — 새 테이블의 기본 블라인드로 계산한다. */
-    fun findForNewTable(userId: Long): BuyInView = viewOf(HoldemTable.BIG_BLIND, userId)
+    /** 테이블을 만들기 전(생성 화면)용 — 현재 설정의 테이블 정책으로 계산한다. */
+    fun findForNewTable(userId: Long): BuyInView = viewOf(properties.toPolicy(), userId)
 
-    private fun viewOf(bigBlind: Chips, userId: Long): BuyInView {
+    private fun viewOf(policy: TablePolicy, userId: Long): BuyInView {
         val obligation = recentDepartures.obligationOf(UserId(userId))
-        val range = HoldemTable.buyInRange(bigBlind, obligation?.amount ?: Chips.ZERO)
+        val range = policy.buyInRange(obligation?.amount ?: Chips.ZERO)
         return BuyInView(
             minBuyIn = range.start.amount,
             maxBuyIn = range.endInclusive.amount,
-            maxStack = HoldemTable.maxStack(bigBlind).amount,
+            maxStack = policy.maxStack.amount,
             walletBalance = walletBalance.balanceOf(UserId(userId)),
             obligationExpiresAt = obligation?.expiresAt,
         )

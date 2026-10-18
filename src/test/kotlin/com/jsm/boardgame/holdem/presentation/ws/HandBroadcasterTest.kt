@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
 import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.TurnCountdown
@@ -69,7 +70,7 @@ class HandBroadcasterTest {
             HandBroadcasterFakeTurnCountdown(),
             HandBroadcasterFakeLastHandResultStore(stored),
         )
-        val table = HoldemTable.create("t")
+        val table = HoldemTable.create("t", TestTablePolicy)
         table.sitDown(UserId(1000L), Chips.of(10_000))
 
         broadcaster.publish(TableId(1L), table, hand, eventLastResult, 1L)
@@ -89,7 +90,7 @@ class HandBroadcasterTest {
             HandBroadcasterFakeTurnCountdown(),
             HandBroadcasterFakeLastHandResultStore(null),
         )
-        val table = HoldemTable.create("t")
+        val table = HoldemTable.create("t", TestTablePolicy)
 
         broadcaster.publish(TableId(1L), table, null, null, 1L)
     }
@@ -99,7 +100,7 @@ class HandBroadcasterTest {
         val hand = Hand.start(
             mapOf(1 to Chips.of(1_000), 2 to Chips.of(1_000)),
             buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2,
-            smallBlind = Chips.of(100), bigBlind = Chips.of(200), shuffler = { it },
+            smallBlind = TestTablePolicy.smallBlind, bigBlind = TestTablePolicy.bigBlind, shuffler = { it },
         )
         hand.act(1, BettingAction.Fold)
         val fromEvent = LastHandResult(listOf("2c"), listOf(LastHandResult.Payout(2, UserId(2000L), 300)), emptyList())

@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.port
 
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
@@ -23,8 +24,7 @@ class FakeHoldemTableRepository : HoldemTableRepository {
         val saved = HoldemTable.reconstitute(
             id = id,
             name = table.name,
-            smallBlind = table.smallBlind,
-            bigBlind = table.bigBlind,
+            policy = table.policy,
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
         )
@@ -58,8 +58,7 @@ class FakeCopyingHoldemTableRepository : HoldemTableRepository {
         HoldemTable.reconstitute(
             id = id,
             name = table.name,
-            smallBlind = table.smallBlind,
-            bigBlind = table.bigBlind,
+            policy = table.policy,
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
         )

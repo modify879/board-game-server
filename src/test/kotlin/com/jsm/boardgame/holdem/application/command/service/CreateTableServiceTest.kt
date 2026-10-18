@@ -1,6 +1,8 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
+import com.jsm.boardgame.holdem.application.config.TablePolicyProperties
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.command.usecase.CreateTableCommand
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
@@ -43,16 +45,17 @@ class CreateTableServiceTest {
 
     private val tables = FakeHoldemTableRepository()
     private val handStore = FakeHandStore()
-    private val joinQueue = InMemoryJoinQueue()
+    private val joinQueue = InMemoryJoinQueue(50)
     private val userConnections = CreateTableFakeUserConnections().apply { connected += UserId(1L) }
     private val walletBalance = CreateTableFakeWalletBalance().apply { balances[UserId(1L)] = 8_000 }
     private val service = CreateTableService(
         tables,
         SeatRequester(tables, handStore, joinQueue, userConnections, walletBalance, FakeRecentDepartures(), ApplicationEventPublisher { }),
+        TablePolicyProperties(100, 200, 20, 100),
     )
 
     private fun seatedTable(userId: UserId): HoldemTable {
-        val table = HoldemTable.create("기존 테이블")
+        val table = HoldemTable.create("기존 테이블", TestTablePolicy)
         table.sitDown(userId, Chips.of(8_000))
         return tables.save(table)
     }
@@ -80,7 +83,7 @@ class CreateTableServiceTest {
         val table = seatedTable(userId = UserId(1L))
         handStore.save(
             table.id!!,
-            Hand.start(mapOf(1 to Chips.of(8_000), 2 to Chips.of(8_000)), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, HoldemTable.SMALL_BLIND, HoldemTable.BIG_BLIND, Shuffler { it }),
+            Hand.start(mapOf(1 to Chips.of(8_000), 2 to Chips.of(8_000)), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, TestTablePolicy.smallBlind, TestTablePolicy.bigBlind, Shuffler { it }),
         )
 
         val e = assertFailsWith<HandInProgressException> {

@@ -116,8 +116,8 @@ class WalletQueryRepositoryAdapterIntegrationTest {
     @Test
     fun `findByStatus(null) 은 전체를, findByStatus(PENDING) 은 PENDING 만 돌려준다`() {
         val userId = uniqueUserId()
-        val pending = depositRequests.save(DepositRequest.request(UserId(userId), 10_000, "key-${System.nanoTime()}", now))
-        val approved = depositRequests.save(DepositRequest.request(UserId(userId), 20_000, "key-${System.nanoTime()}", now))
+        val pending = depositRequests.save(DepositRequest.request(UserId(userId), 10_000, 1_000, "key-${System.nanoTime()}", now))
+        val approved = depositRequests.save(DepositRequest.request(UserId(userId), 20_000, 1_000, "key-${System.nanoTime()}", now))
         approved.approve(adminUserId = UserId(1), creditedAmount = 20_000, at = now)
         depositRequests.save(approved)
 
@@ -134,8 +134,8 @@ class WalletQueryRepositoryAdapterIntegrationTest {
     fun `findByStatus(null) 은 전체 환전 요청을, findByStatus(PENDING) 은 PENDING 만 돌려준다`() {
         val userId = uniqueUserId()
         val bankAccount = BankAccount.of("국민은행", "11122233344", "홍길동")
-        val pending = withdrawalRequests.save(WithdrawalRequest.request(UserId(userId), 10_000, bankAccount, "key-${System.nanoTime()}", now))
-        val approved = withdrawalRequests.save(WithdrawalRequest.request(UserId(userId), 20_000, bankAccount, "key-${System.nanoTime()}", now))
+        val pending = withdrawalRequests.save(WithdrawalRequest.request(UserId(userId), 10_000, 1_000, bankAccount, "key-${System.nanoTime()}", now))
+        val approved = withdrawalRequests.save(WithdrawalRequest.request(UserId(userId), 20_000, 1_000, bankAccount, "key-${System.nanoTime()}", now))
         approved.approve(adminUserId = UserId(1), at = now)
         withdrawalRequests.save(approved)
 

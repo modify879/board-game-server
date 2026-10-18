@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.command.usecase.CloseIdleTableCommand
 import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -40,8 +41,7 @@ private class CloseIdleFakeHoldemTableRepository : HoldemTableRepository {
         val saved = HoldemTable.reconstitute(
             id = id,
             name = table.name,
-            smallBlind = table.smallBlind,
-            bigBlind = table.bigBlind,
+            policy = table.policy,
             buttonSeatNo = table.buttonSeatNo,
             seats = table.occupiedSeats().associateBy { it.seatNo },
             closedAt = table.closedAt,
@@ -56,13 +56,13 @@ class CloseIdleTableServiceTest {
     private val now = Instant.parse("2026-01-01T00:00:00Z")
     private val tables = CloseIdleFakeHoldemTableRepository()
     private val handStore = FakeHandStore()
-    private val joinQueue = InMemoryJoinQueue()
+    private val joinQueue = InMemoryJoinQueue(50)
     private val events = mutableListOf<Any>()
     private val service = CloseIdleTableService(
         tables, handStore, joinQueue, ApplicationEventPublisher { events += it }, Clock.fixed(now, ZoneOffset.UTC),
     )
 
-    private fun emptyTable(): TableId = tables.save(HoldemTable.create("빈 테이블")).id!!
+    private fun emptyTable(): TableId = tables.save(HoldemTable.create("빈 테이블", TestTablePolicy)).id!!
 
     @Test
     fun `좌석·핸드·대기열이 모두 비어 있으면 닫고 TableClosed 를 올린다`() {
@@ -91,7 +91,7 @@ class CloseIdleTableServiceTest {
         val id = emptyTable()
         handStore.save(
             id,
-            Hand.start(mapOf(1 to Chips.of(8_000), 2 to Chips.of(8_000)), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, HoldemTable.SMALL_BLIND, HoldemTable.BIG_BLIND, Shuffler { it }),
+            Hand.start(mapOf(1 to Chips.of(8_000), 2 to Chips.of(8_000)), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, TestTablePolicy.smallBlind, TestTablePolicy.bigBlind, Shuffler { it }),
         )
 
         assertFalse(service.close(CloseIdleTableCommand(id.value)))
