@@ -30,7 +30,7 @@ class CloseIdleTableService(
     override fun close(command: CloseIdleTableCommand): Boolean {
         val tableId = TableId(command.tableId)
         val table = tables.findById(tableId) ?: return false
-        if (table.occupiedSeats().isNotEmpty() || handStore.find(tableId) != null || joinQueue.entriesOf(tableId).isNotEmpty()) {
+        if (table.occupiedSeats().isNotEmpty() || handStore.findInProgress(tableId) != null || joinQueue.entriesOf(tableId).isNotEmpty()) {
             return false
         }
         table.close(Instant.now(clock))

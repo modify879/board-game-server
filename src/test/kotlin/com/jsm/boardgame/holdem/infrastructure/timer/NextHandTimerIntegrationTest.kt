@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.infrastructure.timer
 
 import com.jsm.boardgame.UniqueNames
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
@@ -153,7 +154,7 @@ class NextHandTimerIntegrationTest {
     // 저장소로 직접 만든다. accessToken 은 호출부 시그니처를 유지하려고 남겼다.
     @Suppress("UNUSED_PARAMETER")
     private fun createTable(accessToken: String, name: String = "t-${UUID.randomUUID().toString().take(8)}"): Long =
-        holdemTableRepository.save(HoldemTable.create(name)).id!!.value
+        holdemTableRepository.save(HoldemTable.create(name, TestTablePolicy)).id!!.value
 
     /** 착석은 STOMP 연결이 있어야 대기열에 들어간다(SitDownService) — 연결부터 만든다. */
     private fun tryConnect(accessToken: String) {

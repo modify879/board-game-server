@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.domain.model.Chips
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.common.error.ErrorCode
 import com.jsm.boardgame.holdem.application.command.usecase.CancelJoinRequestCommand
 import com.jsm.boardgame.holdem.application.exception.JoinRequestNotFoundException
@@ -38,7 +39,7 @@ class CancelJoinRequestServiceTest {
 
     @Test
     fun `취소하면 대기 중인 항목이 대기열에서 제거되고 남은 사람들의 순번이 알려진다`() {
-        val queue = InMemoryJoinQueue()
+        val queue = InMemoryJoinQueue(50)
         val notifier = CancelJoinRequestFakeJoinQueueNotifier()
         val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
         val tableId = TableId(1L)
@@ -53,7 +54,7 @@ class CancelJoinRequestServiceTest {
 
     @Test
     fun `대기 중인 요청이 없으면 JOIN_REQUEST_NOT_FOUND 다`() {
-        val queue = InMemoryJoinQueue()
+        val queue = InMemoryJoinQueue(50)
         val notifier = CancelJoinRequestFakeJoinQueueNotifier()
         val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
 
@@ -65,7 +66,7 @@ class CancelJoinRequestServiceTest {
 
     @Test
     fun `다른 사용자의 취소는 내 대기열 항목에 영향을 주지 않는다`() {
-        val queue = InMemoryJoinQueue()
+        val queue = InMemoryJoinQueue(50)
         val notifier = CancelJoinRequestFakeJoinQueueNotifier()
         val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
         val tableId = TableId(1L)
@@ -80,7 +81,7 @@ class CancelJoinRequestServiceTest {
 
     @Test
     fun `착석 처리로 이미 제거된 사용자의 취소는 JOIN_REQUEST_NOT_FOUND 다`() {
-        val queue = InMemoryJoinQueue()
+        val queue = InMemoryJoinQueue(50)
         val notifier = CancelJoinRequestFakeJoinQueueNotifier()
         val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
         val tableId = TableId(1L)

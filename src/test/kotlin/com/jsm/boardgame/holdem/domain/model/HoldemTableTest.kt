@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
 
 class HoldemTableTest {
 
-    private fun newTable(): HoldemTable = HoldemTable.create("테이블")
+    private fun newTable(): HoldemTable = HoldemTable.create("테이블", TestTablePolicy)
 
     @Test
     fun `sitDown 하면 좌석에서 조회된다`() {
@@ -58,8 +58,7 @@ class HoldemTableTest {
         val table = HoldemTable.reconstitute(
             id = TableId(1),
             name = "t",
-            smallBlind = HoldemTable.SMALL_BLIND,
-            bigBlind = HoldemTable.BIG_BLIND,
+            policy = TestTablePolicy,
             buttonSeatNo = null,
             seats = mapOf(
                 1 to Seat.reconstitute(1, UserId(1L), Chips.of(10_000), SeatPresence.SEATED),
@@ -201,14 +200,14 @@ class HoldemTableTest {
 
     @Test
     fun `공백 테이블 이름은 TABLE_NAME_INVALID 로 거부된다`() {
-        val e = assertFailsWith<InvalidTableNameException> { HoldemTable.create("   ") }
+        val e = assertFailsWith<InvalidTableNameException> { HoldemTable.create("   ", TestTablePolicy) }
         assertEquals(HoldemErrorCode.TABLE_NAME_INVALID, e.errorCode)
     }
 
     @Test
     fun `30 코드포인트를 넘는 테이블 이름은 TABLE_NAME_INVALID 로 거부된다`() {
         val longName = "😀".repeat(31)
-        val e = assertFailsWith<InvalidTableNameException> { HoldemTable.create(longName) }
+        val e = assertFailsWith<InvalidTableNameException> { HoldemTable.create(longName, TestTablePolicy) }
         assertEquals(HoldemErrorCode.TABLE_NAME_INVALID, e.errorCode)
     }
 
@@ -239,8 +238,7 @@ class HoldemTableTest {
         val table = HoldemTable.reconstitute(
             id = TableId(1L),
             name = "   ",
-            smallBlind = HoldemTable.SMALL_BLIND,
-            bigBlind = HoldemTable.BIG_BLIND,
+            policy = TestTablePolicy,
             buttonSeatNo = 42,
             seats = emptyMap(),
         )
@@ -301,8 +299,7 @@ class HoldemTableTest {
         val table = HoldemTable.reconstitute(
             id = TableId(1L),
             name = "t",
-            smallBlind = HoldemTable.SMALL_BLIND,
-            bigBlind = HoldemTable.BIG_BLIND,
+            policy = TestTablePolicy,
             buttonSeatNo = 2,
             seats = emptyMap(),
             smallBlindSeatNo = 3, // 직전 SB 였던 좌석 — 이번 핸드엔 없다
@@ -321,8 +318,7 @@ class HoldemTableTest {
         val table = HoldemTable.reconstitute(
             id = TableId(1L),
             name = "t",
-            smallBlind = HoldemTable.SMALL_BLIND,
-            bigBlind = HoldemTable.BIG_BLIND,
+            policy = TestTablePolicy,
             buttonSeatNo = 7,
             seats = emptyMap(),
             smallBlindSeatNo = 1,
@@ -341,8 +337,7 @@ class HoldemTableTest {
         val table = HoldemTable.reconstitute(
             id = TableId(1L),
             name = "t",
-            smallBlind = HoldemTable.SMALL_BLIND,
-            bigBlind = HoldemTable.BIG_BLIND,
+            policy = TestTablePolicy,
             buttonSeatNo = 7,
             seats = emptyMap(),
             smallBlindSeatNo = 1,
@@ -361,8 +356,7 @@ class HoldemTableTest {
         val table = HoldemTable.reconstitute(
             id = TableId(1L),
             name = "t",
-            smallBlind = HoldemTable.SMALL_BLIND,
-            bigBlind = HoldemTable.BIG_BLIND,
+            policy = TestTablePolicy,
             buttonSeatNo = 2,
             seats = emptyMap(),
             smallBlindSeatNo = 3,
@@ -492,5 +486,20 @@ class HoldemTableTest {
 
         assertEquals(HoldemErrorCode.TABLE_NOT_EMPTY, e.errorCode)
         assertNull(table.closedAt)
+    }
+
+    @Test
+    fun `정책이 다른 두 테이블은 바이인 범위와 블라인드를 각자 적용한다`() {
+        val small = HoldemTable.create("small", TestTablePolicy)
+        val big = HoldemTable.create("big", TablePolicy.of(500, 1_000, 10, 50))
+
+        assertEquals(Chips.of(200), small.bigBlind)
+        assertEquals(Chips.of(1_000), big.bigBlind)
+        assertEquals(Chips.of(4_000)..Chips.of(20_000), small.buyInRange(Chips.ZERO))
+        assertEquals(Chips.of(10_000)..Chips.of(50_000), big.buyInRange(Chips.ZERO))
+        // 한쪽 하한(4,000)은 다른 쪽에서는 미달이다.
+        small.sitDown(UserId(1L), Chips.of(4_000))
+        assertFailsWith<BuyInOutOfRangeException> { big.sitDown(UserId(1L), Chips.of(4_000)) }
+        assertEquals(Chips.of(50_000), big.maxStack())
     }
 }

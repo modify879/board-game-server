@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.command.usecase.SitDownCommand
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
@@ -53,14 +54,14 @@ class SitDownServiceTest {
 
     private val tables = FakeHoldemTableRepository()
     private val handStore = FakeHandStore()
-    private val joinQueue = InMemoryJoinQueue()
+    private val joinQueue = InMemoryJoinQueue(50)
     private val userConnections = SitDownFakeUserConnections()
     private val walletBalance = SitDownFakeWalletBalance().apply { balances[1L] = 8_000; balances[2L] = 8_000 }
     private val eventPublisher = ApplicationEventPublisher { }
     private val departures = FakeRecentDepartures()
     private val service = SitDownService(tables, SeatRequester(tables, handStore, joinQueue, userConnections, walletBalance, departures, eventPublisher))
 
-    private fun createTable(): TableId = tables.save(HoldemTable.create("테스트 테이블")).id!!
+    private fun createTable(): TableId = tables.save(HoldemTable.create("테스트 테이블", TestTablePolicy)).id!!
 
     @Test
     fun `존재하지 않는 테이블이면 TABLE_NOT_FOUND`() {
@@ -74,7 +75,7 @@ class SitDownServiceTest {
 
     @Test
     fun `이미 다른 테이블에 앉아 있으면 핸드가 없어도 ALREADY_SEATED`() {
-        val otherTable = tables.save(HoldemTable.create("다른 테이블"))
+        val otherTable = tables.save(HoldemTable.create("다른 테이블", TestTablePolicy))
         otherTable.sitDown(userId = UserId(1), buyIn = Chips.of(8_000))
         tables.save(otherTable)
         val tableId = createTable()
@@ -88,12 +89,12 @@ class SitDownServiceTest {
 
     @Test
     fun `이미 앉은 테이블에서 핸드가 진행 중이면 HAND_IN_PROGRESS`() {
-        val otherTable = tables.save(HoldemTable.create("다른 테이블"))
+        val otherTable = tables.save(HoldemTable.create("다른 테이블", TestTablePolicy))
         otherTable.sitDown(userId = UserId(1), buyIn = Chips.of(8_000))
         val savedOther = tables.save(otherTable)
         handStore.save(
             savedOther.id!!,
-            Hand.start(mapOf(1 to Chips.of(8_000), 2 to Chips.of(8_000)), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, HoldemTable.SMALL_BLIND, HoldemTable.BIG_BLIND, Shuffler { it }),
+            Hand.start(mapOf(1 to Chips.of(8_000), 2 to Chips.of(8_000)), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, TestTablePolicy.smallBlind, TestTablePolicy.bigBlind, Shuffler { it }),
         )
         val tableId = createTable()
         userConnections.connect(1)

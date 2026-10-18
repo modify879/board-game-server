@@ -31,7 +31,7 @@ class DepositRequestTest {
     @Test
     fun `1000원 미만이면 DEPOSIT_AMOUNT_INVALID`() {
         val e = assertFailsWith<InvalidDepositAmountException> {
-            DepositRequest.request(userId = UserId(1), amount = 900, idempotencyKey = "key", at = now)
+            DepositRequest.request(userId = UserId(1), amount = 900, minAmount = 1_000, idempotencyKey = "key", at = now)
         }
         assertEquals(WalletErrorCode.DEPOSIT_AMOUNT_INVALID, e.errorCode)
     }
@@ -39,7 +39,7 @@ class DepositRequestTest {
     @Test
     fun `100원 배수가 아니면 DEPOSIT_AMOUNT_INVALID`() {
         val e = assertFailsWith<InvalidDepositAmountException> {
-            DepositRequest.request(userId = UserId(1), amount = 1_050, idempotencyKey = "key", at = now)
+            DepositRequest.request(userId = UserId(1), amount = 1_050, minAmount = 1_000, idempotencyKey = "key", at = now)
         }
         assertEquals(WalletErrorCode.DEPOSIT_AMOUNT_INVALID, e.errorCode)
     }
@@ -47,14 +47,14 @@ class DepositRequestTest {
     @Test
     fun `음수 금액 요청은 AMOUNT_NEGATIVE 가 아니라 DEPOSIT_AMOUNT_INVALID`() {
         val e = assertFailsWith<InvalidDepositAmountException> {
-            DepositRequest.request(userId = UserId(1), amount = -5_000, idempotencyKey = "key", at = now)
+            DepositRequest.request(userId = UserId(1), amount = -5_000, minAmount = 1_000, idempotencyKey = "key", at = now)
         }
         assertEquals(WalletErrorCode.DEPOSIT_AMOUNT_INVALID, e.errorCode)
     }
 
     @Test
     fun `상한은 없다 - 10억도 요청된다`() {
-        val request = DepositRequest.request(userId = UserId(1), amount = 1_000_000_000, idempotencyKey = "key", at = now)
+        val request = DepositRequest.request(userId = UserId(1), amount = 1_000_000_000, minAmount = 1_000, idempotencyKey = "key", at = now)
 
         assertEquals(Money.of(1_000_000_000), request.requestedAmount)
     }

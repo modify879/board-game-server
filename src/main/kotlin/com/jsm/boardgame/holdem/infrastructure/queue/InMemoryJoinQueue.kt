@@ -2,17 +2,20 @@ package com.jsm.boardgame.holdem.infrastructure.queue
 
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.event.TableClosed
+import com.jsm.boardgame.holdem.application.exception.JoinQueueFullException
 import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
 import com.jsm.boardgame.holdem.application.port.QueuePosition
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.TableId
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import org.springframework.transaction.event.TransactionalEventListener
 
 /**
- * [JoinQueue] 의 인메모리 구현. 단일 인스턴스 배포를 전제한다 — 여러 인스턴스면 각자 자기
+ * [JoinQueue] 의 인메모리 구현. 길이 상한([maxLength])은 메모리를 지키는 인프라 한계라 여기서 검사한다 —
+ * 중복 검사와 같은 락 안이라 동시 요청에도 상한을 넘지 않는다. 단일 인스턴스 배포를 전제한다 — 여러 인스턴스면 각자 자기
  * 대기열만 보게 된다(TableViewSequence·타이머들과 같은 전제). 재시작하면 비워지지만 좌석 배정
  * 전이라 안전하다(클래스 KDoc 참고).
  *
@@ -22,7 +25,9 @@ import org.springframework.transaction.event.TransactionalEventListener
  * 테이블별 락으로 바꾼다.
  */
 @Component
-class InMemoryJoinQueue : JoinQueue {
+class InMemoryJoinQueue(
+    @Value("\${app.holdem.join-queue-max-length}") private val maxLength: Int,
+) : JoinQueue {
     private data class Entry(val userId: UserId, val postBlindImmediately: Boolean, val buyIn: Chips) {
         fun toView() = JoinQueueEntry(userId, postBlindImmediately, buyIn)
     }
@@ -37,6 +42,9 @@ class InMemoryJoinQueue : JoinQueue {
                 throw AlreadySeatedException("이미 대기열에 있는 사용자입니다: userId=$userId")
             }
             val queue = tableQueues.getOrPut(tableId) { mutableListOf() }
+            if (queue.size >= maxLength) {
+                throw JoinQueueFullException("참가 대기열이 가득 찼습니다: tableId=$tableId, max=$maxLength")
+            }
             queue += Entry(userId, postBlindImmediately, buyIn)
             userToTable[userId] = tableId
             queue.size

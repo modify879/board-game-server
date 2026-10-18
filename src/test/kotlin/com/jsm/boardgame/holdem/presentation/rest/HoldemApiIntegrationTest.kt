@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.rest
 
 import com.jsm.boardgame.UniqueNames
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
@@ -173,7 +174,7 @@ class HoldemApiIntegrationTest {
     // 저장소로 직접 만든다. accessToken 은 호출부 시그니처를 유지하려고 남겼다.
     @Suppress("UNUSED_PARAMETER")
     private fun createTable(accessToken: String, name: String = "t-${UUID.randomUUID().toString().take(8)}"): Long =
-        holdemTableRepository.save(HoldemTable.create(name)).id!!.value
+        holdemTableRepository.save(HoldemTable.create(name, TestTablePolicy)).id!!.value
 
     /** SitDownService 가 STOMP 연결이 없는 사용자를 대기열에 넣지 않는다(NOT_CONNECTED) — 실제
      *  STOMP CONNECT 를 열어 SimpUserRegistry 에 이 사용자를 등록시킨다. 구독은 필요 없다. */
@@ -306,6 +307,15 @@ class HoldemApiIntegrationTest {
     }
 
     @Test
+    fun `페이지 size 는 상한 100 으로 잘린다`() {
+        val (_, viewer) = signUpAndLogin()
+
+        authGet("/api/holdem/tables?size=500", viewer)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.page.size").value(100))
+    }
+
+    @Test
     fun `미착석 사용자의 테이블 목록 조회는 200을 응답한다`() {
         val (_, accessToken) = signUpAndLogin()
 
@@ -410,6 +420,23 @@ class HoldemApiIntegrationTest {
         assertThat(holdemTableRepository.findByUserId(UserId(ctx.userId))).isNull()
         assertThat(balanceOf(ctx.userId)).isGreaterThan(0L)
         assertThat(recentDepartures.obligationOf(UserId(ctx.userId))).isNotNull()
+    }
+
+    @Test
+    fun `핸드 중이라도 이번 핸드에 참가하지 않은 좌석의 기립은 204 로 즉시 일어서 스택이 지갑으로 돌아온다`() {
+        val ctx = seatedWithHandInProgress()
+        val (spectatorId, spectatorToken) = signUpAndLogin()
+        // 핸드가 시작될 때 이미 앉아 있었지만 딜인되지 않은 좌석(예: BB 대기)을 저장소로 직접 만든다.
+        val table = holdemTableRepository.findById(TableId(ctx.tableId))!!
+        table.sitDown(UserId(spectatorId), Chips.of(10_000))
+        holdemTableRepository.save(table)
+
+        authDelete("/api/holdem/seat", spectatorToken).andExpect(status().isNoContent)
+
+        assertThat(holdemTableRepository.findByUserId(UserId(spectatorId))).isNull()
+        assertThat(balanceOf(spectatorId)).isEqualTo(10_000L)
+        // 진행 중이던 핸드의 참가자는 그대로다
+        assertThat(holdemTableRepository.findByUserId(UserId(ctx.userId))).isNotNull()
     }
 
     @Test

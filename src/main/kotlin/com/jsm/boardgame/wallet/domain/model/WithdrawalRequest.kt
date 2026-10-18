@@ -79,10 +79,9 @@ class WithdrawalRequest private constructor(
     }
 
     companion object {
-        private const val MIN_AMOUNT = 1_000L
-
-        fun request(userId: UserId, amount: Long, bankAccount: BankAccount, idempotencyKey: String, at: Instant): WithdrawalRequest {
-            if (amount < MIN_AMOUNT || amount % MONEY_UNIT != 0L) {
+        /** [minAmount] 는 운영 정책이라 application 이 설정에서 읽어 넘긴다. */
+        fun request(userId: UserId, amount: Long, minAmount: Long, bankAccount: BankAccount, idempotencyKey: String, at: Instant): WithdrawalRequest {
+            if (amount < minAmount || amount % MONEY_UNIT != 0L) {
                 throw InvalidWithdrawalAmountException("환전 요청 금액이 유효하지 않음: amount=$amount")
             }
             return WithdrawalRequest(

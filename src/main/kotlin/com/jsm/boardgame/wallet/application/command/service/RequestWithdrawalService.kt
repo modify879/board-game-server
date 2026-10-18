@@ -2,6 +2,7 @@ package com.jsm.boardgame.wallet.application.command.service
 
 import com.jsm.boardgame.wallet.application.command.usecase.RequestWithdrawalUseCase
 import com.jsm.boardgame.wallet.application.command.usecase.RequestWithdrawalCommand
+import com.jsm.boardgame.wallet.application.config.WalletProperties
 import com.jsm.boardgame.wallet.application.exception.IdempotencyKeyReusedException
 import com.jsm.boardgame.wallet.domain.model.BankAccount
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
@@ -32,6 +33,7 @@ class RequestWithdrawalService(
     private val wallets: WalletRepository,
     private val ledger: LedgerEntryRepository,
     private val clock: Clock,
+    private val properties: WalletProperties,
 ) : RequestWithdrawalUseCase {
 
     override fun request(command: RequestWithdrawalCommand): WithdrawalRequestId {
@@ -39,7 +41,7 @@ class RequestWithdrawalService(
         val bankAccount = BankAccount.of(command.bankName, command.accountNumber, command.accountHolder)
         val key = requireValidIdempotencyKey(command.idempotencyKey)
         val userId = UserId(command.userId)
-        val request = WithdrawalRequest.request(userId, command.amount, bankAccount, key, now)
+        val request = WithdrawalRequest.request(userId, command.amount, properties.minWithdrawalAmount, bankAccount, key, now)
 
         // 재전송이면 지갑을 건드리기 전에 원래 요청을 돌려준다 — 두 번 차감하지 않는다.
         // 동시 요청은 uk_withdrawal_requests_user_key 가 아래 save 에서 한쪽을 막는다(요청 → 지갑 순서 유지).

@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
@@ -61,7 +62,7 @@ class StandUpServiceTest {
 
     @Test
     fun `기립하면 좌석이 비고 스택이 지갑으로 돌아간다`() {
-        val table = tables.save(HoldemTable.create("테스트 테이블"))
+        val table = tables.save(HoldemTable.create("테스트 테이블", TestTablePolicy))
         table.sitDown(UserId(1), Chips.of(8_000))
         val saved = tables.save(table)
 
@@ -85,12 +86,12 @@ class StandUpServiceTest {
     }
 
     private fun tableWithHandInProgress(): TableId {
-        val table = tables.save(HoldemTable.create("테스트 테이블"))
+        val table = tables.save(HoldemTable.create("테스트 테이블", TestTablePolicy))
         table.sitDown(UserId(1), Chips.of(8_000))
         val saved = tables.save(table)
         handStore.save(
             saved.id!!,
-            Hand.start(mapOf(1 to Chips.of(8_000), 2 to Chips.of(8_000)), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, HoldemTable.SMALL_BLIND, HoldemTable.BIG_BLIND, Shuffler { it }),
+            Hand.start(mapOf(1 to Chips.of(8_000), 2 to Chips.of(8_000)), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, TestTablePolicy.smallBlind, TestTablePolicy.bigBlind, Shuffler { it }),
         )
         return saved.id!!
     }
@@ -105,6 +106,24 @@ class StandUpServiceTest {
         assertTrue(tables.findById(tableId)!!.seatAt(1)!!.leaveReserved)
         assertEquals(0, walletTransfer.fromGameCalls.size)
         assertEquals(1, eventPublisher.events.count { it is HandBroadcastRequested })
+    }
+
+    @Test
+    fun `핸드 중이라도 참가하지 않은 좌석은 즉시 기립한다`() {
+        val tableId = tableWithHandInProgress()
+        // 핸드는 1·2번 좌석이 참가자다 — 2번에 사용자 2, 3번에 사용자 3 이 앉아 있으면 3번은 핸드와 무관하다.
+        val table = tables.findById(tableId)!!
+        table.sitDown(UserId(2), Chips.of(8_000))
+        table.sitDown(UserId(3), Chips.of(8_000))
+        tables.save(table)
+
+        val result = service.standUp(StandUpCommand(userId = 3))
+
+        assertEquals(StandUpResult.STOOD_UP, result)
+        assertNull(tables.findById(tableId)!!.seatOf(UserId(3)))
+        assertEquals(8_000L, walletTransfer.fromGameCalls.single().amount)
+        // 핸드가 진행 중이므로 브로드캐스트는 핸드를 실어야 한다(null 이면 공개 뷰가 핸드를 잃는다)
+        assertTrue(eventPublisher.events.filterIsInstance<HandBroadcastRequested>().all { it.hand != null })
     }
 
     @Test
@@ -134,8 +153,7 @@ class StandUpServiceTest {
         val table = HoldemTable.reconstitute(
             id = TableId(1),
             name = "테스트 테이블",
-            smallBlind = HoldemTable.SMALL_BLIND,
-            bigBlind = HoldemTable.BIG_BLIND,
+            policy = TestTablePolicy,
             buttonSeatNo = null,
             seats = mapOf(1 to zeroStackSeat),
         )
@@ -149,7 +167,7 @@ class StandUpServiceTest {
 
     @Test
     fun `기립으로 후보가 2명 미만이 되면 다음 핸드 카운트다운이 취소된다`() {
-        val table = tables.save(HoldemTable.create("테스트 테이블"))
+        val table = tables.save(HoldemTable.create("테스트 테이블", TestTablePolicy))
         table.sitDown(UserId(1), Chips.of(8_000))
         table.sitDown(UserId(2), Chips.of(8_000))
         tables.save(table)
@@ -161,7 +179,7 @@ class StandUpServiceTest {
 
     @Test
     fun `기립 후에도 후보가 2명 이상이면 카운트다운을 건드리지 않는다`() {
-        val table = tables.save(HoldemTable.create("테스트 테이블"))
+        val table = tables.save(HoldemTable.create("테스트 테이블", TestTablePolicy))
         table.sitDown(UserId(1), Chips.of(8_000))
         table.sitDown(UserId(2), Chips.of(8_000))
         table.sitDown(UserId(3), Chips.of(8_000))

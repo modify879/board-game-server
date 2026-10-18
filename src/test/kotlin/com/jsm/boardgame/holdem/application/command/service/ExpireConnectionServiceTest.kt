@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
@@ -41,7 +42,7 @@ class ExpireConnectionServiceTest {
 
     @Test
     fun `핸드가 없으면 즉시 기립시키고 null 을 돌려준다`() {
-        val table = tables.save(HoldemTable.create("테스트 테이블"))
+        val table = tables.save(HoldemTable.create("테스트 테이블", TestTablePolicy))
         table.sitDown(UserId(1L), Chips.of(8_000))
         tables.save(table)
 
@@ -54,7 +55,7 @@ class ExpireConnectionServiceTest {
 
     @Test
     fun `핸드가 진행 중이면 즉시 기립시키지 않고 테이블 id 를 돌려준다`() {
-        val table = tables.save(HoldemTable.create("테스트 테이블"))
+        val table = tables.save(HoldemTable.create("테스트 테이블", TestTablePolicy))
         table.sitDown(UserId(1L), Chips.of(8_000))
         val saved = tables.save(table)
         handStore.save(
@@ -64,8 +65,8 @@ class ExpireConnectionServiceTest {
                 buttonSeatNo = 1,
                 smallBlindSeatNo = 1,
                 bigBlindSeatNo = 2,
-                HoldemTable.SMALL_BLIND,
-                HoldemTable.BIG_BLIND,
+                TestTablePolicy.smallBlind,
+                TestTablePolicy.bigBlind,
                 Shuffler { it },
             ),
         )

@@ -1,5 +1,6 @@
 package com.jsm.boardgame.wallet.application.command.service
 
+import com.jsm.boardgame.wallet.application.config.WalletProperties
 import com.jsm.boardgame.wallet.application.command.usecase.RequestWithdrawalCommand
 import com.jsm.boardgame.wallet.domain.exception.InsufficientBalanceException
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
@@ -25,7 +26,7 @@ class RequestWithdrawalServiceTest {
     private val wallets = FakeWalletRepository()
     private val ledger = FakeLedgerEntryRepository()
     private val clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
-    private val service = RequestWithdrawalService(withdrawalRequests, wallets, ledger, clock)
+    private val service = RequestWithdrawalService(withdrawalRequests, wallets, ledger, clock, WalletProperties(1_000, 1_000))
 
     private fun walletWithBalance(userId: Long, balance: Long) {
         wallets.stored[userId] = Wallet.reconstitute(id = WalletId(userId), userId = UserId(userId), balance = Money.of(balance))
@@ -60,5 +61,19 @@ class RequestWithdrawalServiceTest {
             service.request(RequestWithdrawalCommand(1, 5_000, "국민은행", "123456789012", "홍길동", "key"))
         }
         assertEquals(WalletErrorCode.INSUFFICIENT_BALANCE, e.errorCode)
+    }
+
+    @Test
+    fun `최소액은 설정값을 따른다 - 미달이면 지갑을 건드리지 않는다`() {
+        walletWithBalance(1, 10_000)
+        val strict = RequestWithdrawalService(withdrawalRequests, wallets, ledger, clock, WalletProperties(1_000, 5_000))
+
+        val e = assertFailsWith<com.jsm.boardgame.wallet.domain.exception.InvalidWithdrawalAmountException> {
+            strict.request(RequestWithdrawalCommand(1, 4_000, "국민은행", "123456789012", "홍길동", "key"))
+        }
+
+        assertEquals(WalletErrorCode.WITHDRAWAL_AMOUNT_INVALID, e.errorCode)
+        assertEquals(Money.of(10_000), wallets.findByUserId(UserId(1))!!.balance)
+        service.request(RequestWithdrawalCommand(1, 4_000, "국민은행", "123456789012", "홍길동", "key2"))
     }
 }

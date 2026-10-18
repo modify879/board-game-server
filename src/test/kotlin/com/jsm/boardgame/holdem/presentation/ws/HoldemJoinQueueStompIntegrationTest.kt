@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
 import com.jsm.boardgame.holdem.domain.model.Chips
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.UniqueNames
@@ -120,7 +121,7 @@ class HoldemJoinQueueStompIntegrationTest {
     fun `착석 요청이 처리되면 join-queue 구독자가 SEATED 를 받는다`() {
         val (userId, token) = signUpAndLogin()
         fundWallet(userId, 10_000)
-        val tableId = holdemTableRepository.save(HoldemTable.create("t-" + UUID.randomUUID().toString().take(8))).id!!.value
+        val tableId = holdemTableRepository.save(HoldemTable.create("t-" + UUID.randomUUID().toString().take(8), TestTablePolicy)).id!!.value
         val session = connect(token)
         try {
             val frames = subscribeJoinQueue(session, userId)
@@ -187,7 +188,7 @@ class HoldemJoinQueueStompIntegrationTest {
     @Test
     fun `대기열에 있는 사용자가 구독하면 POSITION 스냅샷을 받는다`() {
         val (userId, token) = signUpAndLogin()
-        val tableId = holdemTableRepository.save(HoldemTable.create("t-" + UUID.randomUUID().toString().take(8))).id!!
+        val tableId = holdemTableRepository.save(HoldemTable.create("t-" + UUID.randomUUID().toString().take(8), TestTablePolicy)).id!!
         joinQueue.enqueue(tableId, UserId(userId), false, Chips.of(8_000))
         val session = connect(token)
         try {
@@ -220,7 +221,7 @@ class HoldemJoinQueueStompIntegrationTest {
     @Test
     fun `같은 사용자의 두 번째 세션이 구독하면 스냅샷은 그 세션에만 간다`() {
         val (userId, token) = signUpAndLogin()
-        val tableId = holdemTableRepository.save(HoldemTable.create("t-" + UUID.randomUUID().toString().take(8))).id!!
+        val tableId = holdemTableRepository.save(HoldemTable.create("t-" + UUID.randomUUID().toString().take(8), TestTablePolicy)).id!!
         val first = connect(token)
         var second: StompSession? = null
         try {

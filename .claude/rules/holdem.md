@@ -13,6 +13,8 @@ paths: ["**/holdem/**"]
   `/user/queue/...` 에는 `SeatPrivateView` 만 흐르게 해 규칙 6을 "좌석마다 루프 돌 것을 기억하라" 가 아니라
   **컴파일러**로 보장한다. 한 타입에 nullable 홀카드 필드를 두고 마스킹으로 비우는 방식은 쓰지 않는다 —
   빠뜨리면 패가 새고, 빠뜨렸는지는 런타임에만 드러난다
+- **테이블 정책(블라인드·바이인 범위)은 생성 시점의 설정(`app.holdem.table-policy.*`, 기본 100/200·20~100BB)을 `TablePolicy` 로 테이블에 고정한다.** 설정을 바꿔도 열린 테이블은 판 도중 규칙이 바뀌지 않는다. 컬럼은 `holdem_tables` 의 `small_blind`·`big_blind`·`min_buy_in_big_blinds`·`max_buy_in_big_blinds`. 상수로 블라인드·바이인을 쓰지 않고 항상 `table.policy` 를 거친다
+- **참가 대기열 길이는 `app.holdem.join-queue-max-length`(기본 50)로 제한한다.** 넘으면 `JOIN_QUEUE_FULL` 409. 이미 대기 중인 사용자의 재요청은 큐가 가득 차도 `ALREADY_SEATED` 를 유지한다(중복 검사가 먼저)
 - **방/좌석은 holdem 안에 둔다.** 별도 컨텍스트로 빼지 않는다
 - **핸드 히스토리는 결과 요약만 남긴다(하우스 룰 11, 액션 로그 없음).** `HandSettler.settle` 이 같은 트랜잭션에서 `HandHistory` 포트로 쓴다.
   취소된 핸드(`CancelHandService`)는 남기지 않는다. 남의 패는 `shown` 일 때만 보이게 하는 마스킹은 `HandHistoryQueryService` 가 한다.
@@ -35,7 +37,8 @@ paths: ["**/holdem/**"]
   **그 예외 밖에서 카드 성격의 필드를 추가하는 순간 관전이 곧 정보 유출이 된다**
 - **올인으로 더 베팅할 수 없으면 남은 보드를 한 번에 깔지 않는다.** `RunoutTimer` 가 `runout-step-delay` 간격으로 한 스트리트씩
   진행한다 — 공개 → 플랍/턴/리버 → 쇼다운 순(사용자 결정)
-- **퇴장 예약(핸드 뒤 일어나기, 하우스 룰 13)은 DB 에 저장한다.** `DELETE /api/holdem/seat` 가 핸드 중이면 `HandInProgressException` 대신 좌석의 `leaveReserved`(`holdem_seats.leave_after_hand`)를
+- **"핸드가 진행 중인가" 는 `Hand?.isInProgress`(핸드가 있고 결과가 없다) / `HandStore.findInProgress` 하나로 묻는다.** 정산·액션·복원처럼 핸드 객체가 필요한 곳만 `find` 를 쓴다. 판단 지점마다 `find != null` 과 `!isFinished` 를 따로 쓰지 않는다
+- **퇴장 예약(핸드 뒤 일어나기, 하우스 룰 13)은 DB 에 저장한다.** `DELETE /api/holdem/seat` 가 핸드 중이면(그 좌석이 핸드 참가자일 때만 — 핸드 도중 앉아 참가하지 않은 좌석은 핸드와 무관하므로 즉시 기립 204) `HandInProgressException` 대신 좌석의 `leaveReserved`(`holdem_seats.leave_after_hand`)를
   켜고 **202**(멱등), 핸드가 없으면 즉시 기립 204. 실행은 `LeaveReservations.standUpAll` — `HandSettler.settle`(0칩 기립 뒤, 후보 수 판단·`JoinRequestsDue` 앞)과
   `CancelHandService` 가 부른다. StandUpService 와 같이 재착석 의무 기록·지갑 환급을 한다. 좌석이 어떤 이유로든 사라지면 예약도 함께 사라진다.
   예약에는 종류가 있다 — `DELETE /api/holdem/seat?after=SPECTATE|LEAVE`(기본 SPECTATE, 잘못된 값은 400 `REQUEST_INVALID`). 서버 실행은 종류와 무관하고 클라이언트가 기립 뒤 행동(관전 유지 / 방 목록 이동)을 정하는 데만 쓴다.
@@ -69,13 +72,13 @@ paths: ["**/holdem/**"]
   그 핸드가 끝날 때까지 그 좌석 번호에는 앉을 수 없다(정산이 새 착석자를 덮어쓴다)
 - **바이인 자동 합산은 없다.** 지갑에 들어온 돈(충전 승인·출금 취소/반려·관리자 증액)은 지갑에만 남고
   `WalletCredited` 를 듣는 쪽은 holdem 에 없다. 스택에 넣는 길은 두 가지뿐이다 — 착석 때의 바이인과 핸드 사이의 **칩 추가**(`AddChipsService`:
-  핸드 진행 중이면 `HAND_IN_PROGRESS`, 결과 스택이 100BB 를 넘으면 `CHIP_ADD_OUT_OF_RANGE`, 테이블 → 지갑 락 순서로 이체한 뒤 공개 뷰를 브로드캐스트).
+  핸드 진행 중이면 `HAND_IN_PROGRESS`, 결과 스택이 테이블 정책의 최대 바이인(기본 100BB)을 넘으면 `CHIP_ADD_OUT_OF_RANGE`, 테이블 → 지갑 락 순서로 이체한 뒤 공개 뷰를 브로드캐스트).
   범위는 `HoldemTable.buyInRange(obligation)` 하나가 정한다 — 도메인 `sitDown` 은 하한만 보고 상한은 `SeatRequester` 가 본다. 잔액이 바이인보다 적으면
   `INSUFFICIENT_BALANCE`(wallet 과 같은 코드 문자열 — 클라이언트가 하나만 처리한다). 대기열 항목(`JoinQueueEntry`)이 고른 금액을 들고 있고
   `AdmitJoinRequestService` 가 정확히 그만큼만 `WalletTransfer.toGame` 으로 옮긴다
 - **재착석 의무(ratholing 방지, 하우스 룰 7)**: `RecentDepartures` 는 `holdem_recent_departure` 에 사용자당 1행으로 저장한다 — 기립과 같은 트랜잭션에 커밋되고,
   만료된 행은 지우지 않고 읽을 때 무시한다. 기립(`StandUpService`)·만료 폴드 기립(`ExpireTurnService`)은 돌려받은 금액을, 0칩 자동 기립(`HandSettler`)은 0(이전 의무를 지운다)을 덮어쓴다.
-  의무는 `buyInRange` 하한을 올리고 100BB 상한보다 우선한다
+  의무는 `buyInRange` 하한을 올리고 최대 바이인 상한보다 우선한다
 - **착석은 항상 대기열을 거친다 — 핸드 진행 여부와 무관하다.** 좌석은 고르지 않는다: 가장 낮은 번호의 빈 좌석에
   FIFO 순서대로 앉힌다. 대기열은 인메모리(`JoinQueue`)다 — 좌석 배정 전이라 돈이 걸려 있지 않고, 재시작하면
   비워져도 안전하다. 트리거는 셋: 대기열 삽입 커밋(SitDownService), 핸드 정산(HandSettler),

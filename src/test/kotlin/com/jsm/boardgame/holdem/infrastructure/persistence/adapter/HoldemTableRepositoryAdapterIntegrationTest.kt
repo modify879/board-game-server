@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.infrastructure.persistence.adapter
 
 import com.jsm.boardgame.holdem.domain.model.LeaveReservation
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.TestcontainersConfiguration
@@ -9,6 +10,7 @@ import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.TablePolicy
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.infrastructure.persistence.entity.HoldemSeatJpaRepository
@@ -20,6 +22,7 @@ import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
+import org.springframework.jdbc.core.JdbcTemplate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -57,7 +60,7 @@ class HoldemTableRepositoryAdapterIntegrationTest {
     @Test
     fun `테이블 저장 후 복원 - 좌석 포함, buttonSeatNo 는 null`() {
         val userId = uniqueUserId()
-        val table = HoldemTable.create("t1")
+        val table = HoldemTable.create("t1", TestTablePolicy)
         table.sitDown(userId, buyIn)
 
         val saved = tables.save(table)
@@ -73,8 +76,8 @@ class HoldemTableRepositoryAdapterIntegrationTest {
 
     @Test
     fun `existsOpen 은 열린 테이블만 true 로 답하고 닫혔거나 없는 테이블은 false 다`() {
-        val open = tables.save(HoldemTable.create("open"))
-        val closed = HoldemTable.create("closed")
+        val open = tables.save(HoldemTable.create("open", TestTablePolicy))
+        val closed = HoldemTable.create("closed", TestTablePolicy)
         closed.close(java.time.Instant.now())
         val closedSaved = tables.save(closed)
 
@@ -86,7 +89,7 @@ class HoldemTableRepositoryAdapterIntegrationTest {
     @Test
     fun `테이블 저장 후 복원 - buttonSeatNo 값이 있는 경우`() {
         val userId = uniqueUserId()
-        val table = HoldemTable.create("t2")
+        val table = HoldemTable.create("t2", TestTablePolicy)
         table.sitDown(userId, buyIn)
         table.placeButtonAtFirstSeat()
 
@@ -99,7 +102,7 @@ class HoldemTableRepositoryAdapterIntegrationTest {
     @Test
     fun `findByUserId 가 사용자가 앉은 테이블을 찾는다`() {
         val userId = uniqueUserId()
-        val table = HoldemTable.create("t3")
+        val table = HoldemTable.create("t3", TestTablePolicy)
         table.sitDown(userId, buyIn)
         val saved = tables.save(table)
 
@@ -111,7 +114,7 @@ class HoldemTableRepositoryAdapterIntegrationTest {
     @Test
     fun `기립 후 해당 좌석 DB 행이 삭제된다`() {
         val userId = uniqueUserId()
-        val table = HoldemTable.create("t4")
+        val table = HoldemTable.create("t4", TestTablePolicy)
         table.sitDown(userId, buyIn)
         val saved = tables.save(table)
 
@@ -126,7 +129,7 @@ class HoldemTableRepositoryAdapterIntegrationTest {
     @Test
     fun `스택 변경이 UPDATE 로 반영된다`() {
         val userId = uniqueUserId()
-        val table = HoldemTable.create("t5")
+        val table = HoldemTable.create("t5", TestTablePolicy)
         table.sitDown(userId, buyIn)
         val saved = tables.save(table)
 
@@ -140,7 +143,7 @@ class HoldemTableRepositoryAdapterIntegrationTest {
     @Test
     fun `퇴장 예약 플래그가 저장되고 복원되며 취소도 UPDATE 로 반영된다`() {
         val userId = uniqueUserId()
-        val table = HoldemTable.create("t-leave")
+        val table = HoldemTable.create("t-leave", TestTablePolicy)
         table.sitDown(userId, buyIn)
         val saved = tables.save(table)
         assertFalse(saved.seatOf(userId)!!.leaveReserved)
@@ -161,15 +164,41 @@ class HoldemTableRepositoryAdapterIntegrationTest {
     @Test
     fun `uk_holdem_seats_user 위반은 AlreadySeatedException 으로 번역된다`() {
         val userX = uniqueUserId()
-        val table1 = HoldemTable.create("t6")
+        val table1 = HoldemTable.create("t6", TestTablePolicy)
         table1.sitDown(userX, buyIn)
         tables.save(table1)
 
-        val table2 = tables.save(HoldemTable.create("t7"))
+        val table2 = tables.save(HoldemTable.create("t7", TestTablePolicy))
         table2.sitDown(userX, buyIn)
 
         val e = assertFailsWith<AlreadySeatedException> { tables.save(table2) }
         assertEquals(HoldemErrorCode.ALREADY_SEATED, e.errorCode)
     }
 
+
+    @Autowired
+    private lateinit var jdbc: JdbcTemplate
+
+    @Test
+    fun `테이블은 생성 시점의 정책을 저장하고 그대로 복원한다`() {
+        val policy = TablePolicy.of(500, 1_000, 10, 50)
+
+        val saved = tables.save(HoldemTable.create("policy", policy))
+        val found = tables.findById(saved.id!!)
+
+        assertEquals(policy, found?.policy)
+    }
+
+    @Test
+    fun `정책 컬럼이 생기기 전의 기존 행은 이전 상수값(20BB 에서 100BB)으로 복원된다`() {
+        // ddl-auto update 가 새 컬럼을 default 로 채운 상태를 재현한다 — 두 컬럼을 빼고 넣는다.
+        val id = jdbc.queryForObject(
+            "insert into holdem_tables (name, small_blind, big_blind) values ('legacy', 100, 200) returning id",
+            Long::class.java,
+        )!!
+
+        val found = tables.findById(TableId(id))
+
+        assertEquals(TablePolicy.of(100, 200, 20, 100), found?.policy)
+    }
 }

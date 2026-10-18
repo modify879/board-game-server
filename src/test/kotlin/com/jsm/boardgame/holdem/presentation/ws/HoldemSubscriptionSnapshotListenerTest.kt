@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
 import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
@@ -249,7 +250,7 @@ class HoldemSubscriptionSnapshotListenerTest {
     fun `테이블 토픽 스냅샷은 인바운드 스레드에서 읽지 않고 실행기에서 seq 와 상태를 함께 읽는다`() {
         val sequence = TableViewSequence()
         sequence.next(table)
-        val stored = HoldemTable.create("t").apply { sitDown(user, Chips.of(10_000)) }
+        val stored = HoldemTable.create("t", TestTablePolicy).apply { sitDown(user, Chips.of(10_000)) }
         var current: HoldemTable? = stored
         val tables = Proxy.newProxyInstance(
             HoldemTableRepository::class.java.classLoader, arrayOf(HoldemTableRepository::class.java),

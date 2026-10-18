@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
+import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.command.usecase.CancelLeaveReservationCommand
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.HandStore
@@ -30,7 +31,7 @@ class CancelLeaveReservationServiceTest {
     private val service = CancelLeaveReservationService(tables, CancelLeaveFakeHandStore(), ApplicationEventPublisher { events += it })
 
     private fun reservedTable(): TableId {
-        val table = tables.save(HoldemTable.create("테스트 테이블"))
+        val table = tables.save(HoldemTable.create("테스트 테이블", TestTablePolicy))
         table.sitDown(UserId(1), Chips.of(8_000))
         table.reserveLeave(UserId(1), LeaveReservation.SPECTATE)
         return tables.save(table).id!!

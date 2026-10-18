@@ -11,7 +11,8 @@ import com.jsm.boardgame.holdem.domain.model.TableId
  */
 interface JoinQueue {
     /** userId 는 테이블 전역에서 한 번에 하나의 대기열에만 있을 수 있다 — 이미 대기 중이면
-     *  [AlreadySeatedException] 을 던진다(구현이 원자적으로 검사+삽입한다). 1-based 대기 순번을 돌려준다. */
+     *  [AlreadySeatedException] 을 던진다(구현이 원자적으로 검사+삽입한다). 1-based 대기 순번을 돌려준다.
+     *  테이블 대기열이 상한에 닿았으면 [com.jsm.boardgame.holdem.application.exception.JoinQueueFullException]. */
     fun enqueue(tableId: TableId, userId: UserId, postBlindImmediately: Boolean, buyIn: Chips): Int
 
     fun peekHead(tableId: TableId): JoinQueueEntry?

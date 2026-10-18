@@ -5,6 +5,7 @@ import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.LeaveReservation
 import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.isInProgress
 import java.time.Duration
 
 /**
@@ -53,7 +54,7 @@ fun publicViewOf(
     }
     return TablePublicView(
         tableId = tableId.value,
-        handInProgress = hand != null && !hand.isFinished,
+        handInProgress = hand.isInProgress,
         street = hand?.street?.name,
         board = hand?.board?.map { it.toString() } ?: lastResult?.board ?: emptyList(),
         pot = hand?.potTotal()?.amount ?: 0L,
@@ -64,7 +65,7 @@ fun publicViewOf(
         revealedHands = hand?.revealedSeatNos?.sorted()
             ?.map { RevealedHandView(it, hand.holeCardsOf(it).map { c -> c.toString() }) } ?: emptyList(),
         nextHandInMs = nextHandRemaining?.toMillis(),
-        turnRemainingMs = if (hand != null && !hand.isFinished && hand.toActSeatNo != null) turnRemaining?.toMillis() else null,
+        turnRemainingMs = if (hand.isInProgress && hand?.toActSeatNo != null) turnRemaining?.toMillis() else null,
         seq = seq,
     )
 }
