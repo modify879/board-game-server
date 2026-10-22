@@ -1,4 +1,4 @@
-package com.jsm.boardgame.holdem.qa
+package com.jsm.boardgame.holdem.infrastructure.shuffle
 
 import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.port.NewHandShuffler
@@ -15,8 +15,8 @@ import org.springframework.transaction.event.TransactionalEventListener
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * 테이블의 "다음 핸드 하나"의 홀카드·보드를 고정하는 QA 전용 셔플러 선택기. `src/qa` 소스셋에만 있어
- * 운영 jar 에 들어가지 않는다. 진행 중 핸드 복원(`HandInProgressStoreAdapter`)은 이 경로를 타지 않는다.
+ * 테이블의 "다음 핸드 하나"의 홀카드·보드를 고정하는 QA 전용 셔플러 선택기. `@Profile("qa")` 로만 켜진다
+ * (운영 기동 거부는 `QaProfileGuard`). 진행 중 핸드 복원(`HandInProgressStoreAdapter`)은 이 경로를 타지 않는다.
  *
  * 덱 위치 규칙(참가자 n명, 딜 순서 = [dealOrder]):
  * - 딜 순서는 버튼 다음 참가 좌석부터 좌석 번호 오름차순으로 순환하며 버튼이 마지막이다(헤즈업이면 BB, 버튼 순).

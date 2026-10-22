@@ -1,4 +1,4 @@
-package com.jsm.boardgame.holdem.qa
+package com.jsm.boardgame.holdem.infrastructure.shuffle
 
 import com.jsm.boardgame.holdem.domain.model.Card
 import com.jsm.boardgame.holdem.domain.model.Deck

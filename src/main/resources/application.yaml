@@ -17,6 +17,12 @@ spring:
       data-source-properties:
         options: "-c lock_timeout=3s -c statement_timeout=10s -c idle_in_transaction_session_timeout=30s"
 
+  devtools:
+    # :8080 과 qa(:8081) 서버를 같은 트리에서 동시에 띄우므로 LiveReload 포트(35729) 충돌을 끈다.
+    # 운영 jar 에는 devtools 가 없어 이 설정은 무시된다.
+    livereload:
+      enabled: false
+
   jackson:
     deserialization:
       # 300.7 같은 소수를 정수 필드(칩·금액)에 조용히 잘라 넣지 않고 거부한다.
