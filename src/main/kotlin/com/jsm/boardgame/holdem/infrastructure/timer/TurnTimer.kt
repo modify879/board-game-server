@@ -33,8 +33,9 @@ import java.util.concurrent.atomic.AtomicLong
  * 포트 인터페이스는 두지 않는다(구현 하나에 소비자 0인 인터페이스가 된다).
  *
  * 재시작하면 예약이 사라지지만 문제가 되지 않는다. 복구가 끝나면 [HandBroadcastRequested] 가 다시
- * 발행되고 이 타이머가 거기서 새로 예약을 건다 — 계획서의 "복구 후 턴 타이머는 남은 시간을
- * 이어받지 않고 새로 시작한다" 가 그대로 지켜진다.
+ * 발행되고 이 타이머가 거기서 새로 예약을 건다 — 복구 후 턴 타이머는 남은 시간을
+ * 이어받지 않고 새로 시작한다. 턴 제한은 설정(`app.holdem.turn-timeout`)이며 테이블별 값이 필요해지면
+ * TablePolicy 로 옮길 자리다.
  */
 @Component
 class TurnTimer(
@@ -49,7 +50,7 @@ class TurnTimer(
 
     private val scheduled = ConcurrentHashMap<TableId, ScheduledExpiry>()
 
-    // 테이블별 단조 증가 토큰. cancel() 은 최선 노력이라 스레드풀에서 이미 실행이 시작된
+    // 테이블별 단조 증가 토큰. cancel() 은 최선 노력이라 이미 실행이 시작된
     // 작업은 못 멈춘다 - 예약 시점의 토큰을 캡처해두고, 깨어났을 때 현재 토큰과 다르면
     // (그 사이 새 이벤트가 다시 예약했다는 뜻이니) 낡은 실행으로 보고 무시한다.
     private val tokens = ConcurrentHashMap<TableId, AtomicLong>()

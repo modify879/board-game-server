@@ -10,7 +10,7 @@ import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
-/** 진행 중인 핸드에 앉아 있는 동안은 로비를 볼 수 없다 — 계획서의 안전망(자리를 비운 채 다른 테이블을 훑지 못하게). */
+/** 진행 중인 핸드에 앉아 있는 동안은 로비를 볼 수 없다 — 자리를 비운 채 다른 테이블을 훑다 차례를 놓치는 것을 막는 안전망이다. */
 @Service
 @Transactional(readOnly = true)
 class HoldemTableQueryService(

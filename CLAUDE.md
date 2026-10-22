@@ -16,6 +16,7 @@ PostgreSQL + Redis / 단일 Gradle 모듈.
 ```
 
 qa 프로필은 `app_environment` 표식이 `qa` 인 DB 에서만 기동한다(`QaProfileGuard`). 표식은 compose-qa 초기화 SQL 이 만든다.
+`GET /api/server-info` 는 인증 없이 열려 있고 가드를 통과한 QA 서버만 `environment=qa` 를 돌려준다. qa 프로필에서만 QA 덱 고정 API(`POST /api/admin/qa/holdem/tables/{tableId}/next-deck`, ADMIN)가 켜진다.
 
 Docker 가 떠 있어야 한다. 접속 정보는 `application.yaml` 에 적지 않는다 — Compose 지원이 연결한다.
 

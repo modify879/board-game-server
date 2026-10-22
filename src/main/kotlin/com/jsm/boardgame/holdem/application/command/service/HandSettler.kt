@@ -29,7 +29,7 @@ import org.springframework.stereotype.Component
  *
  * 참가 좌석은 핸드가 소유한다 — 핸드 도중 새로 앉은 좌석은 다음 핸드부터 참가한다.
  *
- * hand.seatNos 중 이미 점유가 풀린 좌석은 ExpireTurnService 가 30초 무응답 폴드로 즉시 기립시킨
+ * hand.seatNos 중 이미 점유가 풀린 좌석은 ExpireTurnService 가 차례 시간 초과 폴드로 즉시 기립시킨
  * 좌석뿐이다 — 그 좌석은 이 핸드가 끝날 때까지 스택이 더 바뀌지 않으므로 정산에서 건너뛴다.
  * 폴드가 아닌데 점유가 풀려 있으면 불변식 위반이다(HoldemTable.applyStacks 의 점유 가드는
  * 그대로 둔다 — 여기서는 넘길 대상 자체를 걸러낸다).

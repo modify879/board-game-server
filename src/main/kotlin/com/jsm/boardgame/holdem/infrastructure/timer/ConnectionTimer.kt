@@ -37,15 +37,15 @@ import java.util.concurrent.atomic.AtomicLong
  * 퇴장시키지 않고 감시를 다시 건다(going south 방지, 핸드가 끝난 뒤의 만료가 퇴장시킨다).
  *
  * [TurnTimer] 와 예약/토큰 패턴은 같다 - TaskScheduler 로 예약하고, 단조 증가 토큰으로 cancel()이
- * 못 막은 stale 실행을 걸러낸다. 상수는 공유하지 않는다: 턴 타이머는 "차례가 왔는데 응답이 없다"(30초)를,
- * 이 타이머는 "자리만 차지하고 사라졌다"(3분)를 재고, 만료 동작(폴드 vs 퇴장)도 다르다.
+ * 못 막은 stale 실행을 걸러낸다. 상수는 공유하지 않는다: 턴 타이머는 "차례가 왔는데 응답이 없다"(`turn-timeout`, 기본 30초)를,
+ * 이 타이머는 "자리만 차지하고 사라졌다"(`connection-timeout`, 기본 3분)를 재고, 만료 동작(폴드 vs 퇴장)도 다르다.
  *
  * 재시작하면 예약이 사라지지만, 부팅 시 앉아 있는 사용자 전원에게 감시를 다시 건다.
  * 재시작 후 접속하지 않은 사람에게는 [SessionDisconnectEvent] 가 영영 오지 않으므로, 그 사람을
  * 치우는 경로가 이 부팅 스윕뿐이다. Tomcat 은 Ready 전에 접속을 받으므로, 그 사이 먼저 재접속한
  * 사용자를 다시 감시하면 연결된 채 기립되어 이미 연결된 사용자는 뺀다.
  *
- * 복구 유예 중인 테이블([HandRecovery] 가 진행 중 핸드를 복구하는 3분 동안)의 참가자는 이 부팅
+ * 복구 유예 중인 테이블([HandRecovery] 가 진행 중 핸드를 복구하는 `recovery-timeout`(기본 3분) 동안)의 참가자는 이 부팅
  * 시딩에서 빠져야 한다 - 서버가 죽어있던 시간은 플레이어 책임이 아니다. pull 방식
  * (`HandRecovery.isAwaitingRecovery(userId)` 조회)은 복구가 끝났을 때 안 돌아온 사람에게 감시를
  * 새로 걸어야 하는 요구와 합치면(`HandRecovery` 가 이 컴포넌트를 다시 불러야 한다) 순환 빈
@@ -113,7 +113,7 @@ class ConnectionTimer(
             }
         }
 
-        // 다른 탭·기기가 살아 있으면 연결이 끊긴 게 아니다 - DISCONNECTED 표시도 3분 퇴장 타이머도 걸지 않는다.
+        // 다른 탭·기기가 살아 있으면 연결이 끊긴 게 아니다 - DISCONNECTED 표시도 퇴장 타이머도 걸지 않는다.
         if (hasOtherSession) return
         // 복구 유예 중에는 이 타이머가 돌지 않는다 - 서버 다운타임은 플레이어 책임이 아니다.
         if (userId in suspended) return
@@ -189,7 +189,7 @@ class ConnectionTimer(
         if (handInProgressTableId != null && tokens[userId]?.get() == token && !userConnections.isConnected(userId)) schedule(userId)
     }
 
-    /** 실패한 만료를 3분 감시로 되돌린다. 그 사이 재접속했거나 감시가 바뀌었으면(토큰·연결 확인) 건드리지 않는다. */
+    /** 실패한 만료를 연결 감시로 되돌린다. 그 사이 재접속했거나 감시가 바뀌었으면(토큰·연결 확인) 건드리지 않는다. */
     private fun rearmWatch(userId: UserId, token: Long?) {
         if (tokens[userId]?.get() != token || userConnections.isConnected(userId)) return
         try {

@@ -66,8 +66,8 @@ tasks.withType<Test> {
     useJUnitPlatform()
     environment("APP_JWT_SECRET", localJwtSecret)
     // holdem 통합 테스트가 실제 10초 다음-핸드 타이머의 우연한 발화를 피하려고 개별로
-    // 되돌리던 값을 여기서 테스트 전역 기본값으로 준다(캐시 키에는 안 들어간다 — systemProperty
-    // 지 @TestPropertySource 가 아니다). 컨텍스트 캐시 키를 하나 줄이는 효과도 있다.
+    // 되돌리던 값을 여기서 테스트 전역 기본값으로 준다(systemProperty 라 @TestPropertySource 와 달리
+    // 캐시 키에 안 들어간다). 컨텍스트 캐시 키를 하나 줄이는 효과도 있다.
     systemProperty("app.holdem.next-hand-delay", "1h")
     systemProperty("app.holdem.runout-step-delay", "1h")
     // HandSimulationTest 의 반복 횟수·단일 시드 재생. gradle 은 -D 를 테스트 JVM 으로 넘기지 않는다.

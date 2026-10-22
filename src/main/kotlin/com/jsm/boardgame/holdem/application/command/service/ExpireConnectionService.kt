@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * 연결이 3분 넘게 끊긴 사용자를 처리한다. 호출자는 사용자가 아니라
+ * 연결이 `connection-timeout`(기본 3분)을 넘게 끊긴 사용자를 처리한다. 호출자는 사용자가 아니라
  * [com.jsm.boardgame.holdem.infrastructure.timer.ConnectionTimer] 뿐이라, 미착석이면 조용히
  * 끝낸다(알릴 대상이 없다).
  *
