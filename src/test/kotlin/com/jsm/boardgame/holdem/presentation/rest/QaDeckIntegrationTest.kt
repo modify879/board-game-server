@@ -156,6 +156,13 @@ class QaDeckIntegrationTest {
     }
 
     @Test
+    fun `qa 프로필에서는 서버 정보가 qa 다`() {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/server-info"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.environment").value("qa"))
+    }
+
+    @Test
     fun `잘못된 카드 코드나 중복이나 범위 밖 좌석은 400 REQUEST_INVALID 다`() {
         val (_, adminToken) = signUpAndLogin(admin = true)
         listOf(

@@ -15,7 +15,7 @@ PostgreSQL + Redis / 단일 Gradle 모듈.
 ./gradlew bootRun --args='--spring.profiles.active=qa'   # QA 서버 :8081 (별도 DB, 덱 고정 API)
 ```
 
-qa 프로필은 로컬 DB 에서만 기동한다(운영에서 켜지면 기동 거부 — `QaProfileGuard`).
+qa 프로필은 `app_environment` 표식이 `qa` 인 DB 에서만 기동한다(`QaProfileGuard`). 표식은 compose-qa 초기화 SQL 이 만든다.
 
 Docker 가 떠 있어야 한다. 접속 정보는 `application.yaml` 에 적지 않는다 — Compose 지원이 연결한다.
 

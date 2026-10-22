@@ -11,6 +11,7 @@ services:
       - "5432"
     volumes:
       - postgres-data:/var/lib/postgresql
+      - ./docker/qa-postgres-init/01-app-environment.sql:/docker-entrypoint-initdb.d/01-app-environment.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U board_game -d board_game"]
       interval: 5s

@@ -5,6 +5,7 @@ import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.context.annotation.Bean
 import org.testcontainers.postgresql.PostgreSQLContainer
+import org.testcontainers.utility.MountableFile
 
 /**
  * `spring-boot-docker-compose` 는 developmentOnly 라 테스트에서는 동작하지 않는다.
@@ -33,7 +34,13 @@ class TestcontainersConfiguration {
 
     companion object {
         val postgres: PostgreSQLContainer by lazy {
-            PostgreSQLContainer("postgres:18-alpine").apply { start() }
+            PostgreSQLContainer("postgres:18-alpine")
+                // qa 프로필 테스트(QaProfileGuard)가 요구하는 표식. 기본 프로필은 이 테이블을 읽지 않아 영향이 없다.
+                .withCopyFileToContainer(
+                    MountableFile.forHostPath("docker/qa-postgres-init/01-app-environment.sql"),
+                    "/docker-entrypoint-initdb.d/01-app-environment.sql",
+                )
+                .apply { start() }
         }
         val redis: RedisContainer by lazy {
             RedisContainer("redis:8-alpine").apply { start() }

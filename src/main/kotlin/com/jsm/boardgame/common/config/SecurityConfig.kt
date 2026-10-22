@@ -63,6 +63,7 @@ class SecurityConfig {
                     // 시작되지 못한다. 실제 인증은 CONNECT STOMP 프레임에서
                     // StompAuthenticationInterceptor 가 하고, 구독 인가는 별도 인터셉터가 한다.
                     .requestMatchers("/ws/**").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/server-info").permitAll()
                     .requestMatchers("/api/admin/**").hasRole("ADMIN")
                     .anyRequest().authenticated()
             }
