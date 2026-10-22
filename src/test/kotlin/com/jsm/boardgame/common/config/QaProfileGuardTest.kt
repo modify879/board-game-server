@@ -6,37 +6,34 @@ import kotlin.test.assertTrue
 
 class QaProfileGuardTest {
 
-    private val local = "jdbc:postgresql://localhost:5433/board"
-
-    private fun v(profiles: List<String> = listOf("qa"), url: String = local, env: String? = null) =
-        QaProfileGuard.violations(profiles, url, env)
+    private fun v(rows: Result<List<String>>, profiles: List<String> = listOf("qa")) =
+        QaProfileGuard.violations(profiles, rows)
 
     @Test
-    fun `로컬 DB 이고 운영 표시가 없으면 통과한다`() {
-        assertEquals(emptyList(), v())
-        assertEquals(emptyList(), v(url = "jdbc:postgresql://127.0.0.1:5432/x?a=b", env = "local"))
-        assertEquals(emptyList(), v(url = "jdbc:postgresql://[::1]:5432/x"))
-        assertEquals(emptyList(), v(env = " LOCAL "))
+    fun `표식이 정확히 한 행이고 qa 이면 통과한다`() {
+        assertEquals(emptyList(), v(Result.success(listOf("qa"))))
     }
 
     @Test
-    fun `운영 프로필이 함께 켜지면 거부한다`() {
-        listOf("prod", "Production", "live", "prd").forEach { assertTrue(v(listOf("qa", it)).isNotEmpty(), it) }
+    fun `테이블이 없거나 조회가 실패하면 거부한다`() {
+        assertTrue(v(Result.failure(RuntimeException("relation \"app_environment\" does not exist"))).isNotEmpty())
     }
 
     @Test
-    fun `DB 호스트가 로컬이 아니거나 읽을 수 없으면 거부한다`() {
-        listOf(
-            "jdbc:postgresql://db.example.com:5432/x",
-            "jdbc:postgresql://10.0.0.5/x",
-            "jdbc:postgresql://localhost.evil.com/x",
-            "jdbc:postgresql://localhost:5432,db.example.com:5432/x",
-            "garbage",
-        ).forEach { assertTrue(v(url = it).isNotEmpty(), it) }
+    fun `행이 없거나 여러 개면 거부한다`() {
+        assertTrue(v(Result.success(emptyList())).isNotEmpty())
+        assertTrue(v(Result.success(listOf("qa", "qa"))).isNotEmpty())
     }
 
     @Test
-    fun `APP_ENV 가 설정돼 있고 local 이 아니면 거부한다`() {
-        listOf("prod", "staging", "").forEach { assertTrue(v(env = it).isNotEmpty(), "'$it'") }
+    fun `값이 qa 가 아니면 거부한다`() {
+        assertTrue(v(Result.success(listOf("live"))).isNotEmpty())
+    }
+
+    @Test
+    fun `운영 프로필이 함께 켜지면 표식이 qa 여도 거부한다`() {
+        listOf("prod", "Production", "live", "prd").forEach {
+            assertTrue(v(Result.success(listOf("qa")), listOf("qa", it)).isNotEmpty(), it)
+        }
     }
 }
