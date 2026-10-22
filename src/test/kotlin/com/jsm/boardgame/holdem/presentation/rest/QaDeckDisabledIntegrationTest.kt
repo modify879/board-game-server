@@ -1,4 +1,4 @@
-package com.jsm.boardgame.holdem.qa
+package com.jsm.boardgame.holdem.presentation.rest
 
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.TestcontainersConfiguration

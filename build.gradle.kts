@@ -1,5 +1,3 @@
-import java.util.zip.ZipFile
-
 plugins {
     kotlin("jvm") version "2.3.21"
     kotlin("plugin.spring") version "2.3.21"
@@ -39,6 +37,7 @@ dependencies {
 
     runtimeOnly("org.postgresql:postgresql")
     developmentOnly("org.springframework.boot:spring-boot-docker-compose")
+    developmentOnly("org.springframework.boot:spring-boot-devtools")
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-starter-websocket-test")
@@ -88,48 +87,3 @@ tasks.register<Test>("unitTest") {
 tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
     environment("APP_JWT_SECRET", localJwtSecret)
 }
-
-// QA 전용 코드(src/qa). 별도 소스셋이라 bootJar·jar 에 들어가지 않는다 — 운영 jar 에 실제 입출금과 연결된
-// 게임의 덱 고정 API 가 존재하면 안 된다. 기동은 `./gradlew qaBootRun`.
-val qa: SourceSet by sourceSets.creating
-configurations["qaImplementation"].extendsFrom(configurations.implementation.get())
-configurations["qaRuntimeOnly"].extendsFrom(configurations.runtimeOnly.get())
-dependencies {
-    "qaImplementation"(sourceSets.main.get().output)
-    // qa 컨트롤러·셔플러를 단위·통합 테스트에서 쓴다. 테스트 클래스패스에 있어도 @Profile("qa") 로 기본은 안 뜬다.
-    testImplementation(qa.output)
-}
-
-tasks.register<org.springframework.boot.gradle.tasks.run.BootRun>("qaBootRun") {
-    description = "qa 프로필 + 덱 고정 API 로 서버를 띄운다."
-    group = "application"
-    mainClass.set(tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun").flatMap { it.mainClass })
-    classpath = qa.runtimeClasspath + configurations.developmentOnly.get()
-    systemProperty("spring.profiles.active", "qa")
-    environment("APP_JWT_SECRET", localJwtSecret)
-}
-
-// 운영 jar(bootJar·plain jar)에 qa 소스셋 출력물이 하나라도 섞이면 빌드를 실패시킨다. 판정은 qa 출력물의 상대 경로 기준.
-val verifyNoQaInJars = tasks.register("verifyNoQaInJars") {
-    group = "verification"
-    description = "bootJar·jar 에 QA 전용 클래스·리소스가 없는지 검사한다."
-    dependsOn(tasks.bootJar, tasks.jar, qa.classesTaskName)
-    val qaTree = qa.output.asFileTree
-    val jars = listOf(tasks.bootJar, tasks.jar).map { it.flatMap { j -> j.archiveFile } }
-    inputs.files(qaTree)
-    inputs.files(jars)
-    doLast {
-        val qaPaths = mutableSetOf<String>()
-        qaTree.visit { if (!isDirectory) qaPaths += relativePath.pathString }
-        val leaked = jars.flatMap { jar ->
-            ZipFile(jar.get().asFile).use { zip ->
-                zip.entries().asSequence().map { it.name.removePrefix("BOOT-INF/classes/") }
-                    .filter { it in qaPaths }.map { "${jar.get().asFile.name}: $it" }.toList()
-            }
-        }
-        if (leaked.isNotEmpty()) {
-            throw GradleException("운영 jar 에 QA 전용 코드가 들어갔다 — 덱 고정 API 는 운영에 존재하면 안 된다:\n" + leaked.joinToString("\n"))
-        }
-    }
-}
-tasks.check { dependsOn(verifyNoQaInJars) }
