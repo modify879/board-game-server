@@ -17,11 +17,11 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * 차례 시간(30초) 만료 처리. 호출자는 사용자가 아니라
+ * 차례 시간(기본 30초, `app.holdem.turn-timeout`) 만료 처리. 호출자는 사용자가 아니라
  * [com.jsm.boardgame.holdem.infrastructure.timer.TurnTimer] 뿐이라 실패를 알릴 대상이 없다 -
  * 테이블/핸드가 이미 사라졌거나 차례가 이미 넘어갔으면 조용히 끝낸다.
  *
- * 30초 무응답 = 자리 비움. 체크할 수 있으면 체크(자리 유지), 아니면 폴드하고 즉시 기립(관전).
+ * 차례 시간 무응답 = 자리 비움. 체크할 수 있으면 체크(자리 유지), 아니면 폴드하고 즉시 기립(관전).
  * 공식 룰(시간 초과 시 패는 죽는다)보다 체크 쪽이 관대한 것은 사용자 결정이다.
  *
  * 폴드는 여기서 즉시 기립까지 이어진다 - StandUpService 를 그대로 부르지 않는 이유는 그 서비스의

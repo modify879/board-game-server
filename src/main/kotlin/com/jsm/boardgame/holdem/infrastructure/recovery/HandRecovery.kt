@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicLong
  * `ApplicationReadyEvent` 를 쓰는 이유 - 생성자/`@PostConstruct` 시점에는 이 컴포넌트가 의존하는
  * `TaskScheduler`·DB 커넥션 풀 등 다른 빈들의 초기화 순서가 보장되지 않고, 서버가 아직 STOMP
  * 연결을 받을 준비도 안 됐다. `ApplicationReadyEvent` 는 컨텍스트가 완전히 뜨고 트래픽을 받을
- * 준비가 된 뒤에 발행되어, 이 시점부터 걸어두는 3분 유예와 그 이후 들어오는 재접속을 안전하게
+ * 준비가 된 뒤에 발행되어, 이 시점부터 걸어두는 복구 유예(`recovery-timeout`, 기본 3분)와 그 이후 들어오는 재접속을 안전하게
  * 맞춰볼 수 있다.
  *
  * 좌석별 재접속 판정은 `SessionConnectedEvent` 로 한다 - `ConnectionTimer` 가 재접속 판정에 쓰는
@@ -60,11 +60,11 @@ import java.util.concurrent.atomic.AtomicLong
  * **단일 인스턴스 배포를 전제한다.** 인스턴스가 여럿이면 모두가 같은 행을 복구하려 들어 재개
  * 유스케이스가 중복 호출된다. 다중 인스턴스로 가려면 리더 선출이나 행 잠금이 필요하다.
  *
- * 3분 유예는 전원이 돌아오면 일찍, 아니면 시간이 다 되어 *재개*로 끝난다(하우스 룰 8번) — 취소·환불하지 않는다.
- * 안 돌아온 사람은 [applyWatch] 로 평소의 연결 감시를 새로 받고, 재개가 거는 새 차례 타이머(30초)가
+ * 복구 유예는 전원이 돌아오면 일찍, 아니면 시간이 다 되어 *재개*로 끝난다(하우스 룰 8번) — 취소·환불하지 않는다.
+ * 안 돌아온 사람은 [applyWatch] 로 평소의 연결 감시를 새로 받고, 재개가 거는 새 차례 타이머(`turn-timeout`)가
  * 그 사람의 차례를 체크/폴드·퇴장으로 처리한다. 이미 낸 칩은 팟에 남는다. 취소·환불은 재개가 끝내 실패할 때(서버 버그)만 쓴다.
  *
- * 런아웃 중인 핸드는 3분 재접속 유예 없이 바로 재개한다 — 남은 결정이 없어 기다려도 얻는 게 없고, 오히려
+ * 런아웃 중인 핸드는 재접속 유예 없이 바로 재개한다 — 남은 결정이 없어 기다려도 얻는 게 없고, 오히려
  * 질 쪽이 일부러 돌아오지 않아 이미 공개된 올인을 무효로 만들 수 있다. 안 돌아온 사용자는 유예 중단
  * (`suspendWatch`)을 하지 않았으므로 평소의 연결 타이머가 그대로 건다.
  *
@@ -167,7 +167,7 @@ class HandRecovery(
             awaitingUserIds = ConcurrentHashMap.newKeySet<UserId>().apply { addAll(awaiting) },
             future = future,
         )
-        log.info("테이블 {} 복구 유예(3분)를 시작합니다: 대기 사용자={}", tableId.value, allUserIds)
+        log.info("테이블 {} 복구 유예({})를 시작합니다: 대기 사용자={}", tableId.value, recoveryTimeout, allUserIds)
     }
 
     /** 테이블이 닫히면 복구 유예와 토큰을 치운다. 토큰이 사라지면 이미 깨어난 타임아웃도 걸러진다. */
@@ -192,7 +192,7 @@ class HandRecovery(
         completeRecovery(tableId)
     }
 
-    /** 전원이 돌아왔거나 3분이 지났다 - 어느 쪽이든 핸드를 재개한다. 안 돌아온 사람은 [applyWatch] 와 차례 타이머가 맡는다. */
+    /** 전원이 돌아왔거나 복구 유예가 지났다 - 어느 쪽이든 핸드를 재개한다. 안 돌아온 사람은 [applyWatch] 와 차례 타이머가 맡는다. */
     private fun completeRecovery(tableId: TableId) {
         if (!finishRecovery(tableId)) return
 
@@ -201,7 +201,7 @@ class HandRecovery(
     }
 
     /**
-     * 유예 중에 핸드가 다시 살아났다(플레이어가 액션해 [HandBroadcastRequested] 가 났다) - 3분 뒤 타임아웃이
+     * 유예 중에 핸드가 다시 살아났다(플레이어가 액션해 [HandBroadcastRequested] 가 났다) - 유예 만료 타임아웃이
      * 그 뒤의 핸드를 또 재개하면 안 되므로 재개 없이 유예만 끝낸다. 재개 유스케이스가 내는 이벤트는
      * [completeRecovery] 가 pending 을 먼저 지운 뒤라 여기서 아무것도 못 찾는다. 커밋 후 콜백이라 던지지 않는다.
      */
@@ -232,7 +232,7 @@ class HandRecovery(
     }
 
     private fun applyWatch(recovery: PendingRecovery) {
-        // 돌아온 사람은 유예를 해제하고, 안 돌아온 사람은 지금부터 3분 연결 타이머를 새로 건다.
+        // 돌아온 사람은 유예를 해제하고, 안 돌아온 사람은 지금부터 연결 타이머를 새로 건다.
         // 돌아왔다가 유예 중에 다시 끊긴 사람(그 끊김은 무시됐다)도 연결이 없으니 감시를 새로 받는다.
         // 한 명의 실패가 나머지를 영영 유예 상태로 두면 안 된다 - 사용자별로 격리한다.
         val returned = recovery.allUserIds - recovery.awaitingUserIds
