@@ -17,6 +17,4 @@
 
 ## 아직 하지 않은 것
 
-- ArchUnit 의존성 테스트 — 게임이 둘 이상 생기면 도입. 목표는 BuckPal 과 같은 3줄:
-  `application.doesNotDependOn(adapters)` / `domainDoesNotDependOnAdapters()` / `adapters.dontDependOnEachOther()`
 - Micrometer Tracing
