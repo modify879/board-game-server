@@ -144,4 +144,26 @@ class HandStateJsonTest {
         val oldRestored = objectMapper.readValue(objectMapper.writeValueAsString(old), HandStateJson::class.java)
         assertTrue(oldRestored.lastActions.isEmpty())
     }
+
+    @Test
+    fun `SB·BB 좌석은 JSON 왕복에서 보존되고 필드가 없는 예전 JSON 은 null 로 읽힌다`() {
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)),
+            buttonSeatNo = 1,
+            smallBlindSeatNo = 2,
+            bigBlindSeatNo = 3,
+            smallBlind = Chips.of(100),
+            bigBlind = Chips.of(200),
+            shuffler = identityShuffler,
+        )
+
+        val text = objectMapper.writeValueAsString(hand.snapshot().toJson())
+        val restored = objectMapper.readValue(text, HandStateJson::class.java).toSnapshot()
+        assertEquals(2 to 3, restored.smallBlindSeatNo to restored.bigBlindSeatNo)
+
+        val old = objectMapper.readTree(text).let { (it as tools.jackson.databind.node.ObjectNode).apply { remove("smallBlindSeatNo"); remove("bigBlindSeatNo") } }
+        val oldRestored = objectMapper.readValue(objectMapper.writeValueAsString(old), HandStateJson::class.java).toSnapshot()
+        assertNull(oldRestored.smallBlindSeatNo)
+        assertNull(oldRestored.bigBlindSeatNo)
+    }
 }

@@ -66,6 +66,9 @@ interface HandInProgressJpaRepository : JpaRepository<HandInProgressJpaEntity, L
  */
 data class HandStateJson(
     val buttonSeatNo: Int,
+    // 기본값 null — 이 필드가 없는 예전 행은 블라인드 좌석을 모르는 핸드로 읽는다.
+    val smallBlindSeatNo: Int? = null,
+    val bigBlindSeatNo: Int? = null,
     val bigBlind: Long,
     val seatNos: List<Int>,
     val street: String,
@@ -106,6 +109,8 @@ data class HandStateJson(
 
 fun HandSnapshot.toJson(): HandStateJson = HandStateJson(
     buttonSeatNo = buttonSeatNo,
+    smallBlindSeatNo = smallBlindSeatNo,
+    bigBlindSeatNo = bigBlindSeatNo,
     bigBlind = bigBlind.amount,
     seatNos = seatNos,
     street = street.name,
@@ -141,6 +146,8 @@ private fun HandSnapshot.BettingSeatSnapshot.toJson(): HandStateJson.BettingSeat
 
 fun HandStateJson.toSnapshot(): HandSnapshot = HandSnapshot(
     buttonSeatNo = buttonSeatNo,
+    smallBlindSeatNo = smallBlindSeatNo,
+    bigBlindSeatNo = bigBlindSeatNo,
     bigBlind = Chips.reconstitute(bigBlind),
     seatNos = seatNos,
     street = Street.valueOf(street),

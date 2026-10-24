@@ -61,7 +61,10 @@ fun publicViewOf(
         board = hand?.board?.map { it.toString() } ?: lastResult?.board ?: emptyList(),
         pot = hand?.potTotal()?.amount ?: 0L,
         toActSeatNo = hand?.toActSeatNo,
-        buttonSeatNo = table.buttonSeatNo,
+        // 테이블의 버튼은 명목상 값이다 — 헤즈업으로 줄면 핸드의 실제 버튼이 달라져 SB·BB 와 어긋난다.
+        buttonSeatNo = hand?.buttonSeatNo ?: table.buttonSeatNo,
+        smallBlindSeatNo = hand?.smallBlindSeatNo,
+        bigBlindSeatNo = hand?.bigBlindSeatNo,
         seats = seats,
         result = finished?.let(::handResultPublicViewOf),
         revealedHands = hand?.revealedSeatNos?.sorted()
