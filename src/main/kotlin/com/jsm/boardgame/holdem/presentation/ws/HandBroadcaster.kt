@@ -65,7 +65,7 @@ class HandBroadcaster(
         try {
             messagingTemplate.convertAndSend(
                 HoldemDestinations.publicTopicOf(tableId.value),
-                publicViewOf(tableId, table, hand, lastResult, seq, nextHandCountdown.remaining(tableId), turnCountdown.remaining(tableId)),
+                publicViewOf(tableId, table, hand, lastResult, seq, nextHandCountdown.remaining(tableId), turnCountdown.remaining(tableId), turnCountdown.turnTimeout),
             )
 
             hand ?: return

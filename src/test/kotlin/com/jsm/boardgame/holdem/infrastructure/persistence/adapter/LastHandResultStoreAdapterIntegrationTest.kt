@@ -11,6 +11,7 @@ import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
+import org.springframework.jdbc.core.JdbcTemplate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -25,6 +26,9 @@ class LastHandResultStoreAdapterIntegrationTest {
     @Autowired
     private lateinit var tables: HoldemTableRepository
 
+    @Autowired
+    private lateinit var jdbcTemplate: JdbcTemplate
+
     private fun newTableId(): TableId = tables.save(HoldemTable.create("t-${System.nanoTime()}", TestTablePolicy)).id!!
 
     private fun result(amount: Long) = LastHandResult(
@@ -38,6 +42,18 @@ class LastHandResultStoreAdapterIntegrationTest {
         val tableId = newTableId()
 
         store.save(tableId, result(300))
+
+        assertEquals(result(300), store.find(tableId))
+    }
+
+    @Test
+    fun `마지막 행동은 왕복에서 보존되고 필드가 없는 예전 행은 빈 목록으로 읽힌다`() {
+        val tableId = newTableId()
+        val withActions = result(300).copy(lastActions = listOf(LastHandResult.LastAction(2, UserId(2000L), "RAISE_TO")))
+        store.save(tableId, withActions)
+        assertEquals(withActions, store.find(tableId))
+
+        jdbcTemplate.update("update holdem_last_hand_result set result = result - 'lastActions' where table_id = ?", tableId.value)
 
         assertEquals(result(300), store.find(tableId))
     }

@@ -52,7 +52,7 @@ class Hand private constructor(
 
     private val departed = mutableMapOf<Int, UserId>()
 
-    // 좌석별로 이번 스트리트에 마지막으로 한 행동. 스트리트가 넘어갈 때만 비운다 — 라운드·핸드가 끝나도 남는다.
+    // 좌석별로 이번 핸드에서 마지막으로 한 행동. 스트리트가 넘어가도, 라운드·핸드가 끝나도 남는다.
     private val lastActions = mutableMapOf<Int, ActionType>()
 
     /** 핸드 도중 폴드한 채 기립한 좌석의 사용자. 핸드를 무를 때 이들의 투입액을 지갑으로 돌려준다. */
@@ -114,7 +114,7 @@ class Hand private constructor(
     fun statusOf(seatNo: Int): SeatStatus =
         currentRound?.seats?.firstOrNull { it.seatNo == seatNo }?.status ?: statuses.getValue(seatNo)
 
-    /** 이 좌석이 이번 스트리트에 마지막으로 한 행동. 아직 행동하지 않았으면 null(블라인드 포스팅은 행동이 아니다). */
+    /** 이 좌석이 이번 핸드에서 마지막으로 한 행동. 아직 행동하지 않았으면 null(블라인드 포스팅은 행동이 아니다). */
     fun lastActionOf(seatNo: Int): ActionType? = lastActions[seatNo]
 
     fun totalContributedBy(seatNo: Int): Chips {
@@ -177,7 +177,6 @@ class Hand private constructor(
         }
         if (boardCards.size < 5) {
             street = nextStreet(street)
-            lastActions.clear()
             dealBoardFor(street)
         } else {
             finishShowdown()
@@ -231,7 +230,6 @@ class Hand private constructor(
         }
 
         street = nextStreet(street)
-        lastActions.clear()
         dealBoardFor(street)
         val newSeats = seatNos.map { seatNo -> BettingSeat(seatNo, stacks.getValue(seatNo), Chips.ZERO, statuses.getValue(seatNo)) }
         currentRound = BettingRound.open(newSeats, bigBlind, postflopFirstToActSeatNo)

@@ -177,6 +177,13 @@ class TurnTimerTest {
     }
 
     @Test
+    fun `turnTimeout 은 설정한 값을 그대로 노출한다`() {
+        val timer = TurnTimer(TurnTimerFakeTaskScheduler(), clock, TurnTimerFakeExpireTurnUseCase(), TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase(), Duration.ofSeconds(30))
+
+        assertEquals(Duration.ofSeconds(30), timer.turnTimeout)
+    }
+
+    @Test
     fun `핸드가 null 이면 예약하지 않는다`() {
         val scheduler = TurnTimerFakeTaskScheduler()
         val useCase = TurnTimerFakeExpireTurnUseCase()

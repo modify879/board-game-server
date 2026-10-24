@@ -316,7 +316,7 @@ class HandTest {
     }
 
     @Test
-    fun `마지막 행동은 블라인드에는 없고 행동하면 남으며 스트리트가 넘어가면 비워진다`() {
+    fun `마지막 행동은 블라인드에는 없고 행동하면 남으며 스트리트가 넘어가도 남고 다시 행동하면 덮어쓴다`() {
         val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
         assertEquals(listOf(null, null, null), listOf(1, 2, 3).map { hand.lastActionOf(it) })
 
@@ -328,9 +328,10 @@ class HandTest {
         hand.act(3, BettingAction.Call)
 
         assertEquals(Street.FLOP, hand.street)
-        assertEquals(listOf(null, null, null), listOf(1, 2, 3).map { hand.lastActionOf(it) })
+        assertEquals(listOf(ActionType.RAISE_TO, ActionType.CALL, ActionType.CALL), listOf(1, 2, 3).map { hand.lastActionOf(it) })
         hand.act(2, BettingAction.Check)
         assertEquals(ActionType.CHECK, hand.lastActionOf(2))
+        assertEquals(ActionType.RAISE_TO, hand.lastActionOf(1))
     }
 
     @Test
@@ -357,14 +358,14 @@ class HandTest {
     }
 
     @Test
-    fun `라운드가 런아웃으로 끝나도 마지막 행동은 남고 다음 스트리트를 깔 때 비워진다`() {
+    fun `라운드가 런아웃으로 끝나도 마지막 행동은 남고 다음 스트리트를 깔아도 남는다`() {
         val hand = preflopAllIn()
         assertEquals(ActionType.RAISE_TO, hand.lastActionOf(1))
         assertEquals(ActionType.CALL, hand.lastActionOf(3))
 
         hand.advanceRunout()
 
-        assertEquals(listOf(null, null, null), listOf(1, 2, 3).map { hand.lastActionOf(it) })
+        assertEquals(listOf(ActionType.RAISE_TO, ActionType.CALL, ActionType.CALL), listOf(1, 2, 3).map { hand.lastActionOf(it) })
     }
 
     private fun preflopAllIn(): Hand {

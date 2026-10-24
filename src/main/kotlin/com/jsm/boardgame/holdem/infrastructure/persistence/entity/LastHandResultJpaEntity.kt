@@ -51,7 +51,10 @@ data class LastHandResultJson(
     val board: List<String>,
     val payouts: List<PayoutJson>,
     val shownHands: List<ShownHandJson>,
+    // 기본값 비어 있음 — 이 필드가 없는 예전 행은 행동 배지가 없는 것으로 읽는다.
+    val lastActions: List<LastActionJson> = emptyList(),
 ) {
+    data class LastActionJson(val seatNo: Int, val userId: Long, val action: String)
     data class PayoutJson(val seatNo: Int, val userId: Long, val amount: Long)
     data class ShownHandJson(val seatNo: Int, val userId: Long, val holeCards: List<String>, val category: String?)
 }
@@ -60,10 +63,12 @@ fun LastHandResult.toJson() = LastHandResultJson(
     board,
     payouts.map { LastHandResultJson.PayoutJson(it.seatNo, it.userId.value, it.amount) },
     shownHands.map { LastHandResultJson.ShownHandJson(it.seatNo, it.userId.value, it.holeCards, it.category) },
+    lastActions.map { LastHandResultJson.LastActionJson(it.seatNo, it.userId.value, it.action) },
 )
 
 fun LastHandResultJson.toResult() = LastHandResult(
     board,
     payouts.map { LastHandResult.Payout(it.seatNo, UserId(it.userId), it.amount) },
     shownHands.map { LastHandResult.ShownHand(it.seatNo, UserId(it.userId), it.holeCards, it.category) },
+    lastActions.map { LastHandResult.LastAction(it.seatNo, UserId(it.userId), it.action) },
 )

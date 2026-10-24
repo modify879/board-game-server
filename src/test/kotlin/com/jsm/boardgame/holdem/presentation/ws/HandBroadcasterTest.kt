@@ -44,6 +44,7 @@ private class HandBroadcasterFakeLastHandResultStore(private val result: LastHan
 }
 
 private class HandBroadcasterFakeTurnCountdown : TurnCountdown {
+    override val turnTimeout: Duration = Duration.ofSeconds(30)
     override fun remaining(tableId: TableId): Duration? = null
 }
 
