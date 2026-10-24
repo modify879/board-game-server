@@ -11,6 +11,7 @@ import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.FakeHandHistory
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.FakeWalletTransfer
+import com.jsm.boardgame.holdem.domain.model.ActionType
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
@@ -92,6 +93,7 @@ class ExpireTurnServiceTest {
         assertNotNull(hand)
         assertFalse(hand.isFinished)
         assertEquals(SeatStatus.FOLDED, hand.statusOf(toAct))
+        assertEquals(ActionType.FOLD, hand.lastActionOf(toAct))
         assertNull(tables.findById(tableId)!!.seatAt(toAct))
         val credited = walletTransfer.fromGameCalls.single()
         assertEquals(UserId(1000L), credited.userId)

@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.persistence.entity
 
+import com.jsm.boardgame.holdem.domain.model.ActionType
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
@@ -119,5 +120,28 @@ class HandStateJsonTest {
         val old = objectMapper.readTree(text).let { (it as tools.jackson.databind.node.ObjectNode).apply { remove("departedUserIds") } }
         val oldRestored = objectMapper.readValue(objectMapper.writeValueAsString(old), HandStateJson::class.java)
         assertTrue(oldRestored.departedUserIds.isEmpty())
+    }
+
+    @Test
+    fun `lastActions 는 JSON 왕복에서 보존되고 필드가 없는 예전 JSON 은 빈 맵으로 읽힌다`() {
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)),
+            buttonSeatNo = 1,
+            smallBlindSeatNo = 2,
+            bigBlindSeatNo = 3,
+            smallBlind = Chips.of(100),
+            bigBlind = Chips.of(200),
+            shuffler = identityShuffler,
+        )
+        hand.act(1, BettingAction.RaiseTo(Chips.of(600)))
+        hand.act(2, BettingAction.Fold)
+
+        val text = objectMapper.writeValueAsString(hand.snapshot().toJson())
+        val restored = objectMapper.readValue(text, HandStateJson::class.java)
+        assertEquals(mapOf(1 to ActionType.RAISE_TO, 2 to ActionType.FOLD), restored.toSnapshot().lastActions)
+
+        val old = objectMapper.readTree(text).let { (it as tools.jackson.databind.node.ObjectNode).apply { remove("lastActions") } }
+        val oldRestored = objectMapper.readValue(objectMapper.writeValueAsString(old), HandStateJson::class.java)
+        assertTrue(oldRestored.lastActions.isEmpty())
     }
 }

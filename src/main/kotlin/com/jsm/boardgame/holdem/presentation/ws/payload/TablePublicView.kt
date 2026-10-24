@@ -45,6 +45,8 @@ data class SeatPublicView(
     val stack: Long,
     val totalContributed: Long,
     val status: String,
+    /** 이번 스트리트에 마지막으로 한 행동(FOLD/CHECK/CALL/RAISE_TO). 아직 행동하지 않았으면 null. */
+    val lastAction: String?,
     val presence: String,
     /** 이 핸드가 끝나면 일어나겠다고 예약한 좌석. 숨길 정보가 아니다. */
     val leaveReserved: Boolean,

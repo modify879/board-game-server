@@ -33,6 +33,8 @@ data class HandSnapshot(
     val runningOut: Boolean,
     /** 핸드 도중 폴드한 채 기립한 좌석의 사용자. [Hand.departedUserIds] 그대로. */
     val departedUserIds: Map<Int, UserId> = emptyMap(),
+    /** 좌석별로 이번 스트리트에 마지막으로 한 행동. [Hand.lastActionOf] 그대로. */
+    val lastActions: Map<Int, ActionType> = emptyMap(),
 ) {
     data class BettingSeatSnapshot(
         val seatNo: Int,

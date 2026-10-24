@@ -5,13 +5,27 @@ import com.jsm.boardgame.holdem.domain.exception.IllegalBettingActionException
 
 enum class SeatStatus { ACTIVE, FOLDED, ALL_IN }
 
+enum class ActionType { FOLD, CHECK, CALL, RAISE_TO }
+
 sealed interface BettingAction {
-    data object Fold : BettingAction
-    data object Check : BettingAction
-    data object Call : BettingAction
+    val type: ActionType
+
+    data object Fold : BettingAction {
+        override val type = ActionType.FOLD
+    }
+
+    data object Check : BettingAction {
+        override val type = ActionType.CHECK
+    }
+
+    data object Call : BettingAction {
+        override val type = ActionType.CALL
+    }
 
     /** 이번 라운드 누적 투입액 기준 "얼마까지 올린다". */
-    data class RaiseTo(val amount: Chips) : BettingAction
+    data class RaiseTo(val amount: Chips) : BettingAction {
+        override val type = ActionType.RAISE_TO
+    }
 }
 
 /** 차례인 좌석이 지금 할 수 있는 것. [BettingRound.availableActionsFor] 참고. */

@@ -315,6 +315,47 @@ class HandTest {
         assertFalse(hand.snapshot().runningOut)
     }
 
+    @Test
+    fun `마지막 행동은 블라인드에는 없고 행동하면 남으며 스트리트가 넘어가면 비워진다`() {
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
+        assertEquals(listOf(null, null, null), listOf(1, 2, 3).map { hand.lastActionOf(it) })
+
+        hand.act(1, BettingAction.RaiseTo(chips(600)))
+        hand.act(2, BettingAction.Call)
+        assertEquals(ActionType.RAISE_TO, hand.lastActionOf(1))
+        assertEquals(ActionType.CALL, hand.lastActionOf(2))
+        assertEquals(null, hand.lastActionOf(3))
+        hand.act(3, BettingAction.Call)
+
+        assertEquals(Street.FLOP, hand.street)
+        assertEquals(listOf(null, null, null), listOf(1, 2, 3).map { hand.lastActionOf(it) })
+        hand.act(2, BettingAction.Check)
+        assertEquals(ActionType.CHECK, hand.lastActionOf(2))
+    }
+
+    @Test
+    fun `폴드로 핸드가 끝나도 마지막 행동은 남는다`() {
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
+        hand.act(1, BettingAction.Fold)
+        hand.act(2, BettingAction.Fold)
+
+        assertTrue(hand.isFinished)
+        assertEquals(ActionType.FOLD, hand.lastActionOf(1))
+        assertEquals(ActionType.FOLD, hand.lastActionOf(2))
+        assertEquals(null, hand.lastActionOf(3))
+    }
+
+    @Test
+    fun `라운드가 런아웃으로 끝나도 마지막 행동은 남고 다음 스트리트를 깔 때 비워진다`() {
+        val hand = preflopAllIn()
+        assertEquals(ActionType.RAISE_TO, hand.lastActionOf(1))
+        assertEquals(ActionType.CALL, hand.lastActionOf(3))
+
+        hand.advanceRunout()
+
+        assertEquals(listOf(null, null, null), listOf(1, 2, 3).map { hand.lastActionOf(it) })
+    }
+
     private fun preflopAllIn(): Hand {
         val hand = Hand.start(stacksOf(1 to 1_000, 2 to 1_000, 3 to 1_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
         hand.act(1, BettingAction.RaiseTo(chips(1_000)))

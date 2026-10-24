@@ -37,6 +37,7 @@ fun publicViewOf(
                 stack = if (hand.isFinished) seat.stack.amount else hand.stackOf(seat.seatNo).amount,
                 totalContributed = hand.totalContributedBy(seat.seatNo).amount,
                 status = hand.statusOf(seat.seatNo).name,
+                lastAction = hand.lastActionOf(seat.seatNo)?.name,
                 presence = seat.presence.name,
                 leaveReserved = seat.leaveReserved,
             )
@@ -47,6 +48,7 @@ fun publicViewOf(
                 stack = seat.stack.amount,
                 totalContributed = 0L,
                 status = "SITTING_OUT",
+                lastAction = null,
                 presence = seat.presence.name,
                 leaveReserved = seat.leaveReserved,
             )

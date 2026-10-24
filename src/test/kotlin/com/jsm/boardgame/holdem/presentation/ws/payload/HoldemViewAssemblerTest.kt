@@ -59,6 +59,7 @@ class HoldemViewAssemblerTest {
         assertNull(view.result)
         assertEquals(2, view.seats.size)
         assertTrue(view.seats.all { it.status == "SITTING_OUT" })
+        assertTrue(view.seats.all { it.lastAction == null })
         assertTrue(view.seats.all { it.presence == "SEATED" })
         assertEquals(10_000L, view.seats.first { it.seatNo == 1 }.stack)
     }
@@ -134,6 +135,8 @@ class HoldemViewAssemblerTest {
         assertFalse(hand.isFinished)
         assertTrue(view.handInProgress)
         assertEquals("FOLDED", view.seats.first { it.seatNo == toAct }.status)
+        assertEquals("FOLD", view.seats.first { it.seatNo == toAct }.lastAction)
+        assertTrue(view.seats.filter { it.seatNo != toAct }.all { it.lastAction == null })
         assertEquals(emptyList(), view.board) // 아직 프리플랍
         assertNull(view.result) // 핸드가 아직 안 끝났다
 
