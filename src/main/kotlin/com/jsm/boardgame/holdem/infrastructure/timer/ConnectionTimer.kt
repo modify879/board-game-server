@@ -15,6 +15,7 @@ import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationReadyEvent
+import org.springframework.context.event.ContextClosedEvent
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
 import org.springframework.core.task.TaskRejectedException
@@ -61,6 +62,10 @@ import java.util.concurrent.atomic.AtomicLong
  * 연결이 끊기면 대기열 멤버십도 함께 지운다([onSessionDisconnect]) — 좌석 배정 전이라
  * suspended(복구 유예) 대상이 될 일이 없으므로 무조건 지워도 안전하다. 단, 같은 사용자의 다른
  * 세션(다른 탭·기기)이 살아 있으면 지우지 않는다 — [UserConnections.hasOtherSession] 으로 확인한다.
+ *
+ * 서버 종료로 끊긴 세션은 처리하지 않는다([onContextClosed] 이후) — 종료는 플레이어 책임이 아니고
+ * 재기동 시 부팅 시딩이 감시를 다시 건다. 또 종료 중 DB 를 부르면 DB 가 먼저 내려간 경우
+ * 커넥션 타임아웃만큼 종료가 멈춘다.
  */
 @Component
 class ConnectionTimer(
@@ -84,6 +89,15 @@ class ConnectionTimer(
 
     private val suspended = ConcurrentHashMap.newKeySet<UserId>()
 
+    @Volatile
+    private var shuttingDown = false
+
+    /** ContextClosedEvent 는 웹서버·라이프사이클 정지보다 먼저 발행되므로 세션 종료 이벤트보다 앞선다. */
+    @EventListener(ContextClosedEvent::class)
+    fun onContextClosed() {
+        shuttingDown = true
+    }
+
     /** 사용자가 앉은 테이블의 실행기에서 [task] 를 돌린다. 앉아 있지 않으면 presence 갱신·만료 모두 할 일이 없는
      *  no-op 이라 돌리지 않고 null 을 돌려준다 — 실행기 밖에서 쓰기를 하지 않는다. */
     private fun <T> dispatchForUser(userId: UserId, task: () -> T): T? =
@@ -100,6 +114,7 @@ class ConnectionTimer(
 
     @EventListener
     fun onSessionDisconnect(event: SessionDisconnectEvent) {
+        if (shuttingDown) return
         val userId = event.user?.name?.toLongOrNull()?.let(::UserId) ?: return
 
         val hasOtherSession = userConnections.hasOtherSession(userId, event.sessionId)
