@@ -11,7 +11,7 @@ server:
 
 app:
   auth:
-    # 클라이언트 QA 대기 단축용. 클라이언트의 인밴드 갱신 마감(stomp.gd)은 이 값보다 짧아야 make-before-break 가 유지된다
+    # 클라이언트 QA 대기 단축용. 클라이언트 인밴드 마감(stomp.gd AUTH_DEADLINE_SEC 20초)보다 짧아, 응답이 늦으면 끊김→재연결로 간다(의도)
     stomp-rotation-grace: 5s
   holdem:
     next-hand-delay: 1s

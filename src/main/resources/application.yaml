@@ -67,6 +67,7 @@ app:
   auth:
     login-max-failures: 5
     login-failure-window: 15m
+    # 클라이언트 인밴드 마감(stomp.gd AUTH_DEADLINE_SEC 20초)보다 길게 둔다 — 짧으면 갱신 때 소켓이 교체 전에 끊긴다
     stomp-rotation-grace: 30s
   stomp:
     heartbeat-interval: 10s
