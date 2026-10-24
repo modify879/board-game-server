@@ -33,6 +33,8 @@ data class TablePublicView(
     /** 현재 차례 좌석의 턴 타이머가 만료되기까지 남은 ms. 클라이언트는 받은 순간부터 자기 단조 시계로
      *  센다 — 벽시계와 비교하지 않는다. 턴 타이머가 없으면(핸드 없음·차례 없음·복구 유예 중) null. */
     val turnRemainingMs: Long?,
+    /** 현재 차례 턴 타이머의 전체 길이 ms. [turnRemainingMs] 가 null 일 때만 null. */
+    val turnTimeoutMs: Long?,
     /**
      * 테이블별 단조 증가 순번(TableViewSequence). 클라이언트 계약: 채널(공개/개인)별로 마지막
      * seq 를 기억하고 `seq < last` 인 메시지는 버린다(같으면 받는다. 같은 seq 는 항상 같은 상태다) — clientOutboundChannel 의
@@ -48,7 +50,7 @@ data class SeatPublicView(
     val stack: Long,
     val totalContributed: Long,
     val status: String,
-    /** 이번 스트리트에 마지막으로 한 행동(FOLD/CHECK/CALL/RAISE_TO). 아직 행동하지 않았으면 null. */
+    /** 이 핸드에서 마지막으로 한 행동(FOLD/CHECK/CALL/RAISE_TO). 행동 전·블라인드만 낸 좌석·핸드 미참가 좌석은 null. 핸드가 끝나도 다음 핸드 시작 전까지(결과 표시 중) 남는다. */
     val lastAction: String?,
     val presence: String,
     /** 이 핸드가 끝나면 일어나겠다고 예약한 좌석. 숨길 정보가 아니다. */

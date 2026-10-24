@@ -132,7 +132,7 @@ class HoldemSubscriptionSnapshotListener(
 
         messagingTemplate.convertAndSend(
             HoldemDestinations.publicTopicOf(rawTableId),
-            publicViewOf(tableId, table, hand, lastResult, seq, nextHandCountdown.remaining(tableId), turnCountdown.remaining(tableId)),
+            publicViewOf(tableId, table, hand, lastResult, seq, nextHandCountdown.remaining(tableId), turnCountdown.remaining(tableId), turnCountdown.turnTimeout),
         )
 
         // 관전자(좌석 없음)는 여기서 끝난다 — 개인 뷰는 그 사용자가 이 테이블에 착석해 있을 때만 나간다.

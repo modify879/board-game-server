@@ -44,7 +44,7 @@ class TurnTimer(
     private val expireTurnUseCase: ExpireTurnUseCase,
     private val tableExecutor: TableExecutor,
     private val cancelHandUseCase: CancelHandUseCase,
-    @Value("\${app.holdem.turn-timeout}") private val turnTimeout: Duration,
+    @Value("\${app.holdem.turn-timeout}") override val turnTimeout: Duration,
 ) : TurnCountdown {
     private class ScheduledExpiry(val future: ScheduledFuture<*>, val token: Long)
 

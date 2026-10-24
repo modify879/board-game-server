@@ -9,9 +9,18 @@ import com.jsm.boardgame.holdem.domain.model.Hand
  * `HandResult.shownSeatNos` 에 든 좌석 것만 들어간다. 좌석 번호는 정산 직후 기립·재착석으로 주인이 바뀔 수
  * 있어 [Payout.userId]·[ShownHand.userId] 를 함께 담는다(핸드 시점의 점유자). 라이브 브로드캐스트와 재구독 스냅샷이 같은 출처를 쓴다.
  */
-data class LastHandResult(val board: List<String>, val payouts: List<Payout>, val shownHands: List<ShownHand>) {
+data class LastHandResult(val board: List<String>, val payouts: List<Payout>, val shownHands: List<ShownHand>,
+    /** 좌석별 마지막 행동(FOLD/CHECK/CALL/RAISE_TO). 핸드 시점의 점유자와 함께 담는다 — 행동한 좌석만. */
+    val lastActions: List<LastAction> = emptyList(),
+) {
     data class Payout(val seatNo: Int, val userId: UserId, val amount: Long)
     data class ShownHand(val seatNo: Int, val userId: UserId, val holeCards: List<String>, val category: String?)
+
+    data class LastAction(val seatNo: Int, val userId: UserId, val action: String)
+
+    /** 그 좌석의 마지막 행동. 점유자가 바뀐(핸드 뒤 기립·재착석) 좌석에는 없다. */
+    fun lastActionOf(seatNo: Int, userId: UserId): String? =
+        lastActions.firstOrNull { it.seatNo == seatNo && it.userId == userId }?.action
 
     companion object {
         /**
@@ -33,6 +42,10 @@ data class LastHandResult(val board: List<String>, val payouts: List<Payout>, va
                         holeCards = hand.holeCardsOf(seatNo).map(Card::toString),
                         category = result.showdownRanks.getValue(seatNo).category.name,
                     )
+                },
+                // 핸드 도중 기립한 좌석은 userIdBySeat 에 없다 — 건너뛴다.
+                lastActions = hand.seatNos.mapNotNull { seat ->
+                    hand.lastActionOf(seat)?.let { a -> userIdBySeat[seat]?.let { LastAction(seat, it, a.name) } }
                 },
             )
         }

@@ -85,7 +85,7 @@ data class HandStateJson(
     val runningOut: Boolean = false,
     // 기본값 비어 있음 — 이 필드가 없는 예전 행은 이탈자가 없던 핸드다.
     val departedUserIds: Map<Int, Long> = emptyMap(),
-    // 기본값 비어 있음 — 이 필드가 없는 예전 행은 이번 스트리트에 행동한 좌석이 없는 것으로 읽는다.
+    // 기본값 비어 있음 — 이 필드가 없는 예전 행은 이번 핸드에 행동한 좌석이 없는 것으로 읽는다.
     val lastActions: Map<Int, String> = emptyMap(),
 ) {
     data class BettingSeatJson(

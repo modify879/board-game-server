@@ -24,11 +24,16 @@ fun publicViewOf(
     seq: Long,
     nextHandRemaining: Duration?,
     turnRemaining: Duration?,
+    turnTimeout: Duration?,
 ): TablePublicView {
     // 결과를 보일지는 여기서만 정한다 — 핸드 없음(재구독·취소 뒤) 또는 방금 끝난 핸드일 때만이다.
     // 호출자는 그 경우의 [lastResult] 를 채워 넘긴다(끝난 핸드는 HandSettler 가 만든 값).
     val finished = if (hand == null || hand.isFinished) lastResult else null
+    val turnRemainingMs = if (hand.isInProgress && hand?.toActSeatNo != null) turnRemaining?.toMillis() else null
     val seats = table.occupiedSeats().map { seat ->
+        // 끝난 핸드의 배지는 사용자까지 맞아야 보인다 — 결과 표시 중 기립·재착석으로 같은 좌석의 주인이 바뀔 수 있다.
+        val lastAction = finished?.lastActionOf(seat.seatNo, seat.userId)
+            ?: if (hand != null && seat.seatNo in hand.seatNos) hand.lastActionOf(seat.seatNo)?.name else null
         if (hand != null && seat.seatNo in hand.seatNos) {
             SeatPublicView(
                 seatNo = seat.seatNo,
@@ -37,7 +42,7 @@ fun publicViewOf(
                 stack = if (hand.isFinished) seat.stack.amount else hand.stackOf(seat.seatNo).amount,
                 totalContributed = hand.totalContributedBy(seat.seatNo).amount,
                 status = hand.statusOf(seat.seatNo).name,
-                lastAction = hand.lastActionOf(seat.seatNo)?.name,
+                lastAction = lastAction,
                 presence = seat.presence.name,
                 leaveReserved = seat.leaveReserved,
             )
@@ -48,7 +53,7 @@ fun publicViewOf(
                 stack = seat.stack.amount,
                 totalContributed = 0L,
                 status = "SITTING_OUT",
-                lastAction = null,
+                lastAction = lastAction,
                 presence = seat.presence.name,
                 leaveReserved = seat.leaveReserved,
             )
@@ -70,7 +75,8 @@ fun publicViewOf(
         revealedHands = hand?.revealedSeatNos?.sorted()
             ?.map { RevealedHandView(it, hand.holeCardsOf(it).map { c -> c.toString() }) } ?: emptyList(),
         nextHandInMs = nextHandRemaining?.toMillis(),
-        turnRemainingMs = if (hand.isInProgress && hand?.toActSeatNo != null) turnRemaining?.toMillis() else null,
+        turnRemainingMs = turnRemainingMs,
+        turnTimeoutMs = if (turnRemainingMs != null) turnTimeout?.toMillis() else null,
         seq = seq,
     )
 }
