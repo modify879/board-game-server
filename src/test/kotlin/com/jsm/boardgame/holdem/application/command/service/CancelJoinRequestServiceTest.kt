@@ -46,7 +46,7 @@ class CancelJoinRequestServiceTest {
         queue.enqueue(tableId, userId = UserId(1L), postBlindImmediately = false, buyIn = Chips.of(8_000))
         queue.enqueue(tableId, userId = UserId(2L), postBlindImmediately = false, buyIn = Chips.of(8_000))
 
-        service.cancel(CancelJoinRequestCommand(tableId.value, userId = 1L))
+        service.cancel(CancelJoinRequestCommand(userId = 1L))
 
         assertTrue(!queue.isQueued(UserId(1L)))
         assertEquals(listOf(UserId(2L)), notifier.positionsCalls.last().second.map { it.userId })
@@ -59,7 +59,7 @@ class CancelJoinRequestServiceTest {
         val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
 
         val e = assertFailsWith<JoinRequestNotFoundException> {
-            service.cancel(CancelJoinRequestCommand(999L, userId = 1L))
+            service.cancel(CancelJoinRequestCommand(userId = 1L))
         }
         assertEquals(HoldemErrorCode.JOIN_REQUEST_NOT_FOUND, e.errorCode)
     }
@@ -73,7 +73,7 @@ class CancelJoinRequestServiceTest {
         queue.enqueue(tableId, userId = UserId(1L), postBlindImmediately = false, buyIn = Chips.of(8_000))
         queue.enqueue(tableId, userId = UserId(2L), postBlindImmediately = false, buyIn = Chips.of(8_000))
 
-        service.cancel(CancelJoinRequestCommand(tableId.value, userId = 2L))
+        service.cancel(CancelJoinRequestCommand(userId = 2L))
 
         assertTrue(queue.isQueued(UserId(1L)))
         assertEquals(UserId(1L), queue.peekHead(tableId)?.userId)
@@ -89,7 +89,7 @@ class CancelJoinRequestServiceTest {
         queue.removeByUserId(UserId(1L))
 
         val e = assertFailsWith<JoinRequestNotFoundException> {
-            service.cancel(CancelJoinRequestCommand(tableId.value, userId = 1L))
+            service.cancel(CancelJoinRequestCommand(userId = 1L))
         }
         assertEquals(HoldemErrorCode.JOIN_REQUEST_NOT_FOUND, e.errorCode)
     }

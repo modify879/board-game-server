@@ -18,7 +18,7 @@ interface HoldemTableRepository {
     fun findAllSeatedUserIds(): List<UserId>
 
     /**
-     * 모든 테이블 id. 부팅 시 HandRecovery 가 다음 핸드 카운트다운을 새로 걸 대상을 훑는 용도.
+     * 닫히지 않은 모든 테이블 id. 부팅 시 HandRecovery 가 다음 핸드 카운트다운을 새로 걸 대상을 훑는 용도.
      */
     fun findAllTableIds(): List<TableId>
 

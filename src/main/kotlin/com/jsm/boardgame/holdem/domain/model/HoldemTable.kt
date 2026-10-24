@@ -62,7 +62,7 @@ class HoldemTable private constructor(
         if (seatOf(userId) != null) {
             throw AlreadySeatedException("이미 이 테이블에 앉아 있는 사용자입니다: userId=$userId")
         }
-        // 상한은 application 이 본다 — 재착석 의무가 100BB 를 넘을 수 있어 도메인은 하한만 안다.
+        // 상한은 application 이 본다 — 재착석 의무가 테이블 정책의 최대 바이인(기본 100BB)을 넘을 수 있어 도메인은 하한만 안다.
         if (buyIn < policy.minBuyIn) {
             throw BuyInOutOfRangeException("바이인은 ${policy.minBuyInBigBlinds}BB(${policy.minBuyIn}) 이상이어야 합니다: $buyIn")
         }
@@ -83,7 +83,7 @@ class HoldemTable private constructor(
     fun maxStack(): Chips = policy.maxStack
 
     /**
-     * 좌석 스택에 [amount] 를 더한다(칩 추가). 결과가 [maxStack] 을 넘으면 거부한다 — 플레이 중 스택이 100BB 를 넘는 건
+     * 좌석 스택에 [amount] 를 더한다(칩 추가). 결과가 [maxStack] 을 넘으면 거부한다 — 플레이 중 스택이 최대 바이인(기본 100BB)을 넘는 건
      * 허용이지만 추가로 넘기는 건 아니다. 핸드 진행 중에는 부르면 안 된다 — 도메인은 모르니 호출 위치(AddChipsService)가 보장한다.
      */
     fun addChips(seatNo: Int, amount: Chips) {

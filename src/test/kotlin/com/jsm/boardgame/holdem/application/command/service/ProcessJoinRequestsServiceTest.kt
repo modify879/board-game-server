@@ -255,7 +255,7 @@ class ProcessJoinRequestsServiceTest {
         var cancelFailure: Throwable? = null
         val cancelThread = thread {
             try {
-                cancelService.cancel(CancelJoinRequestCommand(tableId.value, userId = 101L))
+                cancelService.cancel(CancelJoinRequestCommand(userId = 101L))
             } catch (e: Throwable) {
                 cancelFailure = e
             }

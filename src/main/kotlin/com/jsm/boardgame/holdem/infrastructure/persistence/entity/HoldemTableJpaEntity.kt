@@ -24,7 +24,7 @@ class HoldemTableJpaEntity(
     var smallBlind: Long,
     @Column(name = "big_blind", nullable = false)
     var bigBlind: Long,
-    // 설정이 바뀌어도 이미 열린 테이블의 규칙은 그대로여야 해 테이블 행이 들고 있다. 기존 행은 정책이 상수였던 때의 값이다.
+    // 설정이 바뀌어도 이미 열린 테이블의 규칙은 그대로여야 해 테이블 행이 들고 있다.
     @Column(name = "min_buy_in_big_blinds", nullable = false, columnDefinition = "integer not null default 20")
     var minBuyInBigBlinds: Int,
     @Column(name = "max_buy_in_big_blinds", nullable = false, columnDefinition = "integer not null default 100")

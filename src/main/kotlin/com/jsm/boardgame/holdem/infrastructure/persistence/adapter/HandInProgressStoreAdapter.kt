@@ -23,7 +23,7 @@ private const val CONSTRAINT_HAND_PK = "holdem_hand_in_progress_pkey"
  * Redis 가 아니라 PostgreSQL 인 이유 — 핸드 종료 정산([HandSettler.settle] 이 `HoldemTableRepository.save`
  * 로 스택을 반영하는 것)과 이 저장소의 [remove] 가 **같은 `@Transactional` 트랜잭션 안에서 커밋**돼야 한다.
  * 저장소가 갈리면 그 사이에 프로세스가 죽었을 때 "정산은 됐는데 진행 중 핸드 행은 남아" 있는 상태가 생겨,
- * 다음 조각(부팅 복구)이 같은 핸드를 한 번 더 복구해 스택을 두 번 바꾸게 된다. 같은 DB, 같은 트랜잭션이면
+ * 부팅 복구(HandRecovery)가 같은 핸드를 한 번 더 복구해 스택을 두 번 바꾸게 된다. 같은 DB, 같은 트랜잭션이면
  * 이 창이 아예 없다.
  *
  * 쓰기 순서 — 핸드 시작 → INSERT([save]), 액션마다 → UPDATE state([save]), 핸드 종료 → 정산 커밋 + DELETE.
@@ -40,8 +40,8 @@ private const val CONSTRAINT_HAND_PK = "holdem_hand_in_progress_pkey"
  * 있고, 하필 그 커밋들이 환불액을 결정하는 핸드 상태다. unlogged table 도 쓰지 않는다 — 크래시 후
  * 재시작 시 PostgreSQL 이 자동으로 TRUNCATE 해, 정확히 복구가 필요한 순간에 행이 비어 있게 된다.
  *
- * 같은 행을 find→변경→save 로 다루는 쓰기가 둘이다 — `PlayActionService` 와 타이머 만료 경로
- * (`ExpireTurnService`). 동시 쓰기는 테이블당 명령을 한 스레드로 직렬화하는 `TableExecutor` 가
+ * 같은 행을 find→변경→save 로 다루는 쓰기가 셋이다 — `PlayActionService`, 타이머 만료 경로
+ * (`ExpireTurnService`), 올인 런아웃 진행(`AdvanceRunoutService`). 동시 쓰기는 테이블당 명령을 한 스레드로 직렬화하는 `TableExecutor` 가
  * 상위에서 막으므로 이 어댑터는 쓰기 경합을 검출하지 않는다.
  */
 @Repository

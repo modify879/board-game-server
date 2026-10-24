@@ -17,7 +17,7 @@ import org.springframework.transaction.event.TransactionalEventListener
  * [JoinQueue] 의 인메모리 구현. 길이 상한([maxLength])은 메모리를 지키는 인프라 한계라 여기서 검사한다 —
  * 중복 검사와 같은 락 안이라 동시 요청에도 상한을 넘지 않는다. 단일 인스턴스 배포를 전제한다 — 여러 인스턴스면 각자 자기
  * 대기열만 보게 된다(TableViewSequence·타이머들과 같은 전제). 재시작하면 비워지지만 좌석 배정
- * 전이라 안전하다(클래스 KDoc 참고).
+ * 전이라 안전하다([JoinQueue] KDoc 참고).
  *
  * ponytail: 락 하나로 모든 테이블을 직렬화한다 — 대기열 크기는 사람 수 정도로 작고, 오래 걸리는
  * 작업(지갑 이체·DB 저장)은 이 락 밖(AdmitJoinRequestService 의 REQUIRES_NEW 트랜잭션)에서

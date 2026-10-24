@@ -73,7 +73,7 @@ class HoldemTableController(
     @DeleteMapping("/{tableId}/seats/request")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun cancelJoinRequest(@AuthenticationPrincipal jwt: Jwt, @PathVariable tableId: Long) {
-        cancelJoinRequestUseCase.cancel(CancelJoinRequestCommand(tableId, jwt.requireUserId()))
+        cancelJoinRequestUseCase.cancel(CancelJoinRequestCommand(jwt.requireUserId()))
     }
 
     @PostMapping("/{tableId}/hands/actions")
