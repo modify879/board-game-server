@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.infrastructure.persistence.entity
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.jsm.boardgame.holdem.domain.model.ActionType
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.model.Card
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -81,6 +82,8 @@ data class HandStateJson(
     val runningOut: Boolean = false,
     // 기본값 비어 있음 — 이 필드가 없는 예전 행은 이탈자가 없던 핸드다.
     val departedUserIds: Map<Int, Long> = emptyMap(),
+    // 기본값 비어 있음 — 이 필드가 없는 예전 행은 이번 스트리트에 행동한 좌석이 없는 것으로 읽는다.
+    val lastActions: Map<Int, String> = emptyMap(),
 ) {
     data class BettingSeatJson(
         val seatNo: Int,
@@ -117,6 +120,7 @@ fun HandSnapshot.toJson(): HandStateJson = HandStateJson(
     showdownLeaderSeatNo = showdownLeaderSeatNo,
     runningOut = runningOut,
     departedUserIds = departedUserIds.mapValues { it.value.value },
+    lastActions = lastActions.mapValues { it.value.name },
 )
 
 private fun HandSnapshot.BettingRoundSnapshot.toJson(): HandStateJson.BettingRoundJson = HandStateJson.BettingRoundJson(
@@ -151,6 +155,7 @@ fun HandStateJson.toSnapshot(): HandSnapshot = HandSnapshot(
     showdownLeaderSeatNo = showdownLeaderSeatNo,
     runningOut = runningOut,
     departedUserIds = departedUserIds.mapValues { UserId(it.value) },
+    lastActions = lastActions.mapValues { ActionType.valueOf(it.value) },
 )
 
 private fun HandStateJson.BettingRoundJson.toSnapshot(): HandSnapshot.BettingRoundSnapshot = HandSnapshot.BettingRoundSnapshot(

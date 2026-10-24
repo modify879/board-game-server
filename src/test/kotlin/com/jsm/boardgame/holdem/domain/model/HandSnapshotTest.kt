@@ -202,6 +202,17 @@ class HandSnapshotTest {
         Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
 
     @Test
+    fun `이번 스트리트의 마지막 행동은 스냅샷과 복원본에 남는다`() {
+        val hand = threeHandedHand()
+        hand.act(1, BettingAction.RaiseTo(chips(600)))
+        hand.act(2, BettingAction.Fold)
+
+        val expected = mapOf(1 to ActionType.RAISE_TO, 2 to ActionType.FOLD)
+        assertEquals(expected, hand.snapshot().lastActions)
+        assertEquals(expected, Hand.reconstitute(hand.snapshot(), identityShuffler).snapshot().lastActions)
+    }
+
+    @Test
     fun `폴드한 좌석의 이탈을 기록하면 스냅샷과 복원본에 남는다`() {
         val hand = threeHandedHand()
         hand.act(1, BettingAction.Fold)
