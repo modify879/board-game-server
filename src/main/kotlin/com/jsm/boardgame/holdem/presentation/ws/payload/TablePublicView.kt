@@ -20,6 +20,9 @@ data class TablePublicView(
     val pot: Long,
     val toActSeatNo: Int?,
     val buttonSeatNo: Int?,
+    /** 이번 핸드에서 실제로 SB·BB 를 낸 좌석. 핸드가 없으면 null(SB 는 dead small blind 여도 null). */
+    val smallBlindSeatNo: Int?,
+    val bigBlindSeatNo: Int?,
     val seats: List<SeatPublicView>,
     val result: HandResultPublicView?,
     /** 런아웃 중 공개된 패. 런아웃이 아니면 빈 리스트. */

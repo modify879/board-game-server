@@ -65,6 +65,30 @@ class HoldemViewAssemblerTest {
     }
 
     @Test
+    fun `공개 뷰의 버튼과 SB·BB 는 핸드에서 오고 핸드가 없으면 SB·BB 는 null 이다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        table.placeButtonAtFirstSeat()
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
+            buttonSeatNo = 2,
+            smallBlindSeatNo = 2,
+            bigBlindSeatNo = 1,
+            table.smallBlind,
+            table.bigBlind,
+            identityShuffler,
+        )
+
+        val view = publicViewOf(TableId(1), table, hand, null, 1L, null, null)
+        assertEquals(2, view.buttonSeatNo) // 테이블의 명목상 버튼(1)이 아니라 핸드의 실제 버튼
+        assertEquals(2, view.smallBlindSeatNo)
+        assertEquals(1, view.bigBlindSeatNo)
+
+        val idle = publicViewOf(TableId(1), table, null, null, 1L, null, null)
+        assertNull(idle.smallBlindSeatNo)
+        assertNull(idle.bigBlindSeatNo)
+    }
+
+    @Test
     fun `연결이 끊긴 좌석은 공개 뷰에 presence DISCONNECTED 로 나타난다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
         table.markPresence(UserId(100), SeatPresence.DISCONNECTED)

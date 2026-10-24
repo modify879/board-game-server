@@ -213,6 +213,14 @@ class HandSnapshotTest {
     }
 
     @Test
+    fun `SB·BB 좌석은 스냅샷과 복원본에 남는다`() {
+        val hand = threeHandedHand()
+
+        assertEquals(2 to 3, hand.snapshot().let { it.smallBlindSeatNo to it.bigBlindSeatNo })
+        assertEquals(2 to 3, Hand.reconstitute(hand.snapshot(), identityShuffler).let { it.smallBlindSeatNo to it.bigBlindSeatNo })
+    }
+
+    @Test
     fun `폴드한 좌석의 이탈을 기록하면 스냅샷과 복원본에 남는다`() {
         val hand = threeHandedHand()
         hand.act(1, BettingAction.Fold)

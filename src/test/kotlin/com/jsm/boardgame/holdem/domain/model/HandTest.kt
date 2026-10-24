@@ -334,6 +334,17 @@ class HandTest {
     }
 
     @Test
+    fun `시작할 때 받은 SB·BB 좌석을 그대로 갖고 dead small blind 면 SB 는 null 이다`() {
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
+        assertEquals(2, hand.smallBlindSeatNo)
+        assertEquals(3, hand.bigBlindSeatNo)
+
+        val dead = Hand.start(stacksOf(1 to 10_000, 3 to 10_000, 4 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = null, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
+        assertEquals(null, dead.smallBlindSeatNo)
+        assertEquals(3, dead.bigBlindSeatNo)
+    }
+
+    @Test
     fun `폴드로 핸드가 끝나도 마지막 행동은 남는다`() {
         val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
         hand.act(1, BettingAction.Fold)

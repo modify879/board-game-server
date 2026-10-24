@@ -31,6 +31,10 @@ data class HandResult(
  */
 class Hand private constructor(
     val buttonSeatNo: Int,
+    /** 실제로 SB 를 낸 좌석. dead small blind 면 null. */
+    val smallBlindSeatNo: Int?,
+    // nullable 인 이유는 이 필드가 생기기 전에 저장된 행에 값이 없기 때문이다. 새 핸드는 항상 값이 있다.
+    val bigBlindSeatNo: Int?,
     private val bigBlind: Chips,
     /** 이 핸드에 딜된 좌석. 핸드 도중 테이블에 새로 앉은 좌석은 여기에 없다. */
     val seatNos: List<Int>,
@@ -131,6 +135,8 @@ class Hand private constructor(
      */
     fun snapshot(): HandSnapshot = HandSnapshot(
         buttonSeatNo = buttonSeatNo,
+        smallBlindSeatNo = smallBlindSeatNo,
+        bigBlindSeatNo = bigBlindSeatNo,
         bigBlind = bigBlind,
         seatNos = seatNos,
         street = street,
@@ -367,6 +373,8 @@ class Hand private constructor(
 
             val hand = Hand(
                 buttonSeatNo = buttonSeatNo,
+                smallBlindSeatNo = smallBlindSeatNo,
+                bigBlindSeatNo = bigBlindSeatNo,
                 bigBlind = bigBlind,
                 seatNos = seatNos,
                 holeCards = holeCards,
@@ -412,6 +420,8 @@ class Hand private constructor(
 
             val hand = Hand(
                 buttonSeatNo = snapshot.buttonSeatNo,
+                smallBlindSeatNo = snapshot.smallBlindSeatNo,
+                bigBlindSeatNo = snapshot.bigBlindSeatNo,
                 bigBlind = snapshot.bigBlind,
                 seatNos = snapshot.seatNos,
                 holeCards = snapshot.holeCards,

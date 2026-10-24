@@ -13,6 +13,9 @@ package com.jsm.boardgame.holdem.domain.model
  */
 data class HandSnapshot(
     val buttonSeatNo: Int,
+    /** 실제로 SB·BB 를 낸 좌석. [Hand.smallBlindSeatNo]·[Hand.bigBlindSeatNo] 그대로. */
+    val smallBlindSeatNo: Int? = null,
+    val bigBlindSeatNo: Int? = null,
     val bigBlind: Chips,
     val seatNos: List<Int>,
     val street: Street,
