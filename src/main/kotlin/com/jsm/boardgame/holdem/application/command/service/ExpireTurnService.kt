@@ -4,8 +4,6 @@ import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.HandStore
-import com.jsm.boardgame.holdem.application.port.RecentDepartures
-import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
@@ -36,8 +34,7 @@ class ExpireTurnService(
     private val tables: HoldemTableRepository,
     private val handStore: HandStore,
     private val handSettler: HandSettler,
-    private val walletTransfer: WalletTransfer,
-    private val recentDepartures: RecentDepartures,
+    private val seatDeparture: SeatDeparture,
     private val eventPublisher: ApplicationEventPublisher,
 ) : ExpireTurnUseCase {
 
@@ -72,12 +69,7 @@ class ExpireTurnService(
         val remaining = hand.stackOf(seatNo)
         hand.recordDeparture(seatNo, userId)
         table.applyStacks(mapOf(seatNo to remaining))
-        val returned = table.standUp(userId)
-        recentDepartures.record(userId, returned)
-        if (returned.isPositive()) {
-            // memo 규칙은 StandUpService 와 같다 - 문구는 클라이언트가 만든다(규칙 8).
-            walletTransfer.fromGame(userId, returned.amount, tableId, memo = "holdem")
-        }
+        seatDeparture.standUp(tableId, table, userId)
     }
 
     companion object {

@@ -58,7 +58,7 @@ class StandUpServiceTest {
     private val countdown = FakeNextHandCountdown()
     private val handStarter = HandStarter(tables, handStore, FakeLastHandResultStore(), FakeFoldWinnerCards(), { _, _, _ -> Shuffler { it } }, eventPublisher, countdown)
     private val departures = FakeRecentDepartures()
-    private val service = StandUpService(tables, handStore, walletTransfer, handStarter, departures, eventPublisher)
+    private val service = StandUpService(tables, handStore, handStarter, SeatDeparture(departures, walletTransfer), eventPublisher)
 
     @Test
     fun `기립하면 좌석이 비고 스택이 지갑으로 돌아간다`() {

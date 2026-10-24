@@ -56,7 +56,7 @@ class AdvanceRunoutServiceTest {
     private val handStore = AdvanceRunoutFakeHandStore()
     private val lastHandResults = FakeLastHandResultStore()
     private val eventPublisher = AdvanceRunoutFakeEventPublisher()
-    private val handSettler = HandSettler(tables, handStore, lastHandResults, FakeFoldWinnerCards(), eventPublisher, FakeNextHandCountdown(), FakeRecentDepartures(), FakeHandHistory(), LeaveReservations(FakeRecentDepartures(), FakeWalletTransfer()))
+    private val handSettler = HandSettler(tables, handStore, lastHandResults, FakeFoldWinnerCards(), eventPublisher, FakeNextHandCountdown(), FakeRecentDepartures(), FakeHandHistory(), LeaveReservations(SeatDeparture(FakeRecentDepartures(), FakeWalletTransfer())))
     private val service = AdvanceRunoutService(tables, handStore, handSettler, eventPublisher)
 
     private fun tableWithHand(allIn: Boolean): TableId {

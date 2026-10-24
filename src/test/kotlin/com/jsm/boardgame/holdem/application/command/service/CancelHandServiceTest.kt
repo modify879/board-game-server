@@ -33,7 +33,7 @@ class CancelHandServiceTest {
     private val events = mutableListOf<Any>()
     private val eventPublisher = ApplicationEventPublisher { events += it }
     private val departures = FakeRecentDepartures()
-    private val service = CancelHandService(tables, handStore, walletTransfer, countdown, LeaveReservations(departures, walletTransfer), eventPublisher)
+    private val service = CancelHandService(tables, handStore, walletTransfer, countdown, LeaveReservations(SeatDeparture(departures, walletTransfer)), eventPublisher)
 
     private fun tableWithSeats(vararg buyIns: Pair<Int, Long>): TableId {
         var table = HoldemTable.create("test-table", TestTablePolicy)

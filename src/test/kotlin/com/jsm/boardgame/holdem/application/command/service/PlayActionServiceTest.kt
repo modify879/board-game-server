@@ -35,7 +35,7 @@ class PlayActionServiceTest {
     private val handStore = FakeHandStore()
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
-    private val handSettler = HandSettler(tables, handStore, FakeLastHandResultStore(), FakeFoldWinnerCards(), eventPublisher, FakeNextHandCountdown(), FakeRecentDepartures(), FakeHandHistory(), LeaveReservations(FakeRecentDepartures(), FakeWalletTransfer()))
+    private val handSettler = HandSettler(tables, handStore, FakeLastHandResultStore(), FakeFoldWinnerCards(), eventPublisher, FakeNextHandCountdown(), FakeRecentDepartures(), FakeHandHistory(), LeaveReservations(SeatDeparture(FakeRecentDepartures(), FakeWalletTransfer())))
     private val service = PlayActionService(tables, handStore, handSettler, eventPublisher)
 
     /** userId = seatNo * 1000 으로 대응시킨다. */
