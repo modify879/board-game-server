@@ -184,6 +184,25 @@ class ConnectionTimerTest {
     }
 
     @Test
+    fun `서버 종료 후의 연결 끊김은 대기열을 건드리지 않고 presence 갱신도 감시 예약도 하지 않는다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        val presenceUseCase = ConnectionTimerFakeUpdateSeatPresenceUseCase()
+        val expireUseCase = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = null)
+        val joinQueue = InMemoryJoinQueue(50)
+        val notifier = ConnectionTimerFakeJoinQueueNotifier()
+        joinQueue.enqueue(TableId(5L), UserId(42L), false, Chips.of(8_000))
+        val timer = ConnectionTimer(scheduler, clock, presenceUseCase, expireUseCase, tables, joinQueue, notifier, ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
+
+        timer.onContextClosed()
+        timer.onSessionDisconnect(disconnectEvent(42L))
+
+        assertTrue(joinQueue.isQueued(UserId(42L)))
+        assertTrue(presenceUseCase.calls.isEmpty())
+        assertTrue(scheduler.scheduledCalls.isEmpty())
+        assertTrue(notifier.positionsCalls.isEmpty())
+    }
+
+    @Test
     fun `대기열에 있던 사용자가 연결을 끊으면 대기열에서 빠지고 남은 사람의 순번이 알려진다`() {
         val scheduler = ConnectionTimerFakeTaskScheduler()
         val presenceUseCase = ConnectionTimerFakeUpdateSeatPresenceUseCase()
