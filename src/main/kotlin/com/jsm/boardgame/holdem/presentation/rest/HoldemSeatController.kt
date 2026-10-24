@@ -85,12 +85,12 @@ class HoldemSeatController(
         ) { addChipsUseCase.addChips(request.toCommand(userId)) }
     }
 
-    // 이 조회는 언제나 허용된다 (MySeatQueryService KDoc 참고) — 여기에 차단 로직을 얹지 않는다.
     // 테이블 생성 화면용 — 테이블이 없으니 기본 블라인드 기준이다. 응답은 /tables/{id}/buy-in 과 같다.
     @GetMapping("/buy-in")
     fun buyIn(@AuthenticationPrincipal jwt: Jwt): BuyInResponse =
         BuyInResponse.from(buyInQueryService.findForNewTable(jwt.requireUserId()))
 
+    // 이 조회는 언제나 허용된다 (MySeatQueryService KDoc 참고) — 여기에 차단 로직을 얹지 않는다.
     @GetMapping("/me/seat")
     fun mySeat(@AuthenticationPrincipal jwt: Jwt): ResponseEntity<MySeatResponse> {
         val view = mySeatQueryService.findMine(jwt.requireUserId()) ?: return ResponseEntity.noContent().build()

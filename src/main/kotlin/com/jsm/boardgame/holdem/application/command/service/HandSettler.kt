@@ -23,7 +23,7 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
 
 /**
- * 핸드 종료 정산. StartScheduledHandService·PlayActionService·ExpireTurnService 가 공유한다 —
+ * 핸드 종료 정산. PlayActionService·ExpireTurnService·AdvanceRunoutService 가 공유한다 —
  * 로직을 복제하지 않는다. 참가 좌석의 스택만 테이블에 반영한다. 칩은 테이블에 남고 기립할 때만
  * 지갑으로 돌아간다.
  *

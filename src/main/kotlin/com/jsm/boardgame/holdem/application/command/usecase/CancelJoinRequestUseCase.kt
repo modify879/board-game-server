@@ -4,4 +4,4 @@ interface CancelJoinRequestUseCase {
     fun cancel(command: CancelJoinRequestCommand)
 }
 
-data class CancelJoinRequestCommand(val tableId: Long, val userId: Long)
+data class CancelJoinRequestCommand(val userId: Long)

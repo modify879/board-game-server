@@ -49,7 +49,7 @@ class SeatRequester(
         if (joinQueue.isQueued(userId)) {
             throw AlreadySeatedException("이미 다른 테이블에 참가 요청을 남긴 사용자입니다: userId=$userId")
         }
-        // 단위(100)·음수 검사는 Chips.of 가 한다. 범위는 재착석 의무가 정한다 — 의무가 100BB 를 넘으면 상한도 넘는다.
+        // 단위(100)·음수 검사는 Chips.of 가 한다. 범위는 재착석 의무가 정한다 — 의무가 최대 바이인(기본 100BB)을 넘으면 상한도 넘는다.
         val chips = Chips.of(buyIn)
         val range = table.buyInRange(recentDepartures.obligationOf(userId)?.amount ?: Chips.ZERO)
         if (chips !in range) {

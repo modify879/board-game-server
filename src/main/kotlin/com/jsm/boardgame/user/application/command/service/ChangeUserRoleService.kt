@@ -20,8 +20,7 @@ import java.time.Instant
  * `save`(saveAndFlush, 반환 시 커밋) 뿐이다.
  *
  * 순서: 조회·역할 검증(메모리에서 changeRole) → **블랙리스트·소켓 종료(Redis) → save(DB)**.
- * 예전에는 save 뒤 Redis 였고, Redis 가 실패하면 @Transactional 이 save 를 롤백해 "아무 일도 없음"으로 수렴했다.
- * 지금은 그 롤백이 없으므로 순서를 뒤집어 같은 안전성(fail-closed)을 얻는다:
+ * 트랜잭션이 없어 Redis 실패 때 save 를 롤백할 수 없으므로, Redis 를 먼저 해서 fail-closed 를 얻는다:
  * | 실패 지점 | 남는 상태 |
  * |---|---|
  * | 블랙리스트/소켓 종료 (Redis) | 역할 그대로, 토큰은 일부 무효 — 사용자는 refresh(옛 역할 그대로 유효)로 이어간다 |

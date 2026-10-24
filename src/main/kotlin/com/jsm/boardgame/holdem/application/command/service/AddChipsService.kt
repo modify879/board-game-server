@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * 칩 추가(하우스 룰 6) — 핸드 사이에만, 스택이 100BB 를 넘지 않는 만큼만 지갑에서 가져온다. 자동 합산은 없다.
+ * 칩 추가(하우스 룰 6) — 핸드 사이에만, 스택이 테이블 정책의 최대 바이인(기본 100BB)을 넘지 않는 만큼만 지갑에서 가져온다. 자동 합산은 없다.
  * 테이블 스레드 위에서 돌므로 락 순서는 테이블 → 지갑이다. 새 스택이 모두에게 보이도록 공개 뷰를 브로드캐스트한다.
  */
 @Service
