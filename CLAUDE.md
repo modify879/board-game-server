@@ -22,8 +22,6 @@ Docker 가 떠 있어야 한다. 접속 정보는 `application.yaml` 에 적지 
 
 `APP_JWT_SECRET`(32바이트 이상)이 없으면 기동하지 않는다. `bootRun`·`test` 는 `build.gradle.kts` 가 개발용 키를 넣어준다 — IDE 에서 메인 클래스를 직접 실행하면 실행 구성의 환경 변수에 넣는다.
 
-테스트 규칙은 `.claude/rules/testing.md`.
-
 ## 구조
 
 ```
