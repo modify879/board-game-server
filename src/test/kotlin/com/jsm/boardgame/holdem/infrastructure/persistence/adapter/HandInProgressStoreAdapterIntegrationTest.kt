@@ -122,6 +122,22 @@ class HandInProgressStoreAdapterIntegrationTest {
     }
 
     @Test
+    fun `알 수 없는 키(lastFullLevel)가 든 기존 JSON 행을 읽을 수 있다`() {
+        val tableId = newTableId()
+        val hand = newHand()
+        handStore.save(tableId, hand)
+        jdbcTemplate.update(
+            "update holdem_hand_in_progress set state = jsonb_set(state, '{currentRound,lastFullLevel}', '200') where table_id = ?",
+            tableId.value,
+        )
+
+        val found = handStore.find(tableId)
+
+        assertNotNull(found)
+        assertEquals(hand.snapshot(), found.snapshot())
+    }
+
+    @Test
     fun `저장된 state JSON 에는 아직 딜되지 않은 카드가 없다`() {
         val tableId = newTableId()
         val hand = newHand()

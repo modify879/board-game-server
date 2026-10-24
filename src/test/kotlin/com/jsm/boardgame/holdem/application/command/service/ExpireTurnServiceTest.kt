@@ -34,8 +34,8 @@ class ExpireTurnServiceTest {
     private val identityShuffler = Shuffler { it }
     private val eventPublisher = ApplicationEventPublisher { }
     private val departures = FakeRecentDepartures()
-    private val handSettler = HandSettler(tables, handStore, FakeLastHandResultStore(), FakeFoldWinnerCards(), eventPublisher, FakeNextHandCountdown(), departures, FakeHandHistory(), LeaveReservations(departures, FakeWalletTransfer()))
-    private val service = ExpireTurnService(tables, handStore, handSettler, walletTransfer, departures, eventPublisher)
+    private val handSettler = HandSettler(tables, handStore, FakeLastHandResultStore(), FakeFoldWinnerCards(), eventPublisher, FakeNextHandCountdown(), departures, FakeHandHistory(), LeaveReservations(SeatDeparture(departures, FakeWalletTransfer())))
+    private val service = ExpireTurnService(tables, handStore, handSettler, SeatDeparture(departures, walletTransfer), eventPublisher)
 
     /** userId = seatNo * 1000 으로 대응시킨다. */
     private fun tableWithHand(vararg stacks: Pair<Int, Long>): TableId {

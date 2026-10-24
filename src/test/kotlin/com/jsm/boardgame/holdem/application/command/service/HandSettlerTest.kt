@@ -63,7 +63,7 @@ class HandSettlerTest {
     private val foldWinnerCards = FakeFoldWinnerCards()
     private val handHistory = FakeHandHistory()
     private val leaveWallet = FakeWalletTransfer()
-    private val settler = HandSettler(tables, handStore, lastHandResults, foldWinnerCards, eventPublisher, countdown, departures, handHistory, LeaveReservations(departures, leaveWallet))
+    private val settler = HandSettler(tables, handStore, lastHandResults, foldWinnerCards, eventPublisher, countdown, departures, handHistory, LeaveReservations(SeatDeparture(departures, leaveWallet)))
 
     private fun seatedTable(vararg stacks: Pair<Int, Long>): HoldemTable {
         val seats = stacks.associate { (seatNo, stack) ->

@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.persistence.entity
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.model.Card
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -88,12 +89,12 @@ data class HandStateJson(
         val status: String,
     )
 
+    // 지운 필드(lastFullLevel)가 이미 저장된 행에 남아 있다 — 모르는 키를 무시하지 않으면 부팅 복구가 그 행에서 터진다
+    @JsonIgnoreProperties(ignoreUnknown = true)
     data class BettingRoundJson(
         val seats: List<BettingSeatJson>,
         val currentBet: Long,
         val lastRaiseSize: Long,
-        /** 도메인에서는 없어졌다. 이미 저장된 핸드·롤백된 이전 버전과의 호환을 위해 JSON 에만 남긴다(읽을 땐 무시, 쓸 땐 currentBet). */
-        val lastFullLevel: Long = 0,
         val actedSinceLastFullRaise: Set<Int>,
         val toActSeatNo: Int?,
         val lastAggressorSeatNo: Int? = null,
@@ -122,7 +123,6 @@ private fun HandSnapshot.BettingRoundSnapshot.toJson(): HandStateJson.BettingRou
     seats = seats.map { it.toJson() },
     currentBet = currentBet.amount,
     lastRaiseSize = lastRaiseSize.amount,
-    lastFullLevel = currentBet.amount,
     actedSinceLastFullRaise = actedSinceLastFullRaise,
     toActSeatNo = toActSeatNo,
     lastAggressorSeatNo = lastAggressorSeatNo,

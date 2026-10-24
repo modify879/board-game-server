@@ -8,8 +8,6 @@ import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpResult
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.HandStore
-import com.jsm.boardgame.holdem.application.port.RecentDepartures
-import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.slf4j.LoggerFactory
@@ -33,9 +31,8 @@ import org.springframework.transaction.annotation.Transactional
 class StandUpService(
     private val tables: HoldemTableRepository,
     private val handStore: HandStore,
-    private val walletTransfer: WalletTransfer,
     private val handStarter: HandStarter,
-    private val recentDepartures: RecentDepartures,
+    private val seatDeparture: SeatDeparture,
     private val eventPublisher: ApplicationEventPublisher,
 ) : StandUpUseCase {
 
@@ -58,13 +55,7 @@ class StandUpService(
             return StandUpResult.RESERVED
         }
 
-        val returned = table.standUp(UserId(command.userId))
-        recentDepartures.record(UserId(command.userId), returned)
-        if (returned.isPositive()) {
-            // memo 가 유일하게 "어느 게임인가" 를 나른다 — LedgerEntryType 이 이미 방향을 말하고
-            // LedgerReferenceType.GAME_TABLE 엔 게임 이름이 없다. 표시 문구를 넣지 않는다(규칙 8, 문구는 클라이언트가 만든다).
-            walletTransfer.fromGame(UserId(command.userId), returned.amount, tableId, memo = "holdem")
-        }
+        val returned = seatDeparture.standUp(tableId, table, UserId(command.userId))
         handStarter.rescheduleOnExit(tableId, table, hand)
         eventPublisher.publishEvent(JoinRequestsDue(tableId))
         log.info("기립했습니다: userId={}, tableId={}, returnedChips={}", command.userId, tableId.value, returned.amount)
