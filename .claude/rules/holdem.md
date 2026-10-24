@@ -20,6 +20,7 @@ paths: ["**/holdem/**"]
   취소된 핸드(`CancelHandService`)는 남기지 않는다. 남의 패는 `shown` 일 때만 보이게 하는 마스킹은 `HandHistoryQueryService` 가 한다.
   진행 중 핸드는 이벤트 로그가 아니라 **상태 스냅샷 1행**만 둔다(이벤트 소싱은 정상 경로와 다른 재생 코드를 하나 더 만든다).
   직전 핸드의 공개 결과 1행(`holdem_last_hand_result`)은 재구독 스냅샷용이고 새 핸드가 시작되면 지운다
+  공개 뷰 좌석의 `lastAction` 은 로그가 아니다 — 핸드가 스트리트마다 좌석별 마지막 행동 하나만 들고(`Hand.lastActions`, 스트리트가 넘어갈 때 비운다), 핸드가 끝나도 지우지 않는다
 - **보여 주기(하우스 룰 10)의 폴드 승자 카드는 `LastHandResult` 에 두지 않는다.** 그건 공개 결과의 출처라 비공개 카드가 섞이면 재구독 스냅샷으로 샌다.
   `FoldWinnerCards` 포트(인메모리)에 정산 때 담고, 새 핸드·쇼다운 정산 때 지운다
 - **개인 큐 유실은 돈 문제다.** "당신 차례" 가 증발하면 타임아웃 자동 폴드로 칩이 날아간다 —
@@ -58,6 +59,8 @@ paths: ["**/holdem/**"]
   참가자 수**로 한다 — 후보 수로 하면 대기 좌석이 빠진 판에서 버튼이 BB 와 같은 좌석이 되고 액션 순서가 뒤집힌다.
   헤즈업은 BB 가 아닌 한 좌석이 버튼·SB 를 겸하고, BB 는 직전 BB 다음 좌석으로 간다(TDA 34). 헤즈업 뒤 3인이 되면
   버튼은 "직전 SB" 가 아니라 새 SB 바로 앞 좌석이다
+  실제 포지션은 진행 중 핸드 스냅샷(`Hand.buttonSeatNo`·`smallBlindSeatNo`·`bigBlindSeatNo`)에만 있다. 공개 뷰의 `buttonSeatNo` 는
+  핸드가 있으면 그 핸드의 실제 버튼, 없으면 테이블의 명목 버튼이다. `smallBlindSeatNo`·`bigBlindSeatNo` 는 핸드가 없으면 null 이고 dead small blind 면 SB 만 null 이다
 - **새 참가자는 SB·버튼 자리에서는 포스팅을 자청해도 딜인되지 않는다.** Robert's Rules: "You must wait until
   the button passes." 어기면 SB 와 진입료를 이중으로 내 `committed > currentBet` 이 되고, 콜이
   `CHIPS_NEGATIVE` 로 터진다. 차단된 좌석은 `owesImmediatePost` 를 그대로 들고 기다린다
