@@ -42,7 +42,7 @@ out/
 !.claude/
 .claude/*
 !.claude/rules/
-.claude.local.md
+CLAUDE.local.md
 
 ### Kotlin ###
 .kotlin
