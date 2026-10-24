@@ -13,7 +13,7 @@
 | 동시성 | `docs/decisions/concurrency.md` | 게임 상태는 단일 실행기, 돈은 비관적 락인 이유; 타이머는 상대 시간, 벽시계는 "언제 일어났나" 기록에만; 호출자 타임아웃 대신 DB 에서 상한을 두는 이유; 턴 만료 폴드의 환불을 기립과 같은 트랜잭션에 두는 이유; 테이블을 지우지 않고 닫는 이유; 테이블별 인메모리 상태를 주인이 `TableClosed` 로 치우는 이유 |
 | 인증 | `docs/decisions/auth.md` | 역할 변경을 블랙리스트 + 갱신으로 하는 이유; 액세스 토큰과 리프레시 토큰의 형식이 다른 이유; 클라이언트 single-flight 가 서버로 대체되지 않는 이유; 리프레시 토큰을 응답 body 대신 httpOnly 쿠키로 내려주는 이유 |
 | 바운디드 컨텍스트 | `docs/decisions/bounded-contexts.md` | `wallet` 이 규칙 1의 대상이 아닌 이유 |
-| 홀덤 하우스 룰 | `docs/decisions/holdem-house-rules.md` | 목표 규칙과 근거(차례 시간·바이인·칩 추가·재착석·재시작·쇼다운·히스토리); 미구현 항목; 구현 순서 |
+| 홀덤 하우스 룰 | `docs/decisions/holdem-house-rules.md` | 목표 규칙과 근거(차례 시간·바이인·칩 추가·재착석·재시작·쇼다운·히스토리) |
 
 ## 아직 하지 않은 것
 

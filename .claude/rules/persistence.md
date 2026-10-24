@@ -20,7 +20,6 @@ paths:
   `TransientDataAccessException`(락·문장 타임아웃)은 503 `TEMPORARILY_UNAVAILABLE` — 롤백이 보장돼 재시도 안전. `TableExecutor.call` 에 호출자 타임아웃을 안 두는 이유는 `docs/decisions/concurrency.md`
 - 문자열 컬럼은 `text`. 길이 제약이 DB 에 없으므로 VO 가 유일한 방어선이다
 - 외부 리소스는 키만 저장하고 URL 은 presentation 이 조립한다
-- 페이지 응답은 `PagedModel`(`spring.data.web.pageable.serialization-mode: via_dto`)
 - 스키마 관리 — `ddl-auto: update` 를 계속 쓴다. Flyway 로 갈 계획이 없다.
   추가만 하고 아무것도 지우지 않으므로 컬럼 삭제·이름/타입 변경은 손으로 SQL 을 친다.
   Hibernate 가 못 만드는 제약(FK)은 `src/main/resources/data.sql` 의 멱등 DDL 로 건다.
