@@ -106,6 +106,10 @@ class Hand private constructor(
 
     fun holeCardsOf(seatNo: Int): List<Card> = holeCards.getValue(seatNo)
 
+    /** 홀카드 + 현재 보드로 본 지금의 최선 족보. 홀카드가 없는 좌석이면 null. 프리플랍은 2장 기준이다. */
+    fun currentRankOf(seatNo: Int): HandRank? =
+        holeCards[seatNo]?.let { HandEvaluator.evaluate(it + board) }
+
     /** 현재 스택. 라운드 진행 중이면 이번 라운드 커밋을 반영한 값, 핸드가 끝났으면 수령액까지 반영된 값. */
     fun stackOf(seatNo: Int): Chips =
         currentRound?.seats?.firstOrNull { it.seatNo == seatNo }?.stack ?: stacks.getValue(seatNo)

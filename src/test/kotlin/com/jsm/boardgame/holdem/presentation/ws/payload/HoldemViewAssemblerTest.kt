@@ -7,6 +7,7 @@ import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Card
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
+import com.jsm.boardgame.holdem.domain.model.HandEvaluator
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.LeaveReservation
 import com.jsm.boardgame.holdem.domain.model.SeatPresence
@@ -486,6 +487,33 @@ class HoldemViewAssemblerTest {
         for (card in listOf("Qh", "Qc")) {
             assertTrue(json.contains("\"$card\""), "쇼다운까지 간 좌석(QQ)의 홀카드 $card 가 공개 뷰 직렬화 결과에서 빠짐: $json")
         }
+    }
+
+    @Test
+    fun `개인 뷰의 currentHand 는 홀카드와 보드를 합친 현재 족보다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        table.placeButtonAtFirstSeat()
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
+            table.buttonSeatNo!!,
+            smallBlindSeatNo = 1,
+            bigBlindSeatNo = 2,
+            table.smallBlind,
+            table.bigBlind,
+            fixedShuffler("3s", "2s", "5s", "4s"),
+        )
+
+        assertEquals(CurrentHandView("HIGH_CARD", listOf(4, 2)), privateViewOf(TableId(1), 1, hand, 1L, null).currentHand)
+
+        hand.act(1, BettingAction.Call)
+        hand.act(2, BettingAction.Check) // 플랍
+
+        val expected = HandEvaluator.evaluate(hand.holeCardsOf(1) + hand.board)
+        assertEquals(3, hand.board.size)
+        assertEquals(
+            CurrentHandView(expected.category.name, expected.tiebreakers),
+            privateViewOf(TableId(1), 1, hand, 2L, null).currentHand,
+        )
     }
 
     @Test

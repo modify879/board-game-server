@@ -93,6 +93,7 @@ fun privateViewOf(tableId: TableId, seatNo: Int, hand: Hand, seq: Long, leaveRes
         tableId = tableId.value,
         seatNo = seatNo,
         holeCards = hand.holeCardsOf(seatNo).map { it.toString() },
+        currentHand = hand.currentRankOf(seatNo)?.let { CurrentHandView(it.category.name, it.tiebreakers) },
         availableActions = hand.availableActionsFor(seatNo)?.let { actions ->
             AvailableActionsView(
                 canCheck = actions.canCheck,
