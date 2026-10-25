@@ -46,6 +46,7 @@ paths: ["**/holdem/**"]
   예약에는 종류가 있다 — `DELETE /api/holdem/seat?after=SPECTATE|LEAVE`(기본 SPECTATE, 잘못된 값은 400 `REQUEST_INVALID`). 서버 실행은 종류와 무관하고 클라이언트가 기립 뒤 행동(관전 유지 / 방 목록 이동)을 정하는 데만 쓴다.
   같은 종류 재요청은 브로드캐스트 없는 멱등이고, 다른 종류는 202 를 유지한 채 종류만 바꿔 브로드캐스트한다(개인 뷰 갱신). 개인 뷰 `SeatPrivateView.leaveReservation`(null | "SPECTATE" | "LEAVE")으로 재접속 뒤에도 노출하고 공개 뷰는 `leaveReserved` 불리언 그대로다.
   종류는 `holdem_seats.leave_reservation`(nullable)에 저장하며 `leave_after_hand` 도 함께 쓴다. 종류가 생기기 전의 행(`leave_after_hand=true`, 종류 null)은 SPECTATE 로 복원한다
+- 개인 뷰 `SeatPrivateView.currentHand`({category: HandCategory 이름, tiebreakers: Rank 값 내림차순} | 홀카드가 없으면 null)는 홀카드 + 보드의 현재 족보다. 프리플랍은 2장 기준이라 PAIR/HIGH_CARD 만 나온다. 공개·브로드캐스트 뷰에는 싣지 않는다.
 - **BB 대기 규칙은 판을 굶겨 죽이지 않는다.** 후보(스택 양수 점유 좌석)가 2명 이상인데 대기를
   빼면 2명 미만이면, 전원의 대기를 풀고 참가시킨다. 없으면 영구 데드락이다 — 참가자 부족 예외가
   `@Transactional` 을 롤백해 블라인드 전진과 플래그 해제가 취소되고, 다음 호출도 같은 상태라 영원히 실패한다.

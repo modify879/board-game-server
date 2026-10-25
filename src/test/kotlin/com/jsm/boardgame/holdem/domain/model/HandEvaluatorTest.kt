@@ -136,8 +136,20 @@ class HandEvaluatorTest {
     }
 
     @Test
-    fun `5장 미만이면 구현 오류로 터진다`() {
+    fun `1장·3장·4장이면 구현 오류로 터진다`() {
+        assertFailsWith<IllegalStateException> { HandEvaluator.evaluate(cards("As")) }
+        assertFailsWith<IllegalStateException> { HandEvaluator.evaluate(cards("As", "Kd", "9h")) }
         assertFailsWith<IllegalStateException> { HandEvaluator.evaluate(cards("As", "Kd", "9h", "5c")) }
+    }
+
+    @Test
+    fun `홀카드 2장이 같은 랭크면 페어다`() {
+        assertEquals(HandRank(HandCategory.PAIR, listOf(7)), HandEvaluator.evaluate(cards("7c", "7h")))
+    }
+
+    @Test
+    fun `홀카드 2장이 다른 랭크면 높은 순 하이카드다`() {
+        assertEquals(HandRank(HandCategory.HIGH_CARD, listOf(14, 13)), HandEvaluator.evaluate(cards("Ks", "Ad")))
     }
 
     @Test

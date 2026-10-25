@@ -4,10 +4,18 @@ package com.jsm.boardgame.holdem.domain.model
 // 평가기는 인프라 없는 순수 규칙이라 domain/model 에 둔다.
 object HandEvaluator {
 
-    /** 5~7장 중 최선의 5장 조합에 대한 [HandRank] 를 돌려준다. 5장 미만·8장 이상·중복 카드는 구현 오류다. */
+    /**
+     * 5~7장 중 최선의 5장 조합에 대한 [HandRank] 를 돌려준다. 프리플랍 홀카드 2장만은 페어/하이카드로 평가한다.
+     * 그 외 장수·중복 카드는 구현 오류다.
+     */
     fun evaluate(cards: List<Card>): HandRank {
-        if (cards.size < 5 || cards.size > 7) error("카드는 5장 이상 7장 이하여야 한다: ${cards.size}장")
+        if (cards.size != 2 && (cards.size < 5 || cards.size > 7)) error("카드는 2장 또는 5장 이상 7장 이하여야 한다: ${cards.size}장")
         if (cards.distinct().size != cards.size) error("중복된 카드가 있다: $cards")
+        if (cards.size == 2) {
+            val ranksDesc = cards.map { it.rank.value }.sortedDescending()
+            return if (ranksDesc[0] == ranksDesc[1]) HandRank(HandCategory.PAIR, listOf(ranksDesc[0]))
+            else HandRank(HandCategory.HIGH_CARD, ranksDesc)
+        }
         return combinationsOfFive(cards).maxOf(::evaluateFive)
     }
 
