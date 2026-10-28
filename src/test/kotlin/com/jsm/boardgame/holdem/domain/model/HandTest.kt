@@ -368,6 +368,40 @@ class HandTest {
         assertEquals(listOf(ActionType.RAISE_TO, ActionType.CALL, ActionType.CALL), listOf(1, 2, 3).map { hand.lastActionOf(it) })
     }
 
+    @Test
+    fun `프리플랍에서 스트리트가 닫히기 전에는 모인 팟이 없다`() {
+        val hand = Hand.start(stacksOf(1 to 1_000, 2 to 1_000, 3 to 1_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
+        hand.act(1, BettingAction.Call)
+
+        assertEquals(emptyList(), hand.collectedPots())
+    }
+
+    @Test
+    fun `숏 올인이 있는 스트리트가 닫히면 메인 팟이 먼저고 사이드 팟은 긴 쪽만 자격이 있다`() {
+        val hand = Hand.start(stacksOf(1 to 300, 2 to 1_000, 3 to 1_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
+        hand.act(1, BettingAction.RaiseTo(chips(300)))
+        hand.act(2, BettingAction.RaiseTo(chips(600)))
+        hand.act(3, BettingAction.Call)
+
+        assertEquals(
+            listOf(SidePot(chips(900), setOf(1, 2, 3)), SidePot(chips(600), setOf(2, 3))),
+            hand.collectedPots(),
+        )
+    }
+
+    @Test
+    fun `이번 스트리트에 폴드한 좌석은 바로 자격에서 빠지고 이번 스트리트 베팅은 모인 팟에 들어가지 않는다`() {
+        val hand = Hand.start(stacksOf(1 to 1_000, 2 to 1_000, 3 to 1_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
+        hand.act(1, BettingAction.Call)
+        hand.act(2, BettingAction.Call)
+        hand.act(3, BettingAction.Check)
+        hand.act(2, BettingAction.RaiseTo(chips(200))) // 플랍 베팅 — 아직 모이지 않았다
+        hand.act(3, BettingAction.Fold)
+
+        assertEquals(Street.FLOP, hand.street)
+        assertEquals(listOf(SidePot(chips(600), setOf(1, 2))), hand.collectedPots())
+    }
+
     private fun preflopAllIn(): Hand {
         val hand = Hand.start(stacksOf(1 to 1_000, 2 to 1_000, 3 to 1_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
         hand.act(1, BettingAction.RaiseTo(chips(1_000)))

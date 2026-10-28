@@ -133,6 +133,13 @@ class Hand private constructor(
     }
 
     /**
+     * 이미 가운데로 모인 칩(끝난 스트리트까지)으로 만든 팟 층. 지금 스트리트의 진행 중 베팅은 넣지 않는다.
+     * 메인 팟이 먼저고, 폴드한 좌석(이번 스트리트의 폴드 포함)은 자격에서 빠지며, 콜 못 받은 초과분도 빠진다.
+     */
+    fun collectedPots(): List<SidePot> =
+        Pot.layout(totalContributed, seatNos.filter { statusOf(it) == SeatStatus.FOLDED }.toSet()).pots
+
+    /**
      * 진행 중 핸드의 상태 스냅샷. 덱과 팟은 담지 않는다 — 덱은 저장하면 진행 중인 판의 미래 카드를
      * DB 접근자가 알게 되고(규칙 6), 팟은 좌석별 총 투입액에서 유도되므로 따로 저장하면 두 곳이
      * 어긋날 수 있다. 복원은 [Companion.reconstitute] 를 거친다.

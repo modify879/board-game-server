@@ -61,10 +61,12 @@ fun publicViewOf(
     }
     return TablePublicView(
         tableId = tableId.value,
+        tableName = table.name,
         handInProgress = hand.isInProgress,
         street = hand?.street?.name,
         board = hand?.board?.map { it.toString() } ?: lastResult?.board ?: emptyList(),
         pot = hand?.potTotal()?.amount ?: 0L,
+        pots = hand?.collectedPots()?.map { PotPublicView(it.amount.amount, it.eligibleSeats.sorted()) } ?: emptyList(),
         toActSeatNo = hand?.toActSeatNo,
         // 테이블의 버튼은 명목상 값이다 — 헤즈업으로 줄면 핸드의 실제 버튼이 달라져 SB·BB 와 어긋난다.
         buttonSeatNo = hand?.buttonSeatNo ?: table.buttonSeatNo,
