@@ -41,6 +41,7 @@ fun publicViewOf(
                 // 끝난 핸드는 좌석 값을 쓴다 — 다음 핸드 전까지 칩 추가로 좌석 스택이 바뀔 수 있어 좌석 값이 최신이다.
                 stack = if (hand.isFinished) seat.stack.amount else hand.stackOf(seat.seatNo).amount,
                 totalContributed = hand.totalContributedBy(seat.seatNo).amount,
+                streetBet = hand.streetBetOf(seat.seatNo).amount,
                 status = hand.statusOf(seat.seatNo).name,
                 lastAction = lastAction,
                 presence = seat.presence.name,
@@ -52,6 +53,7 @@ fun publicViewOf(
                 userId = seat.userId.value,
                 stack = seat.stack.amount,
                 totalContributed = 0L,
+                streetBet = 0L,
                 status = "SITTING_OUT",
                 lastAction = lastAction,
                 presence = seat.presence.name,

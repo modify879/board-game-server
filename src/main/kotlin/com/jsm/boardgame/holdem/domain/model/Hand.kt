@@ -121,9 +121,12 @@ class Hand private constructor(
     /** 이 좌석이 이번 핸드에서 마지막으로 한 행동. 아직 행동하지 않았으면 null(블라인드 포스팅은 행동이 아니다). */
     fun lastActionOf(seatNo: Int): ActionType? = lastActions[seatNo]
 
+    /** 지금 열린 베팅 라운드에서 이 좌석이 낸 칩. 열린 라운드가 없으면(런아웃·핸드 종료) 0. */
+    fun streetBetOf(seatNo: Int): Chips =
+        currentRound?.seats?.firstOrNull { it.seatNo == seatNo }?.committed ?: Chips.ZERO
+
     fun totalContributedBy(seatNo: Int): Chips {
-        val inFlight = currentRound?.seats?.firstOrNull { it.seatNo == seatNo }?.committed ?: Chips.ZERO
-        return totalContributed.getValue(seatNo) + inFlight
+        return totalContributed.getValue(seatNo) + streetBetOf(seatNo)
     }
 
     fun potTotal(): Chips {
