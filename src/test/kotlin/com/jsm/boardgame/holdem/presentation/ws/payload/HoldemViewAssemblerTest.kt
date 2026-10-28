@@ -56,6 +56,8 @@ class HoldemViewAssemblerTest {
         assertNull(view.street)
         assertEquals(emptyList(), view.board)
         assertEquals(0L, view.pot)
+        assertEquals("assembler-test", view.tableName)
+        assertEquals(emptyList(), view.pots)
         assertNull(view.toActSeatNo)
         assertNull(view.result)
         assertEquals(2, view.seats.size)

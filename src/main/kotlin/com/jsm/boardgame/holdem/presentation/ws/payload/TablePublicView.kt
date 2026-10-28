@@ -14,10 +14,17 @@ package com.jsm.boardgame.holdem.presentation.ws.payload
  */
 data class TablePublicView(
     val tableId: Long,
+    val tableName: String,
     val handInProgress: Boolean,
     val street: String?,
     val board: List<String>,
     val pot: Long,
+    /**
+     * 끝난 스트리트까지 이미 가운데로 모인 칩의 팟 층. 지금 스트리트의 베팅은 넣지 않는다([pot] 에서 좌석별
+     * 진행 중 베팅을 뺀 값). 메인 팟이 먼저고 폴드한 좌석은 자격에서 빠지며 콜 못 받은 초과분도 뺀다.
+     * 핸드가 없거나 아직 모인 칩이 없으면 빈 리스트.
+     */
+    val pots: List<PotPublicView>,
     val toActSeatNo: Int?,
     val buttonSeatNo: Int?,
     /** 이번 핸드에서 실제로 SB·BB 를 낸 좌석. 핸드가 없으면 null(SB 는 dead small blind 여도 null). */
@@ -43,6 +50,8 @@ data class TablePublicView(
      */
     val seq: Long,
 )
+
+data class PotPublicView(val amount: Long, val eligibleSeatNos: List<Int>)
 
 data class SeatPublicView(
     val seatNo: Int,
