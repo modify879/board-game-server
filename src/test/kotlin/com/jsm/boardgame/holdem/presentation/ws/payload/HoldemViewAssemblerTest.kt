@@ -141,6 +141,26 @@ class HoldemViewAssemblerTest {
     }
 
     @Test
+    fun `공개 뷰의 streetBet 은 열린 라운드 베팅액이고 핸드에 없는 좌석은 0이다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
+            buttonSeatNo = 1,
+            smallBlindSeatNo = 1,
+            bigBlindSeatNo = 2,
+            table.smallBlind,
+            table.bigBlind,
+            identityShuffler,
+        )
+
+        val view = publicViewOf(TableId(1), table, hand, null, 1L, null, null, null)
+
+        assertEquals(table.smallBlind.amount, view.seats.first { it.seatNo == 1 }.streetBet)
+        assertEquals(table.bigBlind.amount, view.seats.first { it.seatNo == 2 }.streetBet)
+        assertEquals(0L, view.seats.first { it.seatNo == 3 }.streetBet)
+    }
+
+    @Test
     fun `폴드한 좌석은 공개 뷰에서 FOLDED 로 표시되고 핸드는 계속 진행 중이며 홀카드가 노출되지 않는다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
         table.placeButtonAtFirstSeat() // null -> 1

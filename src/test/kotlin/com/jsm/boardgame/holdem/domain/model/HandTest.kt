@@ -369,6 +369,48 @@ class HandTest {
     }
 
     @Test
+    fun `프리플랍 시작 직후 SB·BB 의 이번 라운드 베팅액은 블라인드이고 나머지는 0이다`() {
+        val hand = Hand.start(stacksOf(1 to 1_000, 2 to 1_000, 3 to 1_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
+
+        assertEquals(chips(0), hand.streetBetOf(1))
+        assertEquals(chips(100), hand.streetBetOf(2))
+        assertEquals(chips(200), hand.streetBetOf(3))
+    }
+
+    @Test
+    fun `프리플랍 라운드가 닫혀 플랍 라운드가 열리면 모두 0이다`() {
+        val hand = Hand.start(stacksOf(1 to 1_000, 2 to 1_000, 3 to 1_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
+        hand.act(1, BettingAction.Call)
+        hand.act(2, BettingAction.Call)
+        hand.act(3, BettingAction.Check)
+
+        assertEquals(3, hand.board.size)
+        assertTrue(hand.seatNos.all { hand.streetBetOf(it) == Chips.ZERO })
+    }
+
+    @Test
+    fun `런아웃 중에는 열린 라운드가 없어 모두 0이다`() {
+        val hand = preflopAllIn()
+
+        assertTrue(hand.isRunningOut)
+        assertTrue(hand.seatNos.all { hand.streetBetOf(it) == Chips.ZERO })
+    }
+
+    @Test
+    fun `스트리트 중간에 총 기여액은 모인 칩과 이번 라운드 베팅액의 합이다`() {
+        val hand = Hand.start(stacksOf(1 to 1_000, 2 to 1_000, 3 to 1_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
+        hand.act(1, BettingAction.Call)
+        hand.act(2, BettingAction.Call)
+        hand.act(3, BettingAction.Check)
+        hand.act(2, BettingAction.RaiseTo(chips(300)))
+
+        assertEquals(chips(300), hand.streetBetOf(2))
+        assertEquals(chips(0), hand.streetBetOf(3))
+        // 프리플랍에 모인 칩은 좌석마다 200
+        assertTrue(hand.seatNos.all { hand.totalContributedBy(it) == chips(200) + hand.streetBetOf(it) })
+    }
+
+    @Test
     fun `프리플랍에서 스트리트가 닫히기 전에는 모인 팟이 없다`() {
         val hand = Hand.start(stacksOf(1 to 1_000, 2 to 1_000, 3 to 1_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
         hand.act(1, BettingAction.Call)
