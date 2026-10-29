@@ -18,4 +18,6 @@ data class HandBroadcastRequested(
     val hand: Hand?,
     /** 방금 끝난 [hand] 의 공개 결과. 끝난 핸드를 싣는 HandSettler 만 채운다 — 그 외에는 null. */
     val lastResult: LastHandResult? = null,
+    /** false = 핸드 진행(차례·스트리트·런아웃)은 그대로이고 좌석 표시만 바뀐 화면 갱신. 타이머·복구 리스너는 이 이벤트를 무시한다. */
+    val handProgressed: Boolean = true,
 )

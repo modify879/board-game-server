@@ -61,6 +61,8 @@ class TurnTimer(
     // 롤백되면 afterCommit 이 안 돌아 예약도 남지 않는다.
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     fun onHandBroadcastRequested(event: HandBroadcastRequested) {
+        // 예약·취소 같은 화면 갱신이 차례 타이머를 다시 걸면 차례인 사람이 시간을 무한히 늘릴 수 있다.
+        if (!event.handProgressed) return
         TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
             override fun getOrder(): Int = Ordered.HIGHEST_PRECEDENCE
             override fun afterCommit() {

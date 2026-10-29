@@ -207,6 +207,7 @@ class HandRecovery(
      */
     @TransactionalEventListener
     fun onHandBroadcastRequested(event: HandBroadcastRequested) {
+        if (!event.handProgressed) return
         try {
             val recovery = removePending(event.tableId) ?: return
             log.info("테이블 {} 복구 유예 중 핸드가 다시 진행되어 유예를 끝냅니다.", event.tableId.value)

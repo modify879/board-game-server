@@ -127,6 +127,7 @@ class HandStarter(
             countdown.cancel(tableId)
         }
         tables.save(table)
-        eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand))
+        // 좌석이 나가도 핸드는 진행되지 않는다 — 진행 중 핸드를 싣더라도 타이머를 다시 걸게 하지 않는다.
+        eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand, handProgressed = hand == null))
     }
 }

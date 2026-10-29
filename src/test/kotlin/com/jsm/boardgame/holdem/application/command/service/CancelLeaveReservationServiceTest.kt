@@ -15,6 +15,7 @@ import com.jsm.boardgame.holdem.domain.model.UserId
 import org.springframework.context.ApplicationEventPublisher
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.test.assertFailsWith
 
 private class CancelLeaveFakeHandStore : HandStore {
@@ -46,6 +47,7 @@ class CancelLeaveReservationServiceTest {
 
         assertEquals(false, tables.findById(tableId)!!.seatAt(1)!!.leaveReserved)
         assertEquals(1, events.count { it is HandBroadcastRequested })
+        assertTrue(events.filterIsInstance<HandBroadcastRequested>().none { it.handProgressed })
     }
 
     @Test
