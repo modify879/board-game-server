@@ -28,6 +28,6 @@ class CancelLeaveReservationService(
         table.cancelLeaveReservation(userId)
         tables.save(table)
         val tableId = table.id!!
-        eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, handStore.find(tableId)))
+        eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, handStore.find(tableId), handProgressed = false))
     }
 }

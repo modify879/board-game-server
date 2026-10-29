@@ -49,7 +49,7 @@ class StandUpService(
             if (table.seatOf(UserId(command.userId))!!.leaveReservation != requested) {
                 table.reserveLeave(UserId(command.userId), requested)
                 tables.save(table)
-                eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand))
+                eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand, handProgressed = false))
                 log.info("핸드 뒤 퇴장을 예약했습니다: userId={}, tableId={}, after={}", command.userId, tableId.value, requested)
             }
             return StandUpResult.RESERVED

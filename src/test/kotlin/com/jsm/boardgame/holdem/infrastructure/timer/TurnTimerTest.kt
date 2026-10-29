@@ -164,6 +164,25 @@ class TurnTimerTest {
     }
 
     @Test
+    fun `핸드 진행이 아닌 화면 갱신 이벤트는 예약을 취소하거나 다시 걸지 않는다`() {
+        val scheduler = TurnTimerFakeTaskScheduler()
+        val useCase = TurnTimerFakeExpireTurnUseCase()
+        val timer = TurnTimer(scheduler, clock, useCase, TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase(), Duration.ofSeconds(30))
+        val tableId = TableId(1L)
+        val hand = handWithToAct(1 to 10_000L, 2 to 10_000L)
+
+        timer.commit(event(hand, tableId))
+        val first = scheduler.scheduledCalls[0]
+        timer.commit(event(hand, tableId).copy(handProgressed = false))
+
+        assertTrue(!first.future.cancelled)
+        assertEquals(1, scheduler.scheduledCalls.size)
+        assertEquals(Duration.ofSeconds(30), timer.remaining(tableId))
+        first.task.run() // 토큰도 그대로라 원래 예약이 여전히 유효하다
+        assertEquals(1, useCase.calls.size)
+    }
+
+    @Test
     fun `remaining 은 예약 전에는 null 이고 차례가 예약되면 남은 시간을 돌려주고 차례가 없어지면 다시 null 이다`() {
         val timer = TurnTimer(TurnTimerFakeTaskScheduler(), clock, TurnTimerFakeExpireTurnUseCase(), TurnTimerFakeTableExecutor(), TurnTimerFakeCancelHandUseCase(), Duration.ofSeconds(30))
         val tableId = TableId(1L)

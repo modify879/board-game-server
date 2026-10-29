@@ -47,6 +47,7 @@ class RunoutTimer(
 
     @TransactionalEventListener
     fun onHandBroadcastRequested(event: HandBroadcastRequested) {
+        if (!event.handProgressed) return
         scheduled.remove(event.tableId)?.future?.cancel(false)
         // 런아웃이 아닌 이벤트에서도 올린다 — 이미 돌고 있는 낡은 걸음이 토큰 검사에서 걸러져야 한다.
         val token = tokens.computeIfAbsent(event.tableId) { AtomicLong() }.incrementAndGet()

@@ -106,6 +106,7 @@ class StandUpServiceTest {
         assertTrue(tables.findById(tableId)!!.seatAt(1)!!.leaveReserved)
         assertEquals(0, walletTransfer.fromGameCalls.size)
         assertEquals(1, eventPublisher.events.count { it is HandBroadcastRequested })
+        assertTrue(eventPublisher.events.filterIsInstance<HandBroadcastRequested>().none { it.handProgressed })
     }
 
     @Test
@@ -124,6 +125,7 @@ class StandUpServiceTest {
         assertEquals(8_000L, walletTransfer.fromGameCalls.single().amount)
         // 핸드가 진행 중이므로 브로드캐스트는 핸드를 실어야 한다(null 이면 공개 뷰가 핸드를 잃는다)
         assertTrue(eventPublisher.events.filterIsInstance<HandBroadcastRequested>().all { it.hand != null })
+        assertTrue(eventPublisher.events.filterIsInstance<HandBroadcastRequested>().none { it.handProgressed })
     }
 
     @Test

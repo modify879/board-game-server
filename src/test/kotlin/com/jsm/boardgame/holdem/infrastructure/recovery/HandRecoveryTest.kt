@@ -637,6 +637,24 @@ class HandRecoveryTest {
     }
 
     @Test
+    fun `복구 유예 중 핸드 진행이 아닌 화면 갱신 이벤트는 유예를 끝내지 않는다`() {
+        val handStore = HandRecoveryFakeHandStore()
+        val tables = HandRecoveryFakeTableRepository()
+        val scheduler = HandRecoveryFakeTaskScheduler()
+        val timerScheduler = HandRecoveryFakeTaskScheduler()
+        val connectionTimer = ConnectionTimer(timerScheduler, clock, HandRecoveryFakeUpdateSeatPresenceUseCase(), HandRecoveryFakeExpireConnectionUseCase(reservedTableId = null), tables, InMemoryJoinQueue(50), HandRecoveryFakeJoinQueueNotifier(), HandRecoveryFakeUserConnections(), HandRecoveryFakeTableExecutor(), Duration.ofMinutes(3))
+        val recovery = HandRecovery(handStore, tables, scheduler, clock, HandRecoveryFakeResumeHandUseCase(), HandRecoveryFakeCancelHandUseCase(), connectionTimer, nextHandTimer, HandRecoveryFakeTableExecutor(), HandRecoveryFakeUserConnections(), Duration.ofMinutes(3))
+        val hand = seatTableWithHand(tables, 1L, 1, 2)
+        handStore.put(TableId(1L), hand)
+        recovery.onApplicationReady()
+
+        recovery.onHandBroadcastRequested(HandBroadcastRequested(TableId(1L), tables.findById(TableId(1L))!!, hand, handProgressed = false))
+
+        assertTrue(!scheduler.scheduledCalls[0].future.cancelled)
+        assertEquals(0, timerScheduler.scheduledCalls.size)
+    }
+
+    @Test
     fun `복구 유예 중 돌아왔다가 다시 끊긴 사용자는 유예가 끝날 때 연결 감시를 새로 받는다`() {
         val handStore = HandRecoveryFakeHandStore()
         val tables = HandRecoveryFakeTableRepository()

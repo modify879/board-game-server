@@ -145,6 +145,19 @@ class RunoutTimerTest {
     }
 
     @Test
+    fun `핸드 진행이 아닌 화면 갱신 이벤트는 런아웃 예약을 취소하거나 다시 걸지 않는다`() {
+        timer.onHandBroadcastRequested(event(hand(allIn = true)))
+        val first = scheduler.scheduledCalls[0]
+
+        timer.onHandBroadcastRequested(event(hand(allIn = true)).copy(handProgressed = false))
+
+        assertTrue(!first.future.cancelled)
+        assertEquals(1, scheduler.scheduledCalls.size)
+        first.task.run() // 토큰도 그대로라 원래 예약이 여전히 유효하다
+        assertEquals(1, useCase.calls.size)
+    }
+
+    @Test
     fun `토큰이 바뀐 뒤 깨어난 stale 작업은 걸음을 진행하지 않는다`() {
         timer.onHandBroadcastRequested(event(hand(allIn = true)))
         val stale = scheduler.scheduledCalls[0]
