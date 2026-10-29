@@ -174,8 +174,10 @@ class Hand private constructor(
         } else {
             IllegalHandStateException(HoldemErrorCode.HAND_ALREADY_FINISHED, "이미 끝난 핸드입니다: buttonSeatNo=$buttonSeatNo")
         }
+        // 프리플랍은 블라인드 때문에 currentBet 이 항상 0 보다 커서 스트리트를 따로 볼 필요가 없다.
+        val opening = action is BettingAction.RaiseTo && round.currentBet == Chips.ZERO
         round.act(seatNo, action)
-        lastActions[seatNo] = action.type
+        lastActions[seatNo] = if (opening) ActionType.BET else action.type
         // 라운드가 교체되기 전에 읽는다 — round 는 로컬 참조라 currentRound 필드가 바뀌어도 안전하다.
         showdownLeaderSeatNo = round.lastAggressorSeatNo
         if (round.isComplete) {

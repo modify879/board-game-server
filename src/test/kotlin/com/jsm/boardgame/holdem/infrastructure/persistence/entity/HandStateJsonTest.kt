@@ -146,6 +146,27 @@ class HandStateJsonTest {
     }
 
     @Test
+    fun `포스트플랍 오프닝 베팅 BET 은 JSON 왕복에서 보존된다`() {
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)),
+            buttonSeatNo = 1,
+            smallBlindSeatNo = 2,
+            bigBlindSeatNo = 3,
+            smallBlind = Chips.of(100),
+            bigBlind = Chips.of(200),
+            shuffler = identityShuffler,
+        )
+        hand.act(1, BettingAction.Call)
+        hand.act(2, BettingAction.Call)
+        hand.act(3, BettingAction.Check)
+        hand.act(2, BettingAction.RaiseTo(Chips.of(400)))
+
+        val text = objectMapper.writeValueAsString(hand.snapshot().toJson())
+        val restored = objectMapper.readValue(text, HandStateJson::class.java)
+        assertEquals(ActionType.BET, restored.toSnapshot().lastActions[2])
+    }
+
+    @Test
     fun `SB·BB 좌석은 JSON 왕복에서 보존되고 필드가 없는 예전 JSON 은 null 로 읽힌다`() {
         val hand = Hand.start(
             mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)),

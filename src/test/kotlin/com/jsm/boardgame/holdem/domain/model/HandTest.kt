@@ -334,6 +334,34 @@ class HandTest {
         assertEquals(ActionType.RAISE_TO, hand.lastActionOf(1))
     }
 
+    private fun flopHand(): Hand {
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)
+        hand.act(1, BettingAction.RaiseTo(chips(600)))
+        hand.act(2, BettingAction.Call)
+        hand.act(3, BettingAction.Call)
+        return hand
+    }
+
+    @Test
+    fun `프리플랍 레이즈는 RAISE_TO 로 남고 아무도 안 건 스트리트의 첫 RaiseTo 는 BET, 그 뒤 재레이즈는 RAISE_TO 로 남는다`() {
+        val hand = flopHand()
+        assertEquals(ActionType.RAISE_TO, hand.lastActionOf(1))
+
+        hand.act(2, BettingAction.RaiseTo(chips(400)))
+        assertEquals(ActionType.BET, hand.lastActionOf(2))
+        hand.act(3, BettingAction.RaiseTo(chips(1_000)))
+        assertEquals(ActionType.RAISE_TO, hand.lastActionOf(3))
+    }
+
+    @Test
+    fun `포스트플랍 올인 오프닝 베팅도 BET 으로 남고 스냅샷 왕복에서 보존된다`() {
+        val hand = flopHand()
+        hand.act(2, BettingAction.RaiseTo(chips(9_400)))
+
+        assertEquals(ActionType.BET, hand.lastActionOf(2))
+        assertEquals(ActionType.BET, Hand.reconstitute(hand.snapshot(), identityShuffler).lastActionOf(2))
+    }
+
     @Test
     fun `시작할 때 받은 SB·BB 좌석을 그대로 갖고 dead small blind 면 SB 는 null 이다`() {
         val hand = Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), identityShuffler)

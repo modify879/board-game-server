@@ -5,7 +5,11 @@ import com.jsm.boardgame.holdem.domain.exception.IllegalBettingActionException
 
 enum class SeatStatus { ACTIVE, FOLDED, ALL_IN }
 
-enum class ActionType { FOLD, CHECK, CALL, RAISE_TO }
+/**
+ * BET 은 기록 전용이다 — 아무도 걸지 않은 스트리트(currentBet 0)의 첫 RAISE_TO 를 [Hand] 가 BET 으로 기록한다.
+ * 명령으로는 들어오지 않는다(BettingAction 중 BET 타입은 없다).
+ */
+enum class ActionType { FOLD, CHECK, CALL, RAISE_TO, BET }
 
 sealed interface BettingAction {
     val type: ActionType
