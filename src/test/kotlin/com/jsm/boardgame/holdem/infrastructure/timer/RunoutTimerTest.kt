@@ -103,10 +103,11 @@ class RunoutTimerTest {
     private val fixedInstant = Instant.parse("2026-01-01T00:00:00Z")
     private val clock = Clock.fixed(fixedInstant, ZoneOffset.UTC)
     private val stepDelay = Duration.ofSeconds(2)
+    private val dealGrace = Duration.ofMillis(3500)
     private val scheduler = RunoutTimerFakeTaskScheduler()
     private val useCase = RunoutTimerFakeAdvanceRunoutUseCase()
     private val cancelUseCase = RunoutTimerFakeCancelHandUseCase()
-    private val timer = RunoutTimer(scheduler, clock, useCase, cancelUseCase, RunoutTimerFakeTableExecutor(), stepDelay)
+    private val timer = RunoutTimer(scheduler, clock, useCase, cancelUseCase, RunoutTimerFakeTableExecutor(), stepDelay, dealGrace)
     private val tableId = TableId(1L)
 
     private fun hand(allIn: Boolean): Hand {
@@ -131,6 +132,14 @@ class RunoutTimerTest {
 
         assertEquals(1, scheduler.scheduledCalls.size)
         assertEquals(fixedInstant.plus(stepDelay), scheduler.scheduledCalls[0].time)
+    }
+
+    @Test
+    fun `새 핸드가 바로 런아웃되면 첫 걸음을 dealGrace 뒤로 예약한다`() {
+        timer.onHandBroadcastRequested(event(hand(allIn = true)).copy(handStarted = true))
+
+        assertEquals(1, scheduler.scheduledCalls.size)
+        assertEquals(fixedInstant.plus(dealGrace), scheduler.scheduledCalls[0].time)
     }
 
     @Test
@@ -280,7 +289,7 @@ class RunoutTimerTest {
             }
             override fun post(tableId: TableId, task: () -> Unit) = task()
         }
-        racing = RunoutTimer(scheduler, clock, useCase, cancelUseCase, executor, stepDelay)
+        racing = RunoutTimer(scheduler, clock, useCase, cancelUseCase, executor, stepDelay, dealGrace)
         racing.onHandBroadcastRequested(event(hand(allIn = true)))
 
         scheduler.scheduledCalls[0].task.run()

@@ -78,7 +78,7 @@ app:
     next-hand-delay: 10s
     runout-step-delay: 2s
     turn-timeout: 30s
-    # 클라이언트의 새 판 연출(셔플 1.0s + 딜 2.0s) + 네트워크 여유 0.5s. 첫 차례에만 더한다.
+    # 클라이언트의 새 판 연출(셔플 1.0s + 딜 2.0s) + 네트워크 여유 0.5s. 새 핸드의 첫 차례에 더하고, 바로 런아웃되면 첫 보드 공개 지연으로 쓴다.
     deal-grace: 3500ms
     idle-table-ttl: 1m
     idle-sweep-interval: 15s
