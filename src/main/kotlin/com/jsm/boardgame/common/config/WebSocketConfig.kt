@@ -36,6 +36,7 @@ class WebSocketConfig(
     private val stompErrorHandler: StompErrorHandler,
     private val capturingWebSocketHandlerDecoratorFactory: CapturingWebSocketHandlerDecoratorFactory,
     @Value("\${app.stomp.heartbeat-interval}") private val heartbeatInterval: Duration,
+    @Value("\${app.stomp.allowed-origin-patterns}") private val allowedOriginPatterns: Array<String>,
 ) : WebSocketMessageBrokerConfigurer {
 
     // 하트비트 전용. 빈으로 노출하면 TaskScheduler 를 타입으로 주입받는 holdem 타이머들이 모호해지고,
@@ -50,7 +51,7 @@ class WebSocketConfig(
     fun shutdownHeartbeatScheduler() = heartbeatScheduler.shutdown()
 
     override fun registerStompEndpoints(registry: StompEndpointRegistry) {
-        registry.addEndpoint("/ws")
+        registry.addEndpoint("/ws").setAllowedOriginPatterns(*allowedOriginPatterns)
         registry.setErrorHandler(stompErrorHandler)
     }
 
