@@ -37,6 +37,7 @@ class RunoutTimer(
     private val cancelHandUseCase: CancelHandUseCase,
     private val tableExecutor: TableExecutor,
     @Value("\${app.holdem.runout-step-delay}") private val stepDelay: Duration,
+    @Value("\${app.holdem.deal-grace}") private val dealGrace: Duration,
 ) {
     private class ScheduledStep(val future: ScheduledFuture<*>, val token: Long)
 
@@ -53,7 +54,8 @@ class RunoutTimer(
         val token = tokens.computeIfAbsent(event.tableId) { AtomicLong() }.incrementAndGet()
 
         if (event.hand?.isRunningOut != true) return
-        schedule(event.tableId, token, stepDelay)
+        // 새 핸드가 블라인드만으로 바로 런아웃되면 첫 보드는 클라이언트 딜 연출이 끝난 뒤(deal-grace)에 깐다.
+        schedule(event.tableId, token, if (event.handStarted) dealGrace else stepDelay)
     }
 
     /** 테이블이 닫히면 예약과 토큰을 치운다. 토큰이 사라지면 이미 깨어난 낡은 걸음도 걸러진다. */
