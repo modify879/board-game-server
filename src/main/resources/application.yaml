@@ -71,6 +71,9 @@ app:
     stomp-rotation-grace: 30s
   stomp:
     heartbeat-interval: 10s
+    # nginx 가 TLS 를 끝내고 http 로 넘겨 same-origin 검사가 https Origin 을 거부한다. 외부 https 주소를 여기 둔다.
+    # same-origin(http://localhost:8000/8001)은 패턴과 무관하게 계속 허용된다. 쉼표로 여러 개.
+    allowed-origin-patterns: https://modify95.iptime.org:[*]
   holdem:
     next-hand-delay: 10s
     runout-step-delay: 2s
