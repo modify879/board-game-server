@@ -36,6 +36,9 @@ import java.util.concurrent.atomic.AtomicLong
  * 발행되고 이 타이머가 거기서 새로 예약을 건다 — 복구 후 턴 타이머는 남은 시간을
  * 이어받지 않고 새로 시작한다. 턴 제한은 설정(`app.holdem.turn-timeout`)이며 테이블별 값이 필요해지면
  * TablePolicy 로 옮길 자리다.
+ *
+ * 새 핸드의 첫 차례([HandBroadcastRequested.handStarted])만 클라이언트의 셔플·딜 연출 시간(`app.holdem.deal-grace`)을
+ * 더해 예약한다. [turnTimeout] 은 그대로라 공개 뷰의 turnTimeoutMs 는 순수 차례 길이이고 turnRemainingMs 만 여유를 포함한다.
  */
 @Component
 class TurnTimer(
@@ -45,6 +48,7 @@ class TurnTimer(
     private val tableExecutor: TableExecutor,
     private val cancelHandUseCase: CancelHandUseCase,
     @Value("\${app.holdem.turn-timeout}") override val turnTimeout: Duration,
+    @Value("\${app.holdem.deal-grace}") private val dealGrace: Duration,
 ) : TurnCountdown {
     private class ScheduledExpiry(val future: ScheduledFuture<*>, val token: Long)
 
@@ -88,7 +92,7 @@ class TurnTimer(
         val seatNo = event.hand?.toActSeatNo ?: return
         val future = taskScheduler.schedule(
             { onExpire(event.tableId, seatNo, token) },
-            Instant.now(clock).plus(turnTimeout),
+            Instant.now(clock).plus(turnTimeout).plus(if (event.handStarted) dealGrace else Duration.ZERO),
         )
         scheduled[event.tableId] = ScheduledExpiry(future, token)
     }
