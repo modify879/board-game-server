@@ -20,4 +20,6 @@ data class HandBroadcastRequested(
     val lastResult: LastHandResult? = null,
     /** false = 핸드 진행(차례·스트리트·런아웃)은 그대로이고 좌석 표시만 바뀐 화면 갱신. 타이머·복구 리스너는 이 이벤트를 무시한다. */
     val handProgressed: Boolean = true,
+    /** true = 새 핸드가 막 시작돼 첫 차례가 생긴 브로드캐스트(HandStarter.start 만). 차례 타이머가 딜 연출 여유(app.holdem.deal-grace)를 한 번 더한다. */
+    val handStarted: Boolean = false,
 )

@@ -102,7 +102,7 @@ class HandStarter(
         foldWinnerCards.remove(tableId)
         handStore.save(tableId, hand)
         tables.save(table)
-        eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand))
+        eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand, handStarted = true))
         return true
     }
 
