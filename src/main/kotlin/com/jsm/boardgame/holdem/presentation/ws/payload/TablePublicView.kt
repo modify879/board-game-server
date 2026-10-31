@@ -61,7 +61,7 @@ data class SeatPublicView(
     /** 지금 열린 베팅 라운드에서 낸 칩(좌석 앞 칩). 라운드가 없으면(런아웃·핸드 종료·핸드 미참가) 0. 가운데 칩은 [TablePublicView.pots], 콜 못 받은 초과분 = pot − Σpots − ΣstreetBet. */
     val streetBet: Long,
     val status: String,
-    /** 이 핸드에서 마지막으로 한 행동(FOLD/CHECK/CALL/RAISE_TO). 행동 전·블라인드만 낸 좌석·핸드 미참가 좌석은 null. 핸드가 끝나도 다음 핸드 시작 전까지(결과 표시 중) 남는다. */
+    /** 이 핸드에서 마지막으로 한 행동(FOLD/CHECK/CALL/BET/RAISE_TO). 행동 전·블라인드만 낸 좌석·핸드 미참가 좌석은 null. 핸드가 끝나도 다음 핸드 시작 전까지(결과 표시 중) 남는다. */
     val lastAction: String?,
     val presence: String,
     /** 이 핸드가 끝나면 일어나겠다고 예약한 좌석. 숨길 정보가 아니다. */

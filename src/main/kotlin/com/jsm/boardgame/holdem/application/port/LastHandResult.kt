@@ -10,7 +10,7 @@ import com.jsm.boardgame.holdem.domain.model.Hand
  * 있어 [Payout.userId]·[ShownHand.userId] 를 함께 담는다(핸드 시점의 점유자). 라이브 브로드캐스트와 재구독 스냅샷이 같은 출처를 쓴다.
  */
 data class LastHandResult(val board: List<String>, val payouts: List<Payout>, val shownHands: List<ShownHand>,
-    /** 좌석별 마지막 행동(FOLD/CHECK/CALL/RAISE_TO). 핸드 시점의 점유자와 함께 담는다 — 행동한 좌석만. */
+    /** 좌석별 마지막 행동(FOLD/CHECK/CALL/BET/RAISE_TO). 핸드 시점의 점유자와 함께 담는다 — 행동한 좌석만. */
     val lastActions: List<LastAction> = emptyList(),
 ) {
     data class Payout(val seatNo: Int, val userId: UserId, val amount: Long)

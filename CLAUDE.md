@@ -31,11 +31,11 @@ com.jsm.boardgame
 └── <context>/       ← 모든 바운디드 컨텍스트가 이 형태
     ├── domain/      model/ repository/ service/ exception/
     │                repository·service = 출력 포트. service 는 도메인 규칙이 필요로 하는 것(해싱, 셔플)
-    ├── application/ command/{usecase,service,support}  port/  event/  exception/  query/{service,port,view}
+    ├── application/ command/{usecase,service,support}  config/  port/  event/  exception/  query/{service,port,view}
     │                port = 유스케이스가 필요로 하는 출력 포트(세션, 토큰, 타 컨텍스트)
     ├── infrastructure/ persistence/{entity,adapter}  security/{adapter,config}  acl/
     │                acl = 타 컨텍스트를 부르는 어댑터. DB 를 안 건드리므로 persistence 가 아니다
-    └── presentation/ config/ exception/ rest/{request,response}  ws/
+    └── presentation/ config/ exception/ rest/{request,response}  ws/{config,payload}
 ```
 
 - **한 패키지에 역할이 섞이면 가른다. 크기는 기준이 아니다.** 파일 1개짜리 하위 패키지도 그대로 둔다
