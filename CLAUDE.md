@@ -11,9 +11,11 @@ PostgreSQL + Redis / 단일 Gradle 모듈.
 ./gradlew build                          # 전체 빌드
 ./gradlew test --tests '*NicknameTest'   # 하나만
 ./gradlew unitTest                       # 컨테이너 없이 단위 테스트만 (*IntegrationTest 제외)
-./gradlew bootRun                        # 로컬 서버 :8080 (compose 자동 기동, DevTools 자동 재시작)
+./gradlew bootRun                        # 로컬 서버 :8080 (compose 자동 기동)
 ./gradlew bootRun --args='--spring.profiles.active=qa'   # QA 서버 :8081 (별도 DB, 덱 고정 API)
 ```
+
+서버가 떠 있는 트리에서는 빌드하지 않는다 — bootRun 은 build/classes 를 그대로 읽어, 실행 중에 바뀌면 아직 로드되지 않은 클래스가 새 버전으로 섞인다. DevTools 는 쓰지 않는다(오래 떠 있는 서버를 승인 없이 재시작시키고, 개발용 기본값으로 오류 응답 형태를 바꾼다).
 
 qa 프로필은 `app_environment` 표식이 `qa` 인 DB 에서만 기동한다(`QaProfileGuard`). 표식은 compose-qa 초기화 SQL 이 만든다.
 `GET /api/server-info` 는 인증 없이 열려 있고 가드를 통과한 QA 서버만 `environment=qa` 를 돌려준다. qa 프로필에서만 QA 덱 고정 API(`POST /api/admin/qa/holdem/tables/{tableId}/next-deck`, ADMIN)가 켜진다.
