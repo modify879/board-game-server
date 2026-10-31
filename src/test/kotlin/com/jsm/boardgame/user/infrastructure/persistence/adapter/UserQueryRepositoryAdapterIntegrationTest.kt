@@ -1,7 +1,7 @@
 package com.jsm.boardgame.user.infrastructure.persistence.adapter
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.application.query.port.UserQueryRepository
 import com.jsm.boardgame.user.domain.model.Nickname
 import com.jsm.boardgame.user.domain.model.PasswordHash
@@ -9,14 +9,11 @@ import com.jsm.boardgame.user.domain.model.User
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class UserQueryRepositoryAdapterIntegrationTest {
 
     @Autowired

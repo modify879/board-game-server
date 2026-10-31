@@ -1,18 +1,16 @@
 package com.jsm.boardgame.user.infrastructure.security.adapter
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.infrastructure.security.config.JwtProperties
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.RotationResult
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
 import org.springframework.data.redis.core.StringRedisTemplate
 import java.time.Clock
@@ -72,8 +70,7 @@ class MutableClock(
  * 이 시계에서 정확히 같은 시각을 읽더라도(오히려 경합을 더 확실히 재현한다) 경합 가드가
  * 정확히 하나만 통과시키는 동작 자체는 그대로 검증된다.
  */
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class RedisAuthSessionStoreIntegrationTest {
 
     @Autowired

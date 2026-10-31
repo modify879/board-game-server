@@ -1,6 +1,6 @@
 package com.jsm.boardgame.wallet.application.command.service
 
-import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.common.error.BusinessException
 import com.jsm.boardgame.user.domain.model.Nickname
@@ -21,8 +21,6 @@ import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
@@ -40,8 +38,7 @@ import kotlin.test.assertFailsWith
  * (user_id, idempotency_key) 유니크 제약이다. 첫 트랜잭션을 래치로 열어 둔 채 두 번째를 INSERT 에서
  * 막히게 한 뒤 커밋시켜, 결과를 결정적으로 만든다.
  */
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class RequestIdempotencyConcurrencyIntegrationTest {
 
     @Autowired

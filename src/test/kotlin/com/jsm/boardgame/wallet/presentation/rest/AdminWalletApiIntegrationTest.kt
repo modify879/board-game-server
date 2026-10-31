@@ -1,17 +1,14 @@
 package com.jsm.boardgame.wallet.presentation.rest
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
 import com.jayway.jsonpath.JsonPath
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.domain.model.UserRole
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
-import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
@@ -25,9 +22,7 @@ import java.util.UUID
  * `wallet` 컨텍스트의 관리자 REST API 통합 테스트.
  * 인가(403), 그리고 승인·반려·취소·조정으로 실제 잔액과 원장이 맞물려 움직이는지를 검증한다.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class AdminWalletApiIntegrationTest {
 
     @Autowired

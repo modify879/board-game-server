@@ -1,9 +1,9 @@
 package com.jsm.boardgame.holdem.presentation.rest
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jayway.jsonpath.JsonPath
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
@@ -17,10 +17,7 @@ import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.server.LocalServerPort
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
-import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.messaging.simp.stomp.StompHeaders
@@ -44,9 +41,7 @@ import kotlin.concurrent.thread
  * 재시도 가능한 503 으로 보이는지 확인한다. 지갑을 잠그는 동기 REST 경로로 기립(캐시아웃)을 쓴다 —
  * 착석은 대기열을 거쳐 비동기라 REST 가 오류를 못 본다.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureMockMvc
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class HoldemDbTimeoutIntegrationTest {
 
     @Autowired private lateinit var mockMvc: MockMvc

@@ -1,16 +1,13 @@
 package com.jsm.boardgame.common.config
 
-import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.IntegrationTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.server.LocalServerPort
-import org.springframework.context.annotation.Import
 import java.net.Socket
 
 /** nginx 뒤에서 TLS 가 끝나 Origin 은 https, 서버가 보는 Host 는 http 인 상황을 원시 핸드셰이크로 재현한다. */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class WebSocketOriginIntegrationTest {
 
     @LocalServerPort

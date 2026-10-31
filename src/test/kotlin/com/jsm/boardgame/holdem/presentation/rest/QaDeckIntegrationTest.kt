@@ -2,7 +2,7 @@ package com.jsm.boardgame.holdem.presentation.rest
 
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
-import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
@@ -25,14 +25,12 @@ import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.server.LocalServerPort
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
-import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.messaging.simp.stomp.StompHeaders
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter
 import org.springframework.test.context.ActiveProfiles
+import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -48,13 +46,11 @@ import java.util.concurrent.TimeUnit
  * qa 프로필에서 덱 고정 API 로 지정한 홀카드·보드가 실제 핸드에 그대로 딜되는지 본다.
  * 타이머 값은 qa 프로필 yaml(턴 8초 등)이 아니라 테스트 JVM 의 기본(아래 properties)으로 맞춘다.
  */
-@SpringBootTest(
-    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+@IntegrationTest
+@ActiveProfiles("qa")
+@TestPropertySource(
     properties = ["app.holdem.turn-timeout=1h", "app.holdem.idle-table-ttl=1h", "spring.docker.compose.enabled=false"],
 )
-@AutoConfigureMockMvc
-@ActiveProfiles("qa")
-@Import(TestcontainersConfiguration::class)
 class QaDeckIntegrationTest {
 
     @Autowired private lateinit var mockMvc: MockMvc

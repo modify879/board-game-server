@@ -1,8 +1,8 @@
 package com.jsm.boardgame.user.presentation.rest
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
 import com.jayway.jsonpath.JsonPath
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import com.jsm.boardgame.user.infrastructure.security.config.JwtProperties
@@ -11,9 +11,6 @@ import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
-import org.springframework.context.annotation.Import
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm
@@ -38,9 +35,7 @@ import javax.crypto.spec.SecretKeySpec
  * JUnit 은 테스트 메서드 실행 순서를 보장하지 않으므로, "로그인 후 토큰 사용" 처럼 순서에
  * 의존하는 시나리오는 하나의 테스트 안에서 이어서 수행한다.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class AuthApiIntegrationTest {
 
     @Autowired

@@ -1,9 +1,9 @@
 package com.jsm.boardgame.holdem.infrastructure.executor
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.UniqueNames
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.PlayActionCommand
@@ -23,8 +23,6 @@ import com.jsm.boardgame.user.domain.model.User
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 import java.util.concurrent.CountDownLatch
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -42,8 +40,7 @@ import kotlin.test.assertNull
  * 정상적으로 끝나거나, 아직 자기 차례가 아니라서 [ExpireTurnService] 의 stale 가드에 조용히
  * 걸린다 — 어느 순서로 실행되든 예외가 나지 않는다.
  */
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class TableActorRaceIntegrationTest {
 
     @Autowired

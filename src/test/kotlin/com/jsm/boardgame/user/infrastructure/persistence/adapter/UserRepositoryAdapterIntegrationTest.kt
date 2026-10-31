@@ -1,9 +1,9 @@
 package com.jsm.boardgame.user.infrastructure.persistence.adapter
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.user.infrastructure.persistence.entity.UserJpaEntity
 import com.jsm.boardgame.user.infrastructure.persistence.entity.UserJpaRepository
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.domain.exception.DuplicateNicknameException
 import com.jsm.boardgame.user.domain.exception.DuplicateUsernameException
 import com.jsm.boardgame.user.domain.exception.UserErrorCode
@@ -13,8 +13,6 @@ import com.jsm.boardgame.user.domain.model.User
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -30,8 +28,7 @@ import kotlin.test.assertFailsWith
  * 시점까지 미뤄질 수 있어 "save 호출 시점에 예외가 던져진다"는 가정이 깨질 수 있다.
  * 대신 각 테스트가 고유한 username/nickname 을 써서 테스트 간 격리를 확보한다.
  */
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class UserRepositoryAdapterIntegrationTest {
 
     @Autowired
