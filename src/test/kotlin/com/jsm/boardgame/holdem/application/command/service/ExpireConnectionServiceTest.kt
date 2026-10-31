@@ -1,8 +1,8 @@
 package com.jsm.boardgame.holdem.application.command.service
 
-import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
+import com.jsm.boardgame.holdem.domain.repository.FakeHoldemTableRepository
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
-import com.jsm.boardgame.holdem.application.port.FakeHandStore
+import com.jsm.boardgame.holdem.domain.repository.FakeHandStore
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpResult

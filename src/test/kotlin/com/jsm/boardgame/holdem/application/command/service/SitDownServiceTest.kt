@@ -1,9 +1,9 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.support.SeatRequester
-import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
+import com.jsm.boardgame.holdem.domain.repository.FakeHoldemTableRepository
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
-import com.jsm.boardgame.holdem.application.port.FakeHandStore
+import com.jsm.boardgame.holdem.domain.repository.FakeHandStore
 import com.jsm.boardgame.holdem.application.command.usecase.SitDownCommand
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
 import com.jsm.boardgame.holdem.application.exception.NotConnectedException

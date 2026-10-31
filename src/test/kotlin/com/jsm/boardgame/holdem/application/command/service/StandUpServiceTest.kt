@@ -4,8 +4,8 @@ import com.jsm.boardgame.holdem.application.command.support.SeatDeparture
 import com.jsm.boardgame.holdem.application.command.support.HandStarter
 import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
-import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
-import com.jsm.boardgame.holdem.application.port.FakeHandStore
+import com.jsm.boardgame.holdem.domain.repository.FakeHoldemTableRepository
+import com.jsm.boardgame.holdem.domain.repository.FakeHandStore
 import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue

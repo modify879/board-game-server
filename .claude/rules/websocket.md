@@ -2,6 +2,7 @@
 paths:
   - "**/presentation/ws/**"
   - "**/common/web/stomp/**"
+  - "**/infrastructure/stomp/**"
   - "**/common/config/WebSocket*"
   - "**/common/config/StompSessionSchedulerConfig*"
 ---
@@ -26,3 +27,4 @@ paths:
   예외 — 특정 세션을 겨냥한 전송(sessionId 헤더, 예: join-queue 구독 스냅샷)은 그 세션이 레지스트리에 없으면 보내지 않고 WARN 만 남긴다. 보내면 Spring 이 사용자의 모든 세션으로 퍼뜨린다.
 - **브로드캐스트는 커밋 전에 내보내지 않는다.** 순번은 `BEFORE_COMMIT` 에서 따고 전송은 `afterCommit` 에서 한다(세부는 holdem rules).
   커밋 전에 내보내면 뒤이어 롤백됐을 때 클라이언트만 서버보다 앞선 상태를 보게 된다
+- **`StompSessionRegistry` 는 `Entry` 변경을 인스턴스 락 하나로 막는다.** 락 안은 메모리 작업뿐이다(소켓 I/O 는 락 밖). 세션이 많아져 경합이 보이면 세션별 락으로 쪼갠다

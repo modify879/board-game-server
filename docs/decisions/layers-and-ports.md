@@ -40,7 +40,7 @@ BuckPal 의 ArchUnit 규칙이 검사하는 것도 `applicationLayer.doesNotDepe
 필드 이름이 바뀌어도 컴파일이 통과한다. 단건 조회에서 JDSL 이 더 장황한 것은 규칙을 하나로
 유지하는 값이다.
 
-**예외**: `@Lock(PESSIMISTIC_WRITE)` 단건 조회(`WalletJpaEntity.findByUserIdForUpdate` 등)는 조건이 하나뿐이라 문제가 생기지 않는다.
+**예외**: `@Lock(PESSIMISTIC_WRITE)` 단건 조회(`WalletJpaRepository.findByUserIdForUpdate` 등(`WalletJpaEntity.kt` 에 선언))는 조건이 하나뿐이라 문제가 생기지 않는다.
 
 ### `common` 을 넷으로 나눈 이유
 가장 중요한 경계는 `error` 와 `web` 사이다 — `error` 는 `domain` 이 import 하는 유일한 common
