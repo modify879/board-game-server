@@ -1,5 +1,6 @@
-package com.jsm.boardgame.holdem.presentation.ws
+package com.jsm.boardgame.holdem.presentation.ws.broadcast
 
+import com.jsm.boardgame.holdem.presentation.ws.HoldemDestinations
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.common.error.ErrorCode
 import com.jsm.boardgame.holdem.application.port.JoinQueueEntry

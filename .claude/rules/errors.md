@@ -5,6 +5,7 @@ paths:
   - "**/common/web/**"
   - "**/presentation/**"
   - "**/infrastructure/security/**"
+  - "**/common/config/SecurityConfig*"
 ---
 
 # 오류 계약

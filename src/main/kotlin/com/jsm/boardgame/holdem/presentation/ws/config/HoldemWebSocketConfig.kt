@@ -1,7 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.ws.config
 
-import com.jsm.boardgame.holdem.presentation.ws.HoldemSubscriptionInterceptor
-import com.jsm.boardgame.holdem.presentation.ws.HoldemSubscriptionSnapshotListener
+import com.jsm.boardgame.holdem.presentation.ws.subscription.HoldemSubscriptionInterceptor
+import com.jsm.boardgame.holdem.presentation.ws.subscription.HoldemSubscriptionSnapshotListener
 import org.springframework.context.annotation.Configuration
 import org.springframework.messaging.simp.config.ChannelRegistration
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer
