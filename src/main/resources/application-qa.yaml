@@ -17,7 +17,6 @@ app:
     next-hand-delay: 1s
     turn-timeout: 8s
     idle-table-ttl: 15s
-    rejoin-obligation-window: 10s
   profile-image:
     base-url: "http://localhost:8081/images/profiles/"
     default-url: "http://localhost:8081/images/profiles/default.png"
