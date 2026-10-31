@@ -48,12 +48,12 @@ class HandStarter(
         val awaitingSeatNos = table.occupiedSeats().filter { it.awaitingBigBlind }.map { it.seatNo }.toSet()
 
         // 착석 시 "즉시 포스팅"을 고른 좌석. Robert's Rules of Poker, Button and Blind Use: 새 참가자는
-        // 포스팅을 자청해도 SB·버튼 자리에서는 딜인되지 않는다 — 버튼이 지나갈 때까지 대기한다.
+        // 포스팅을 자청해도 버튼~SB 구간에서는 딜인되지 않는다 — 버튼이 지나갈 때까지 대기한다.
         val owingSeatNos = table.occupiedSeats()
             .filter { it.seatNo in candidateSeatNos && it.owesImmediatePost }
             .map { it.seatNo }
             .toSet()
-        val blockedNewPlayers = owingSeatNos.filter { it == positions.buttonSeatNo || it == positions.smallBlindSeatNo }.toSet()
+        val blockedNewPlayers = owingSeatNos.filter { isBetweenButtonAndFirstBlind(it, positions) }.toSet()
 
         // 참가자 = 후보 − (아직 대기 중인데 이번 BB 가 아닌 좌석) − (SB·버튼 자리에 걸린 즉시 포스팅
         // 신규 좌석). 대기 중인 좌석이 SB·버튼 자리에 걸리면 그 자리는 비는 셈이라 dead small
@@ -104,6 +104,21 @@ class HandStarter(
         tables.save(table)
         eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand, handStarted = true))
         return true
+    }
+
+    /**
+     * 버튼(포함)부터 버튼 뒤 첫 블라인드까지의 원형 좌석 구간 안인가. 첫 블라인드는 SB, dead SB 면 BB 다 —
+     * SB 는 구간에 포함하고 BB 는 제외한다(SB~BB 사이 좌석은 막지 않는다). dead button 으로 BB 가 빈 좌석을
+     * 건너뛰면 버튼~SB 사이에 신규 좌석이 앉을 수 있어 정확히 버튼·SB 자리만 보면 놓친다.
+     */
+    private fun isBetweenButtonAndFirstBlind(seatNo: Int, positions: HoldemTable.HandPositions): Boolean {
+        fun distanceFromButton(to: Int) = Math.floorMod(to - positions.buttonSeatNo, HoldemTable.MAX_SEATS)
+        val sb = positions.smallBlindSeatNo
+        return if (sb != null) {
+            distanceFromButton(seatNo) <= distanceFromButton(sb)
+        } else {
+            distanceFromButton(seatNo) < distanceFromButton(positions.bigBlindSeatNo)
+        }
     }
 
     /** 착석처럼 "들어오는" 좌석 변화 뒤에 부른다.
