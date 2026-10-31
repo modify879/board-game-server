@@ -87,6 +87,8 @@ interface WithdrawalRequestJpaRepository :
     fun findByIdForUpdate(@Param("id") id: Long): WithdrawalRequestJpaEntity?
 
     fun findByUserIdAndIdempotencyKey(userId: Long, idempotencyKey: String): WithdrawalRequestJpaEntity?
+
+    fun existsByUserIdAndStatus(userId: Long, status: String): Boolean
 }
 
 fun WithdrawalRequestJpaEntity.toDomain(): WithdrawalRequest =

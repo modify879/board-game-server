@@ -4,6 +4,8 @@ import com.jsm.boardgame.wallet.application.command.usecase.TransferToGameComman
 import com.jsm.boardgame.wallet.domain.exception.InsufficientBalanceException
 import com.jsm.boardgame.wallet.domain.exception.InvalidAmountException
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
+import com.jsm.boardgame.wallet.domain.exception.WalletOwnerNotFoundException
+import com.jsm.boardgame.wallet.application.port.UserExistence
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.Money
@@ -16,6 +18,7 @@ import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 import com.jsm.boardgame.wallet.domain.repository.FakeLedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.FakeWalletRepository
 
@@ -24,7 +27,8 @@ class TransferToGameServiceTest {
     private val wallets = FakeWalletRepository()
     private val ledger = FakeLedgerEntryRepository()
     private val clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
-    private val service = TransferToGameService(wallets, ledger, clock)
+    private val withdrawnUserIds = mutableSetOf<Long>()
+    private val service = TransferToGameService(wallets, ledger, UserExistence { it.value !in withdrawnUserIds }, clock)
 
     @Test
     fun `바이인이면 잔액이 줄고 GAME_BUY_IN 엔트리가 balanceAfter 와 함께 남는다`() {
@@ -83,5 +87,19 @@ class TransferToGameServiceTest {
         }
         assertEquals(WalletErrorCode.INSUFFICIENT_BALANCE, e.errorCode)
         assertEquals(Money.ZERO, wallets.findByUserId(UserId(42))!!.balance)
+    }
+
+    @Test
+    fun `지갑 락을 잡은 뒤 보니 탈퇴한 사용자면 WALLET_OWNER_NOT_FOUND 이고 돈이 움직이지 않는다`() {
+        wallets.stored[1] = Wallet.reconstitute(id = WalletId(1), userId = UserId(1), balance = Money.of(10_000))
+        withdrawnUserIds += 1
+
+        val e = assertFailsWith<WalletOwnerNotFoundException> {
+            service.transfer(TransferToGameCommand(userId = 1, amount = 3_000, gameTableId = 7, memo = "holdem"))
+        }
+
+        assertEquals(WalletErrorCode.WALLET_OWNER_NOT_FOUND, e.errorCode)
+        assertEquals(Money.of(10_000), wallets.findByUserId(UserId(1))!!.balance)
+        assertTrue(ledger.stored.isEmpty())
     }
 }

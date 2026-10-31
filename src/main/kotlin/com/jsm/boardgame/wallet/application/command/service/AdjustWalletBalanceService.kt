@@ -35,16 +35,6 @@ class AdjustWalletBalanceService(
         val adjustment = Adjustment.of(command.amount, command.reason)
         val idempotencyKey = requireValidIdempotencyKey(command.idempotencyKey)
 
-        // 이 확인은 친절한 오류용이고 보장이 아니다 — 확인과 저장 사이에 회원 탈퇴가 들어오면
-        // 그대로 뚫린다. 실제 보장은 wallets.user_id 외래키(fk_wallets_user, data.sql)다 —
-        // "유일성은 DB 가 보장한다" 와 같은 두 겹 구조이고, 사전 체크와 FK 위반 둘 다
-        // WALLET_OWNER_NOT_FOUND 로 떨어진다.
-        if (!userExistence.exists(UserId(command.targetUserId))) {
-            throw WalletOwnerNotFoundException(
-                "조정 대상 사용자가 없음: targetUserId=${command.targetUserId}",
-            )
-        }
-
         val now = Instant.now(clock)
 
         // 키를 지갑을 건드리기 전에 먼저 선점한다: 같은 @Transactional 안에서
@@ -53,7 +43,14 @@ class AdjustWalletBalanceService(
         // 이 INSERT 의 PK 로 직렬화돼 늦게 커밋하는 쪽만 409 를 받는다.
         adjustmentKeys.claim(idempotencyKey, UserId(command.adminUserId), UserId(command.targetUserId), now)
 
+        // 활성 확인은 지갑 락을 잡은 뒤에 한다 — 탈퇴가 같은 락으로 직렬화하므로 기다리는 동안 커밋된 탈퇴를 본다.
+        // 아예 없는 사용자는 findOrOpen 의 INSERT 가 fk_wallets_user 로 먼저 막는다. 둘 다 WALLET_OWNER_NOT_FOUND 다.
         val wallet = wallets.findOrOpen(UserId(command.targetUserId))
+        if (!userExistence.exists(UserId(command.targetUserId))) {
+            throw WalletOwnerNotFoundException(
+                "조정 대상 사용자가 없음: targetUserId=${command.targetUserId}",
+            )
+        }
         val entry = wallet.record(
             type = adjustment.type,
             amount = adjustment.amount,

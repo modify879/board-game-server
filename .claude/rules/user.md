@@ -23,3 +23,5 @@ paths: ["**/user/**"]
 - 탈퇴(`withdrawn_at`)한 사용자는 어댑터에서 걸러낸다 — 명령 쪽 `findById`·`findByUsername` 과 조회 쪽 전부. 서비스마다 확인하지 않는다.
   사용자명은 계속 예약되고(`existsByUsername` 은 탈퇴자도 센다) 닉네임은 `withdrawn-user-{id}` 묘비로 바꿔 반납한다(15자 이상이라 유효 닉네임과 겹치지 않는다)
 - 마지막 관리자의 자기 강등을 막지 않는다(사용자 결정)
+- 탈퇴의 사전 조건과 저장은 트랜잭션 하나다(`WithdrawService`, `TransactionOperations`). 안에서 **지갑 락(`WalletHoldings`) → 좌석·대기열 확인 → 저장** 순서를 지킨다.
+  좌석 확인을 락 앞으로 옮기면 그 사이 커밋된 착석을 놓쳐 앉은 채 탈퇴된다(`WithdrawConcurrencyIntegrationTest`). 세션 종료는 커밋 뒤다

@@ -4,6 +4,8 @@ import com.jsm.boardgame.wallet.application.config.WalletProperties
 import com.jsm.boardgame.wallet.application.command.usecase.RequestWithdrawalCommand
 import com.jsm.boardgame.wallet.domain.exception.InsufficientBalanceException
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
+import com.jsm.boardgame.wallet.domain.exception.WalletOwnerNotFoundException
+import com.jsm.boardgame.wallet.application.port.UserExistence
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.Money
@@ -26,7 +28,9 @@ class RequestWithdrawalServiceTest {
     private val wallets = FakeWalletRepository()
     private val ledger = FakeLedgerEntryRepository()
     private val clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
-    private val service = RequestWithdrawalService(withdrawalRequests, wallets, ledger, clock, WalletProperties(1_000, 1_000))
+    private val withdrawnUserIds = mutableSetOf<Long>()
+    private val userExistence = UserExistence { it.value !in withdrawnUserIds }
+    private val service = RequestWithdrawalService(withdrawalRequests, wallets, ledger, userExistence, clock, WalletProperties(1_000, 1_000))
 
     private fun walletWithBalance(userId: Long, balance: Long) {
         wallets.stored[userId] = Wallet.reconstitute(id = WalletId(userId), userId = UserId(userId), balance = Money.of(balance))
@@ -66,7 +70,7 @@ class RequestWithdrawalServiceTest {
     @Test
     fun `최소액은 설정값을 따른다 - 미달이면 지갑을 건드리지 않는다`() {
         walletWithBalance(1, 10_000)
-        val strict = RequestWithdrawalService(withdrawalRequests, wallets, ledger, clock, WalletProperties(1_000, 5_000))
+        val strict = RequestWithdrawalService(withdrawalRequests, wallets, ledger, userExistence, clock, WalletProperties(1_000, 5_000))
 
         val e = assertFailsWith<com.jsm.boardgame.wallet.domain.exception.InvalidWithdrawalAmountException> {
             strict.request(RequestWithdrawalCommand(1, 4_000, "국민은행", "123456789012", "홍길동", "key"))
@@ -75,5 +79,19 @@ class RequestWithdrawalServiceTest {
         assertEquals(WalletErrorCode.WITHDRAWAL_AMOUNT_INVALID, e.errorCode)
         assertEquals(Money.of(10_000), wallets.findByUserId(UserId(1))!!.balance)
         service.request(RequestWithdrawalCommand(1, 4_000, "국민은행", "123456789012", "홍길동", "key2"))
+    }
+
+    @Test
+    fun `지갑 락을 잡은 뒤 보니 탈퇴한 사용자면 WALLET_OWNER_NOT_FOUND 이고 요청도 차감도 없다`() {
+        walletWithBalance(1, 10_000)
+        withdrawnUserIds += 1
+
+        val e = assertFailsWith<WalletOwnerNotFoundException> {
+            service.request(RequestWithdrawalCommand(1, 5_000, "국민은행", "123456789012", "홍길동", "key"))
+        }
+
+        assertEquals(WalletErrorCode.WALLET_OWNER_NOT_FOUND, e.errorCode)
+        assertEquals(Money.of(10_000), wallets.findByUserId(UserId(1))!!.balance)
+        kotlin.test.assertTrue(withdrawalRequests.stored.isEmpty())
     }
 }

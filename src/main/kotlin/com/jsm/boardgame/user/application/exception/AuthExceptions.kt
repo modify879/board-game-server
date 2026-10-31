@@ -1,6 +1,7 @@
 package com.jsm.boardgame.user.application.exception
 
 import com.jsm.boardgame.common.error.BusinessException
+import com.jsm.boardgame.common.error.CommonErrorCode
 import com.jsm.boardgame.user.domain.exception.UserErrorCode
 
 /**
@@ -41,6 +42,13 @@ class WithdrawalSeatedAtTableException(logMessage: String) :
 /** 탈퇴하려는 사용자의 지갑에 잔액이 있거나 처리 중인 충전·환전 요청이 있다. */
 class WithdrawalWalletNotEmptyException(logMessage: String) :
     BusinessException(UserErrorCode.WITHDRAWAL_WALLET_NOT_EMPTY, logMessage)
+
+/**
+ * 탈퇴의 지갑 락이 같은 사용자의 첫 지갑 생성(`uk_wallets_user`)과 엇갈렸다. 트랜잭션은 이미 깨졌지만 롤백됐으므로
+ * 새 트랜잭션으로 다시 하면 된다 — `WithdrawService` 가 한 번 재시도한다. 그래도 나면 락 타임아웃과 같은 일시 실패로 본다.
+ */
+class WalletLockContendedException(logMessage: String, cause: Throwable) :
+    BusinessException(CommonErrorCode.TEMPORARILY_UNAVAILABLE, logMessage, cause)
 
 /** 프로필 이미지 크기 상한은 업로드 유스케이스의 정책이다 — `User` 는 바이트를 모른다. */
 class ProfileImageTooLargeException(

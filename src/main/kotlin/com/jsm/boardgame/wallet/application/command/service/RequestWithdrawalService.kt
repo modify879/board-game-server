@@ -5,6 +5,8 @@ import com.jsm.boardgame.wallet.application.command.usecase.RequestWithdrawalUse
 import com.jsm.boardgame.wallet.application.command.usecase.RequestWithdrawalCommand
 import com.jsm.boardgame.wallet.application.config.WalletProperties
 import com.jsm.boardgame.wallet.application.exception.IdempotencyKeyReusedException
+import com.jsm.boardgame.wallet.application.port.UserExistence
+import com.jsm.boardgame.wallet.domain.exception.WalletOwnerNotFoundException
 import com.jsm.boardgame.wallet.domain.model.BankAccount
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
@@ -32,6 +34,7 @@ class RequestWithdrawalService(
     private val withdrawalRequests: WithdrawalRequestRepository,
     private val wallets: WalletRepository,
     private val ledger: LedgerEntryRepository,
+    private val userExistence: UserExistence,
     private val clock: Clock,
     private val properties: WalletProperties,
 ) : RequestWithdrawalUseCase {
@@ -51,12 +54,18 @@ class RequestWithdrawalService(
             return checkNotNull(existing.id).value
         }
 
+        // 지갑 락을 먼저 잡고 활성을 확인한다 — 탈퇴와 같은 락으로 직렬화한다. 새 요청 행은 아직 아무도 잠글 수
+        // 없어 "요청 → 지갑" 순서와 엇갈리지 않는다.
+        // 지갑이 없으면 잔액 0 인 채로 만들어지므로 아래 record 가 INSUFFICIENT_BALANCE 로 떨어진다 —
+        // "지갑 없음" 을 따로 알리지 않는 것이 의도다.
+        val wallet = wallets.findOrOpen(userId)
+        if (!userExistence.exists(userId)) {
+            throw WalletOwnerNotFoundException("탈퇴했거나 없는 사용자의 환전 요청: userId=${command.userId}")
+        }
+
         // 원장 엔트리가 요청을 가리켜야 하므로 요청을 먼저 저장해 id 를 받는다.
         val saved = withdrawalRequests.save(request)
 
-        // 지갑이 없으면 잔액 0 인 채로 만들어지므로 아래 record 가 INSUFFICIENT_BALANCE 로 떨어진다 —
-        // "지갑 없음" 을 따로 알리지 않는 것이 의도다.
-        val wallet = wallets.findOrOpen(UserId(command.userId))
         val entry = wallet.record(
             type = LedgerEntryType.WITHDRAWAL_HOLD,
             amount = saved.amount,

@@ -9,6 +9,7 @@ import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import com.jsm.boardgame.common.persistence.violatedConstraint
 import com.jsm.boardgame.wallet.application.exception.IdempotencyKeyConflictException
 import com.jsm.boardgame.wallet.domain.model.UserId
+import com.jsm.boardgame.wallet.domain.model.DepositRequestStatus
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Repository
 
@@ -25,6 +26,9 @@ class DepositRequestRepositoryAdapter(
 
     override fun findByUserAndIdempotencyKey(userId: UserId, idempotencyKey: String): DepositRequest? =
         jpa.findByUserIdAndIdempotencyKey(userId.value, idempotencyKey)?.toDomain()
+
+    override fun existsPendingByUserId(userId: UserId): Boolean =
+        jpa.existsByUserIdAndStatus(userId.value, DepositRequestStatus.PENDING.name)
 
     // saveAndFlush 를 쓴다 — save() 만 쓰면 flush 가 커밋까지 미뤄질 수 있어 유니크 위반이
     // 호출자의 @Transactional 커밋 시점에야 터져 이 catch 를 지나친다.
