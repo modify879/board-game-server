@@ -1,11 +1,11 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.command.support.SeatRequester
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.config.TablePolicyProperties
 import com.jsm.boardgame.holdem.application.command.usecase.CreateTableCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CreateTableUseCase
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
-import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -23,9 +23,9 @@ class CreateTableService(
     private val properties: TablePolicyProperties,
 ) : CreateTableUseCase {
 
-    override fun create(command: CreateTableCommand): TableId {
+    override fun create(command: CreateTableCommand): Long {
         val saved = tables.save(HoldemTable.create(command.name, properties.toPolicy()))
         seatRequester.request(saved, UserId(command.ownerUserId), postBlindImmediately = false, buyIn = command.buyIn)
-        return saved.id!!
+        return saved.id!!.value
     }
 }

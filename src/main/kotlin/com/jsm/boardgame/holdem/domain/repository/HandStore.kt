@@ -1,4 +1,4 @@
-package com.jsm.boardgame.holdem.application.port
+package com.jsm.boardgame.holdem.domain.repository
 
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.TableId

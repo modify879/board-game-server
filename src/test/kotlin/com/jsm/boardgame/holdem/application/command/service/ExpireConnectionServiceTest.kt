@@ -73,7 +73,7 @@ class ExpireConnectionServiceTest {
 
         val result = service.expire(ExpireConnectionCommand(userId = 1))
 
-        assertEquals(saved.id, result)
+        assertEquals(saved.id!!.value, result)
         assertEquals(0, standUpUseCase.calls.size)
     }
 

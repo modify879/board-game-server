@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.infrastructure.shuffle
 
 import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.application.port.NewHandShuffler
+import com.jsm.boardgame.holdem.application.port.NextDeckReserver
 import com.jsm.boardgame.holdem.domain.model.Card
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
@@ -32,7 +33,7 @@ import java.util.concurrent.ConcurrentHashMap
 @Component
 @Primary
 @Profile("qa")
-class QaNewHandShuffler(@Qualifier("secureRandomShuffler") private val fallback: Shuffler) : NewHandShuffler {
+class QaNewHandShuffler(@Qualifier("secureRandomShuffler") private val fallback: Shuffler) : NewHandShuffler, NextDeckReserver {
 
     private val pending = ConcurrentHashMap<TableId, DeckSpec>()
 
@@ -43,6 +44,9 @@ class QaNewHandShuffler(@Qualifier("secureRandomShuffler") private val fallback:
     fun reserve(tableId: TableId, spec: DeckSpec) {
         pending[tableId] = spec
     }
+
+    override fun reserve(tableId: TableId, holeCards: Map<Int, List<Card>>, board: List<Card>) =
+        reserve(tableId, DeckSpec(holeCards, board))
 
     /** 사양은 1회용이다 — 꺼내면서 지운다. 없으면 기본 셔플러 그대로. */
     override fun shufflerFor(tableId: TableId, seatNos: List<Int>, buttonSeatNo: Int): Shuffler {

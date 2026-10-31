@@ -10,7 +10,7 @@ import com.jsm.boardgame.holdem.application.port.TableExecutor
 import org.springframework.stereotype.Service
 
 /** 대기열은 인메모리(JoinQueue)라 트랜잭션이 필요 없다. userId 는 전역에서 한 번에 하나의
- *  대기열에만 있을 수 있어 userId 만으로 충분하다.
+ *  대기열에만 있을 수 있어 userId 로 항목을 찾고, 요청의 tableId 와 같은 테이블일 때만 취소한다.
  *
  *  이 서비스가 직접 [TableExecutor] 를 부른다 — 여기서 런타임에
  *  찾은 테이블(joinQueue.tableOf)로 실행기를 골라야 해서다. */
@@ -22,8 +22,8 @@ class CancelJoinRequestService(
 ) : CancelJoinRequestUseCase {
 
     override fun cancel(command: CancelJoinRequestCommand) {
-        val tableId = joinQueue.tableOf(UserId(command.userId))
-            ?: throw JoinRequestNotFoundException("취소할 참가 요청이 없습니다: userId=${command.userId}")
+        val tableId = joinQueue.tableOf(UserId(command.userId))?.takeIf { it.value == command.tableId }
+            ?: throw JoinRequestNotFoundException("취소할 참가 요청이 없습니다: userId=${command.userId}, tableId=${command.tableId}")
         tableExecutor.call(tableId) {
             joinQueue.removeByUserId(UserId(command.userId))
                 ?: throw JoinRequestNotFoundException("취소할 참가 요청이 없습니다: userId=${command.userId}")

@@ -20,7 +20,7 @@ class UpdateSeatPresenceService(
 
     override fun update(command: UpdateSeatPresenceCommand) {
         val table = tables.findByUserId(UserId(command.userId)) ?: return
-        table.markPresence(UserId(command.userId), SeatPresence.valueOf(command.presence))
+        table.markPresence(UserId(command.userId), SeatPresence.of(command.presence))
         tables.save(table)
     }
 }

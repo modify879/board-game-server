@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.presentation.rest
 
 import com.jsm.boardgame.common.error.AuthenticationRequiredException
 import com.jsm.boardgame.holdem.domain.model.LeaveReservation
+import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.AddChipsResult
 import com.jsm.boardgame.holdem.application.command.usecase.AddChipsUseCase
@@ -17,7 +18,7 @@ import com.jsm.boardgame.holdem.application.port.callForUser
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.application.query.service.BuyInQueryService
 import com.jsm.boardgame.holdem.application.query.service.MySeatQueryService
-import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
+import com.jsm.boardgame.holdem.application.query.service.HoldemTableQueryService
 import com.jsm.boardgame.holdem.presentation.rest.request.AddChipsRequest
 import com.jsm.boardgame.holdem.presentation.rest.response.BuyInResponse
 import com.jsm.boardgame.holdem.presentation.rest.response.MySeatResponse
@@ -35,8 +36,7 @@ import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
 // 한 사람은 한 자리이므로 기립은 tableId 없이 유저로 유일하게 찾힌다. path variable 이 없어
-// tableId 를 직접 찾아야 하므로(HoldemTableRepository 를 여기서 직접 읽는다 - 전례:
-// HoldemSubscriptionSnapshotListener) 앉아 있지 않은 경우엔 실행기를 거칠 테이블이 없어 NotSeatedException 을 바로 던진다.
+// tableId 를 직접 찾아야 하므로(조회 서비스로 찾는다) 앉아 있지 않은 경우엔 실행기를 거칠 테이블이 없어 NotSeatedException 을 바로 던진다.
 @RestController
 @RequestMapping("/api/holdem")
 class HoldemSeatController(
@@ -47,8 +47,10 @@ class HoldemSeatController(
     private val mySeatQueryService: MySeatQueryService,
     private val buyInQueryService: BuyInQueryService,
     private val tableExecutor: TableExecutor,
-    private val tables: HoldemTableRepository,
+    private val tableQueryService: HoldemTableQueryService,
 ) {
+
+    private val tableOf: (UserId) -> TableId? = { user -> tableQueryService.findTableIdOf(user.value)?.let(::TableId) }
 
     // 핸드 중이면 즉시 기립 대신 퇴장 예약이고 202 다(바로 일어선 것이 아니다).
     @DeleteMapping("/seat")
@@ -59,7 +61,7 @@ class HoldemSeatController(
         val userId = jwt.requireUserId()
         // 앉아 있지 않은 사용자의 기립은 NotSeatedException 뿐이다(StandUpService) — 실행기 밖에서 유스케이스를 돌리지 않고 같은 오류를 던진다.
         val result = tableExecutor.callForUser(
-            tables, UserId(userId),
+            tableOf, UserId(userId),
             onNotSeated = { throw NotSeatedException("어느 테이블에도 앉아 있지 않은 사용자입니다: userId=$userId") },
         ) { standUpUseCase.standUp(StandUpCommand(userId, (after ?: LeaveReservation.SPECTATE).name)) }
         return when (result) {
@@ -73,7 +75,7 @@ class HoldemSeatController(
     fun cancelLeaveReservation(@AuthenticationPrincipal jwt: Jwt) {
         val userId = jwt.requireUserId()
         tableExecutor.callForUser(
-            tables, UserId(userId),
+            tableOf, UserId(userId),
             onNotSeated = { throw NotSeatedException("어느 테이블에도 앉아 있지 않은 사용자입니다: userId=$userId") },
         ) { cancelLeaveReservationUseCase.cancel(CancelLeaveReservationCommand(userId)) }
     }
@@ -84,7 +86,7 @@ class HoldemSeatController(
     fun addChips(@AuthenticationPrincipal jwt: Jwt, @RequestBody request: AddChipsRequest): ResponseEntity<Void> {
         val userId = jwt.requireUserId()
         val result = tableExecutor.callForUser(
-            tables, UserId(userId),
+            tableOf, UserId(userId),
             onNotSeated = { throw NotSeatedException("어느 테이블에도 앉아 있지 않은 사용자입니다: userId=$userId") },
         ) { addChipsUseCase.addChips(request.toCommand(userId)) }
         return when (result) {
@@ -98,7 +100,7 @@ class HoldemSeatController(
     fun cancelChipsReservation(@AuthenticationPrincipal jwt: Jwt) {
         val userId = jwt.requireUserId()
         tableExecutor.callForUser(
-            tables, UserId(userId),
+            tableOf, UserId(userId),
             onNotSeated = { throw NotSeatedException("어느 테이블에도 앉아 있지 않은 사용자입니다: userId=$userId") },
         ) { cancelChipsReservationUseCase.cancel(CancelChipsReservationCommand(userId)) }
     }

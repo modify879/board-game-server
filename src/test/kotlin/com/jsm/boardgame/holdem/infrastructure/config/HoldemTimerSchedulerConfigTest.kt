@@ -1,4 +1,4 @@
-package com.jsm.boardgame.holdem.infrastructure.timer
+package com.jsm.boardgame.holdem.infrastructure.config
 
 import org.springframework.context.event.ContextClosedEvent
 import org.springframework.context.support.GenericApplicationContext

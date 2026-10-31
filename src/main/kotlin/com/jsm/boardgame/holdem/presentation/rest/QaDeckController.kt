@@ -1,9 +1,7 @@
 package com.jsm.boardgame.holdem.presentation.rest
 
-import com.jsm.boardgame.holdem.domain.model.Card
-import com.jsm.boardgame.holdem.domain.model.TableId
-import com.jsm.boardgame.holdem.infrastructure.shuffle.DeckSpec
-import com.jsm.boardgame.holdem.infrastructure.shuffle.QaNewHandShuffler
+import com.jsm.boardgame.holdem.application.command.usecase.ReserveNextDeckCommand
+import com.jsm.boardgame.holdem.application.command.usecase.ReserveNextDeckUseCase
 import com.jsm.boardgame.holdem.presentation.rest.request.NextDeckRequest
 import org.springframework.context.annotation.Profile
 import org.springframework.http.HttpStatus
@@ -16,25 +14,20 @@ import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
 
 // 인가는 SecurityConfig 의 "/api/admin/**" → hasRole("ADMIN") 이 처리한다.
-// 잘못된 입력은 400 — ResponseStatusException 은 GlobalExceptionHandler 가 errorCode=REQUEST_INVALID 로 만든다.
+// 카드 표기 오류는 CARD_NOTATION_INVALID(400), 그 밖의 잘못된 사양은 400 — ResponseStatusException 은
+// GlobalExceptionHandler 가 errorCode=REQUEST_INVALID 로 만든다.
 @RestController
 @Profile("qa")
 @RequestMapping("/api/admin/qa/holdem/tables")
-class QaDeckController(private val shuffler: QaNewHandShuffler) {
+class QaDeckController(private val reserveNextDeckUseCase: ReserveNextDeckUseCase) {
 
     @PostMapping("/{tableId}/next-deck")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun setNextDeck(@PathVariable tableId: Long, @RequestBody request: NextDeckRequest) {
-        val spec = try {
-            DeckSpec(
-                holeCards = request.holeCards.mapValues { (_, cards) -> cards.map(Card::of) },
-                board = request.board.map(Card::of),
-            )
+        try {
+            reserveNextDeckUseCase.reserve(ReserveNextDeckCommand(tableId, request.holeCards, request.board))
         } catch (e: IllegalArgumentException) {
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, e.message, e)
-        } catch (e: IllegalStateException) { // Card.of 의 잘못된 표기
-            throw ResponseStatusException(HttpStatus.BAD_REQUEST, e.message, e)
         }
-        shuffler.reserve(TableId(tableId), spec)
     }
 }

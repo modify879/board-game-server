@@ -2,8 +2,11 @@ package com.jsm.boardgame.holdem.infrastructure.persistence.adapter
 
 import com.jsm.boardgame.holdem.application.query.port.HoldemTableQueryRepository
 import com.jsm.boardgame.holdem.application.query.view.SeatLocation
+import com.jsm.boardgame.holdem.application.query.view.TablePolicyView
 import com.jsm.boardgame.holdem.application.query.view.TableSummaryView
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.infrastructure.persistence.entity.HandInProgressJpaEntity
+import com.jsm.boardgame.holdem.infrastructure.persistence.entity.HandInProgressJpaRepository
 import com.jsm.boardgame.holdem.infrastructure.persistence.entity.HoldemSeatJpaEntity
 import com.jsm.boardgame.holdem.infrastructure.persistence.entity.HoldemSeatJpaRepository
 import com.jsm.boardgame.holdem.infrastructure.persistence.entity.HoldemTableJpaEntity
@@ -16,6 +19,7 @@ import org.springframework.stereotype.Repository
 class HoldemTableQueryRepositoryAdapter(
     private val tableJpa: HoldemTableJpaRepository,
     private val seatJpa: HoldemSeatJpaRepository,
+    private val handJpa: HandInProgressJpaRepository,
 ) : HoldemTableQueryRepository {
 
     override fun findSeatOf(userId: Long): SeatLocation? =
@@ -27,6 +31,23 @@ class HoldemTableQueryRepositoryAdapter(
             ).from(entity(HoldemSeatJpaEntity::class))
                 .where(path(HoldemSeatJpaEntity::userId).eq(userId))
         }.firstOrNull()
+
+    override fun findPolicyOf(tableId: Long): TablePolicyView? =
+        tableJpa.findAll {
+            selectNew<TablePolicyView>(
+                path(HoldemTableJpaEntity::smallBlind),
+                path(HoldemTableJpaEntity::bigBlind),
+                path(HoldemTableJpaEntity::minBuyInBigBlinds),
+                path(HoldemTableJpaEntity::maxBuyInBigBlinds),
+            ).from(entity(HoldemTableJpaEntity::class))
+                .where(and(path(HoldemTableJpaEntity::id).eq(tableId), path(HoldemTableJpaEntity::closedAt).isNull()))
+        }.firstOrNull()
+
+    override fun existsHandInProgress(tableId: Long): Boolean =
+        handJpa.findAll {
+            select(path(HandInProgressJpaEntity::tableId)).from(entity(HandInProgressJpaEntity::class))
+                .where(path(HandInProgressJpaEntity::tableId).eq(tableId))
+        }.isNotEmpty()
 
     // 집계 JDSL(count + groupBy + join) 선례가 이 저장소에 없어, 그 문법을 추측하는 대신
     // 페이지당 2번의 조회로 간다: 테이블 페이지 하나 + 그 페이지의 테이블 id 들로 좌석을 한 번에

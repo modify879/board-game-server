@@ -1,6 +1,6 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
-import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.domain.repository.HandStore
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
@@ -65,6 +65,8 @@ class HoldemSubscriptionSnapshotListenerTest {
         override fun findSeatOf(userId: Long): SeatLocation? = seat
         override fun findAllTables(pageable: Pageable): Page<com.jsm.boardgame.holdem.application.query.view.TableSummaryView> = error("unused")
         override fun findEmptyTableIds(): List<Long> = error("unused")
+        override fun findPolicyOf(tableId: Long): com.jsm.boardgame.holdem.application.query.view.TablePolicyView? = error("unused")
+        override fun existsHandInProgress(tableId: Long): Boolean = error("unused")
     }
 
     private class Sent(val user: String, val dest: String, val payload: Any, val headers: MessageHeaders?)

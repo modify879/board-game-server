@@ -88,17 +88,17 @@ private class ConnectionTimerFakeUpdateSeatPresenceUseCase : UpdateSeatPresenceU
 }
 
 private class ConnectionTimerFakeExpireConnectionUseCase(
-    var reservedTableId: TableId?,
+    var reservedTableId: Long?,
 ) : ExpireConnectionUseCase {
     val calls = mutableListOf<ExpireConnectionCommand>()
-    override fun expire(command: ExpireConnectionCommand): TableId? {
+    override fun expire(command: ExpireConnectionCommand): Long? {
         calls += command
         return reservedTableId
     }
 }
 
 private class ConnectionTimerFailingExpireConnectionUseCase : ExpireConnectionUseCase {
-    override fun expire(command: ExpireConnectionCommand): TableId? = throw IllegalStateException("db down")
+    override fun expire(command: ExpireConnectionCommand): Long? = throw IllegalStateException("db down")
 }
 
 private class ConnectionTimerFakePrincipal(private val id: Long) : Principal {
@@ -546,7 +546,7 @@ class ConnectionTimerTest {
     fun `핸드 진행 중 만료는 퇴장시키지 않고 만료를 다시 예약한다`() {
         val scheduler = ConnectionTimerFakeTaskScheduler()
         val presence = ConnectionTimerFakeUpdateSeatPresenceUseCase()
-        val expire = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = TableId(7L))
+        val expire = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = 7L)
         val timer = newTimer(scheduler, presence, expire)
 
         timer.onSessionDisconnect(disconnectEvent(42L))
@@ -561,7 +561,7 @@ class ConnectionTimerTest {
     @Test
     fun `다시 예약된 만료가 핸드가 끝난 뒤 돌면 더 이상 예약하지 않는다`() {
         val scheduler = ConnectionTimerFakeTaskScheduler()
-        val expire = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = TableId(7L))
+        val expire = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = 7L)
         val timer = newTimer(scheduler, ConnectionTimerFakeUpdateSeatPresenceUseCase(), expire)
 
         timer.onSessionDisconnect(disconnectEvent(42L))
@@ -578,9 +578,9 @@ class ConnectionTimerTest {
         val scheduler = ConnectionTimerFakeTaskScheduler()
         lateinit var timer: ConnectionTimer
         val expire = object : ExpireConnectionUseCase {
-            override fun expire(command: ExpireConnectionCommand): TableId? {
+            override fun expire(command: ExpireConnectionCommand): Long? {
                 timer.onSessionConnected(connectedEvent(command.userId)) // 만료 트랜잭션이 도는 사이 재접속
-                return TableId(7L)
+                return 7L
             }
         }
         timer = newTimer(scheduler, ConnectionTimerFakeUpdateSeatPresenceUseCase(), expire)
@@ -595,7 +595,7 @@ class ConnectionTimerTest {
     fun `사용자가 연결된 상태에서 만료가 돌면 아무것도 하지 않는다`() {
         val scheduler = ConnectionTimerFakeTaskScheduler()
         val connections = ConnectionTimerFakeUserConnections()
-        val expire = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = TableId(7L))
+        val expire = ConnectionTimerFakeExpireConnectionUseCase(reservedTableId = 7L)
         val timer = newTimer(scheduler, ConnectionTimerFakeUpdateSeatPresenceUseCase(), expire, connections)
 
         timer.onSessionDisconnect(disconnectEvent(42L))

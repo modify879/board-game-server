@@ -1,5 +1,7 @@
 package com.jsm.boardgame.holdem.domain.model
 
+import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
+import com.jsm.boardgame.holdem.domain.exception.InvalidCardNotationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -36,22 +38,22 @@ class CardTest {
 
     @Test
     fun `한 글자 표기는 에러를 던진다`() {
-        assertFailsWith<IllegalStateException> { Card.of("A") }
+        assertEquals(HoldemErrorCode.CARD_NOTATION_INVALID, assertFailsWith<InvalidCardNotationException> { Card.of("A") }.errorCode)
     }
 
     @Test
     fun `세 글자 표기는 에러를 던진다`() {
-        assertFailsWith<IllegalStateException> { Card.of("Ass") }
+        assertEquals(HoldemErrorCode.CARD_NOTATION_INVALID, assertFailsWith<InvalidCardNotationException> { Card.of("Ass") }.errorCode)
     }
 
     @Test
     fun `알 수 없는 끗수는 에러를 던진다`() {
-        assertFailsWith<IllegalStateException> { Card.of("Xs") }
+        assertEquals(HoldemErrorCode.CARD_NOTATION_INVALID, assertFailsWith<InvalidCardNotationException> { Card.of("Xs") }.errorCode)
     }
 
     @Test
     fun `알 수 없는 무늬는 에러를 던진다`() {
-        assertFailsWith<IllegalStateException> { Card.of("Ax") }
+        assertEquals(HoldemErrorCode.CARD_NOTATION_INVALID, assertFailsWith<InvalidCardNotationException> { Card.of("Ax") }.errorCode)
     }
 
     @Test

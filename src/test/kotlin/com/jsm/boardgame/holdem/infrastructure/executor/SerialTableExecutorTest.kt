@@ -34,7 +34,7 @@ private class SerialExecutorFakeHoldemTableRepository : HoldemTableRepository {
 }
 
 // 실제 트랜잭션 생명주기(동기화 콜백 포함)만 돌리는 빈 트랜잭션 매니저 — 커넥션도 DB 도 없다.
-private class NoopTransactionManager : AbstractPlatformTransactionManager() {
+private class SerialExecutorNoopTransactionManager : AbstractPlatformTransactionManager() {
     override fun doGetTransaction(): Any = Any()
     override fun doBegin(transaction: Any, definition: TransactionDefinition) {}
     override fun doCommit(status: DefaultTransactionStatus) {}
@@ -234,7 +234,7 @@ class SerialTableExecutorTest {
         val sync = register {
             caught = runCatching { executor.call(TableId(1L)) { 1 } }.exceptionOrNull()
         }
-        TransactionTemplate(NoopTransactionManager()).executeWithoutResult {
+        TransactionTemplate(SerialExecutorNoopTransactionManager()).executeWithoutResult {
             TransactionSynchronizationManager.registerSynchronization(sync)
         }
         return caught

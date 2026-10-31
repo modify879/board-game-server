@@ -45,6 +45,20 @@ class HandHistoryAdapter(
     }
 
     override fun markShown(tableId: TableId, userId: UserId) {
-        players.markShownInLatestHand(tableId.value, userId.value)
+        players.update {
+            update(entity(HandHistoryPlayerJpaEntity::class))
+                .set(path(HandHistoryPlayerJpaEntity::shown), true)
+                .where(
+                    and(
+                        path(HandHistoryPlayerJpaEntity::userId).eq(userId.value),
+                        path(HandHistoryPlayerJpaEntity::handId).eq(
+                            select(max(path(HandHistoryJpaEntity::id)))
+                                .from(entity(HandHistoryJpaEntity::class))
+                                .where(path(HandHistoryJpaEntity::tableId).eq(tableId.value))
+                                .asSubquery(),
+                        ),
+                    ),
+                )
+        }
     }
 }

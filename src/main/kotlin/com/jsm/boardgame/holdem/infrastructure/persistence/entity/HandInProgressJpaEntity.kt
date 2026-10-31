@@ -8,6 +8,7 @@ import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.HandSnapshot
 import com.jsm.boardgame.holdem.domain.model.SeatStatus
 import com.jsm.boardgame.holdem.domain.model.Street
+import com.linecorp.kotlinjdsl.support.spring.data.jpa.repository.KotlinJdslJpqlExecutor
 import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
 import jakarta.persistence.Column
@@ -57,7 +58,7 @@ class HandInProgressJpaEntity(
     }
 }
 
-interface HandInProgressJpaRepository : JpaRepository<HandInProgressJpaEntity, Long>
+interface HandInProgressJpaRepository : JpaRepository<HandInProgressJpaEntity, Long>, KotlinJdslJpqlExecutor
 
 /**
  * [HandSnapshot] 의 영속 전용 표현. 필드 이름·구조는 대응하는 도메인 스냅샷과 맞추되 타입만 원시로 내린다.

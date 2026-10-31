@@ -1,5 +1,8 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.command.support.LeaveReservations
+import com.jsm.boardgame.holdem.application.command.support.SeatDeparture
+import com.jsm.boardgame.holdem.application.command.support.HandStarter
 import com.jsm.boardgame.holdem.domain.model.LeaveReservation
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
@@ -7,7 +10,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.StandUpUseCase
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpResult
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
-import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.domain.repository.HandStore
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.slf4j.LoggerFactory
@@ -45,7 +48,7 @@ class StandUpService(
         // 칩이 핸드에 걸려 있지 않아 going south 가 아니고, 예약하면 개인 뷰가 안 나가 종류를 볼 수도 없다.
         val hand = handStore.findInProgress(tableId)
         if (hand != null && table.seatOf(UserId(command.userId))!!.seatNo in hand.seatNos) {
-            val requested = LeaveReservation.valueOf(command.after)
+            val requested = LeaveReservation.of(command.after)
             if (table.seatOf(UserId(command.userId))!!.leaveReservation != requested) {
                 table.reserveLeave(UserId(command.userId), requested)
                 tables.save(table)

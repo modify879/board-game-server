@@ -101,7 +101,7 @@ class ConnectionTimer(
     /** 사용자가 앉은 테이블의 실행기에서 [task] 를 돌린다. 앉아 있지 않으면 presence 갱신·만료 모두 할 일이 없는
      *  no-op 이라 돌리지 않고 null 을 돌려준다 — 실행기 밖에서 쓰기를 하지 않는다. */
     private fun <T> dispatchForUser(userId: UserId, task: () -> T): T? =
-        tableExecutor.callForUser<T?>(tables, userId, onNotSeated = { null }, task = task)
+        tableExecutor.callForUser<T?>({ tables.findByUserId(it)?.id }, userId, onNotSeated = { null }, task = task)
 
     /** HandRecovery.onApplicationReady(@Order(0)) 다음으로 실행되어야 한다 - 클래스 KDoc 참고. */
     @EventListener(ApplicationReadyEvent::class)

@@ -1,12 +1,14 @@
 package com.jsm.boardgame.holdem.domain.model
 
+import com.jsm.boardgame.holdem.domain.exception.InvalidCardNotationException
+
 enum class Suit(val symbol: Char) {
     SPADE('s'), HEART('h'), DIAMOND('d'), CLUB('c'),
     ;
 
     companion object {
         fun of(symbol: Char): Suit = entries.firstOrNull { it.symbol == symbol }
-            ?: error("알 수 없는 무늬: $symbol")
+            ?: throw InvalidCardNotationException("알 수 없는 무늬: $symbol")
     }
 }
 
@@ -18,7 +20,7 @@ enum class Rank(val value: Int, val symbol: Char) {
 
     companion object {
         fun of(symbol: Char): Rank = entries.firstOrNull { it.symbol == symbol }
-            ?: error("알 수 없는 끗수: $symbol")
+            ?: throw InvalidCardNotationException("알 수 없는 끗수: $symbol")
     }
 }
 
@@ -28,7 +30,7 @@ data class Card(val rank: Rank, val suit: Suit) {
     companion object {
         /** `"As"`, `"Th"` 같은 표기로 카드를 만든다. 로그와 고정 덱을 사람이 읽을 수 있게 한다. */
         fun of(notation: String): Card {
-            if (notation.length != 2) error("카드 표기는 두 글자여야 한다: $notation")
+            if (notation.length != 2) throw InvalidCardNotationException("카드 표기는 두 글자여야 한다: $notation")
             return Card(Rank.of(notation[0]), Suit.of(notation[1]))
         }
     }

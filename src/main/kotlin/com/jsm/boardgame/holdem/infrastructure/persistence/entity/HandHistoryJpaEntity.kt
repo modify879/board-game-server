@@ -9,9 +9,6 @@ import jakarta.persistence.Id
 import jakarta.persistence.Index
 import jakarta.persistence.Table
 import org.springframework.data.jpa.repository.JpaRepository
-import org.springframework.data.jpa.repository.Modifying
-import org.springframework.data.jpa.repository.Query
-import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 
 /**
@@ -56,20 +53,6 @@ class HandHistoryPlayerJpaEntity(
     var shown: Boolean,
 )
 
-interface HandHistoryJpaRepository : JpaRepository<HandHistoryJpaEntity, Long>, KotlinJdslJpqlExecutor {
-    /** 자식 행은 FK 의 ON DELETE CASCADE 가 지운다. 지운 핸드 수를 돌려준다. */
-    @Transactional
-    @Modifying
-    @Query("delete from HandHistoryJpaEntity h where h.endedAt < :cutoff")
-    fun deleteByEndedAtBefore(cutoff: Instant): Int
-}
+interface HandHistoryJpaRepository : JpaRepository<HandHistoryJpaEntity, Long>, KotlinJdslJpqlExecutor
 
-interface HandHistoryPlayerJpaRepository : JpaRepository<HandHistoryPlayerJpaEntity, Long>, KotlinJdslJpqlExecutor {
-    @Transactional
-    @Modifying
-    @Query(
-        "update HandHistoryPlayerJpaEntity p set p.shown = true where p.userId = :userId and p.handId = " +
-            "(select max(h.id) from HandHistoryJpaEntity h where h.tableId = :tableId)",
-    )
-    fun markShownInLatestHand(tableId: Long, userId: Long): Int
-}
+interface HandHistoryPlayerJpaRepository : JpaRepository<HandHistoryPlayerJpaEntity, Long>, KotlinJdslJpqlExecutor

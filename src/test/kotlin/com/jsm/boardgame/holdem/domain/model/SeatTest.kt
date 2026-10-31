@@ -1,7 +1,11 @@
 package com.jsm.boardgame.holdem.domain.model
 
+import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
+import com.jsm.boardgame.holdem.domain.exception.InvalidLeaveReservationException
+import com.jsm.boardgame.holdem.domain.exception.InvalidSeatPresenceException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -76,5 +80,19 @@ class SeatTest {
 
         seat.applyLeaveReservation(null)
         assertFalse(seat.leaveReserved)
+    }
+
+    @Test
+    fun `SeatPresence of 는 알 수 없는 값을 SEAT_PRESENCE_INVALID 로 거절한다`() {
+        assertEquals(SeatPresence.DISCONNECTED, SeatPresence.of("DISCONNECTED"))
+        val e = assertFailsWith<InvalidSeatPresenceException> { SeatPresence.of("SITTING_OUT") }
+        assertEquals(HoldemErrorCode.SEAT_PRESENCE_INVALID, e.errorCode)
+    }
+
+    @Test
+    fun `LeaveReservation of 는 알 수 없는 값을 LEAVE_RESERVATION_INVALID 로 거절한다`() {
+        assertEquals(LeaveReservation.LEAVE, LeaveReservation.of("LEAVE"))
+        val e = assertFailsWith<InvalidLeaveReservationException> { LeaveReservation.of("later") }
+        assertEquals(HoldemErrorCode.LEAVE_RESERVATION_INVALID, e.errorCode)
     }
 }

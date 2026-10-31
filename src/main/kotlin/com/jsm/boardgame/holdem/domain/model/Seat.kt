@@ -1,7 +1,20 @@
 package com.jsm.boardgame.holdem.domain.model
 
+import com.jsm.boardgame.holdem.domain.exception.InvalidLeaveReservationException
+import com.jsm.boardgame.holdem.domain.exception.InvalidSeatPresenceException
+
 /** 좌석 점유 상태. BettingRound 의 SeatStatus(ACTIVE/FOLDED/ALL_IN)와 다른 개념이라 이름을 가른다. */
-enum class SeatPresence { SEATED, SITTING_OUT, DISCONNECTED }
+enum class SeatPresence {
+    SEATED,
+    DISCONNECTED,
+    ;
+
+    companion object {
+        /** 경계를 넘어온 문자열을 접속 상태로 바꾼다. 알 수 없는 값은 SEAT_PRESENCE_INVALID 로 떨어진다. */
+        fun of(raw: String): SeatPresence =
+            entries.find { it.name == raw } ?: throw InvalidSeatPresenceException("알 수 없는 접속 상태: presence=$raw")
+    }
+}
 
 /** 퇴장 예약의 종류. 서버 실행(핸드 뒤 기립)은 둘이 같고, 클라이언트가 기립 뒤 행동을 정하는 데만 쓴다. */
 enum class LeaveReservation {
@@ -10,6 +23,13 @@ enum class LeaveReservation {
 
     /** 핸드 뒤 일어나 방 목록으로 이동한다. */
     LEAVE,
+    ;
+
+    companion object {
+        /** 경계를 넘어온 문자열을 예약 종류로 바꾼다. 알 수 없는 값은 LEAVE_RESERVATION_INVALID 로 떨어진다. */
+        fun of(raw: String): LeaveReservation =
+            entries.find { it.name == raw } ?: throw InvalidLeaveReservationException("알 수 없는 퇴장 예약 종류: after=$raw")
+    }
 }
 
 class Seat private constructor(

@@ -1,25 +1,15 @@
 package com.jsm.boardgame.holdem.application.port
 
-import com.jsm.boardgame.holdem.domain.model.Chips
-import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
-import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
-import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 /** 조회 결과를 호출 순서대로 돌려준다 — 마지막 값은 계속 반복한다. */
-private class CallForUserFakeTables(private val answers: List<Long?>) : HoldemTableRepository {
+private class CallForUserTableLookup(private val answers: List<Long?>) : (UserId) -> TableId? {
     private var i = 0
-    override fun findById(id: TableId): HoldemTable? = null
-    override fun findByUserId(userId: UserId): HoldemTable? = answers[minOf(i++, answers.size - 1)]?.let {
-        HoldemTable.reconstitute(TableId(it), "t", TestTablePolicy, null, emptyMap())
-    }
-    override fun findAllSeatedUserIds(): List<UserId> = emptyList()
-    override fun findAllTableIds(): List<TableId> = emptyList()
-    override fun save(table: HoldemTable): HoldemTable = table
+    override fun invoke(userId: UserId): TableId? = answers[minOf(i++, answers.size - 1)]?.let(::TableId)
 }
 
 private class CallForUserFakeExecutor : TableExecutor {
@@ -37,7 +27,7 @@ class CallForUserTest {
         val executor = CallForUserFakeExecutor()
         var ran = false
 
-        val result = executor.callForUser(CallForUserFakeTables(listOf(null)), user, onNotSeated = { "none" }) { ran = true; "ran" }
+        val result = executor.callForUser(CallForUserTableLookup(listOf(null)), user, onNotSeated = { "none" }) { ran = true; "ran" }
 
         assertEquals("none", result)
         assertEquals(false, ran)
@@ -48,7 +38,7 @@ class CallForUserTest {
     fun `앉은 테이블이 그대로면 그 테이블의 실행기에서 task 를 돌려 결과를 돌려준다`() {
         val executor = CallForUserFakeExecutor()
 
-        val result = executor.callForUser(CallForUserFakeTables(listOf(1L)), user, onNotSeated = { "none" }) { "ran" }
+        val result = executor.callForUser(CallForUserTableLookup(listOf(1L)), user, onNotSeated = { "none" }) { "ran" }
 
         assertEquals("ran", result)
         assertEquals(listOf(TableId(1L)), executor.called)
@@ -60,7 +50,7 @@ class CallForUserTest {
         var runs = 0
 
         // 1번 조회(밖) 테이블 1, 2번(안) 테이블 2 로 옮겨 감 → 다시 조회(밖) 2, (안) 2
-        executor.callForUser(CallForUserFakeTables(listOf(1L, 2L, 2L, 2L)), user, onNotSeated = { Unit }) { runs++ }
+        executor.callForUser(CallForUserTableLookup(listOf(1L, 2L, 2L, 2L)), user, onNotSeated = { Unit }) { runs++ }
 
         assertEquals(listOf(TableId(1L), TableId(2L)), executor.called)
         assertEquals(1, runs)
@@ -72,7 +62,7 @@ class CallForUserTest {
         var runs = 0
 
         assertFailsWith<IllegalStateException> {
-            executor.callForUser(CallForUserFakeTables(listOf(1L, 2L, 3L, 4L)), user, onNotSeated = { Unit }) { runs++ }
+            executor.callForUser(CallForUserTableLookup(listOf(1L, 2L, 3L, 4L)), user, onNotSeated = { Unit }) { runs++ }
         }
 
         assertEquals(0, runs)
