@@ -1,8 +1,7 @@
-package com.jsm.boardgame.holdem.application.port
+package com.jsm.boardgame.holdem.domain.repository
 
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.TableId
-import com.jsm.boardgame.holdem.domain.repository.HandStore
 
 /** 서비스 테스트가 공유하는 인메모리 대역. */
 class FakeHandStore : HandStore {

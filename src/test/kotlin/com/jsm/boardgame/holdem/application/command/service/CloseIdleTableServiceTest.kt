@@ -1,6 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
-import com.jsm.boardgame.holdem.application.port.FakeHandStore
+import com.jsm.boardgame.holdem.domain.repository.FakeHandStore
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.command.usecase.CloseIdleTableCommand
 import com.jsm.boardgame.holdem.application.event.TableClosed

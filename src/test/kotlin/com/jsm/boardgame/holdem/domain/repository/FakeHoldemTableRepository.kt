@@ -1,11 +1,10 @@
-package com.jsm.boardgame.holdem.application.port
+package com.jsm.boardgame.holdem.domain.repository
 
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.Seat
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
-import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 
 /** 서비스 테스트가 공유하는 인메모리 대역. 저장할 때 복사하고 읽을 때는 저장본을 그대로 돌려준다. */
 class FakeHoldemTableRepository : HoldemTableRepository {

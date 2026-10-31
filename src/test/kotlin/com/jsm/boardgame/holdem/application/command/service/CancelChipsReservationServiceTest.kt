@@ -3,8 +3,8 @@ package com.jsm.boardgame.holdem.application.command.service
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.application.command.usecase.CancelChipsReservationCommand
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
-import com.jsm.boardgame.holdem.application.port.FakeHandStore
-import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
+import com.jsm.boardgame.holdem.domain.repository.FakeHandStore
+import com.jsm.boardgame.holdem.domain.repository.FakeHoldemTableRepository
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.HoldemTable

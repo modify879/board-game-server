@@ -1,6 +1,6 @@
 package com.jsm.boardgame.holdem.application.query.service
 
-import com.jsm.boardgame.holdem.application.port.FakeHandStore
+import com.jsm.boardgame.holdem.domain.repository.FakeHandStore
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand

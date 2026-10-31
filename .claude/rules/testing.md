@@ -7,8 +7,9 @@ paths:
 
 - 통합 테스트는 `@IntegrationTest` 하나만 붙인다(SpringBootTest·MockMvc·Testcontainers 를 묶은 메타 애너테이션).
   컨텍스트 키를 바꾸는 애너테이션(`@TestPropertySource`·`@ActiveProfiles`·중첩 `@TestConfiguration`·`@Import` 추가 설정·
-  `@DynamicPropertySource`·`@MockitoBean`)은 빈을 갈아끼워야 할 때만 덧붙이고, 테스트 전체에 걸친 값은 build.gradle.kts 의 `systemProperty` 로 준다.
+  `@DynamicPropertySource`)은 빈을 갈아끼워야 할 때만 덧붙이고, 테스트 전체에 걸친 값은 build.gradle.kts 의 `systemProperty` 로 준다.
   컨텍스트가 하나 늘 때마다 공유 Postgres 에 풀을 하나 더 쥐고, max_connections 를 넘으면 컨텍스트가 30초 대기 뒤 실패한다
+- 예외: `QaProfileGuardMissingMarkerIntegrationTest` 는 `@IntegrationTest` 없이 자기 컨테이너와 `SpringApplicationBuilder` 로 기동한다 — 표식 없는 DB 에서 시작해야 하기 때문이다
 - 컨테이너가 필요한 테스트만 클래스 이름에 `IntegrationTest` 접미사를 붙인다
 - 목 라이브러리를 쓰지 않는다. 인메모리 페이크를 쓴다. 한 테스트만 쓰는 건 그 테스트 파일 안에, 여러 테스트가 같이 쓰는 건 포트의 테스트 패키지에 `Fake<Port>.kt` 로 둔다(접두 없음)
 - **테스트 파일 안의 페이크 이름에는 테스트별 접두를 붙인다**(`RequestFakeWalletRepository`). top-level `private`

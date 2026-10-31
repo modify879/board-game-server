@@ -1,8 +1,8 @@
 package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
-import com.jsm.boardgame.holdem.application.port.FakeHandStore
-import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
+import com.jsm.boardgame.holdem.domain.repository.FakeHandStore
+import com.jsm.boardgame.holdem.domain.repository.FakeHoldemTableRepository
 import com.jsm.boardgame.holdem.domain.model.Hand
 import org.springframework.context.ApplicationEventPublisher
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy

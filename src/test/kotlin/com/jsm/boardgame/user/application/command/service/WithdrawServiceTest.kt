@@ -40,11 +40,17 @@ import kotlin.test.assertTrue
 private class WithdrawFakeUserRepository : UserRepository {
     val stored = mutableMapOf<Long, User>()
     override fun findByUsername(username: Username): User? = stored.values.find { it.username == username }
-    override fun findById(id: UserId): User? = stored[id.value]
+    // 읽을 때마다 새 복사본을 준다 — 서비스가 락 뒤에 다시 읽는지 증명하려고
+    override fun findById(id: UserId): User? = stored[id.value]?.let(::copyOf)
     override fun existsByUsername(username: Username): Boolean = false
     override fun existsByNickname(nickname: Nickname): Boolean = false
     override fun save(user: User): User { stored[user.id!!.value] = user; return user }
 }
+
+private fun copyOf(u: User) = User.reconstitute(
+    id = u.id!!, username = u.username, passwordHash = u.passwordHash, nickname = u.nickname,
+    profileImageKey = u.profileImageKey, role = u.role, lockedAt = u.lockedAt, withdrawnAt = u.withdrawnAt,
+)
 
 private class WithdrawFakeHasher : PasswordHasher {
     override fun hash(raw: RawPassword) = PasswordHash("hashed:${raw.value}")
@@ -98,6 +104,7 @@ class WithdrawServiceTest {
     private var walletBusy = false
     private val calls = mutableListOf<String>()
     private var contendedLocks = 0
+    private var concurrentChange: () -> Unit = {}
     private val logout = LogoutService(sessions, realtime, Duration.ofMinutes(30), Clock.systemUTC())
     private val verifier = CurrentPasswordVerifier(users, WithdrawFakeHasher(), limiter, logout, 5, Duration.ofMinutes(15), Clock.systemUTC())
     private val service = WithdrawService(
@@ -105,6 +112,7 @@ class WithdrawServiceTest {
         { calls += "presence"; seated },
         {
             calls += "walletLock"
+            concurrentChange()
             if (contendedLocks > 0) {
                 contendedLocks--
                 throw WalletLockContendedException("경합", IllegalStateException())
@@ -141,6 +149,22 @@ class WithdrawServiceTest {
         assertEquals(listOf(UserId(1)), realtime.closeAllOfCalls)
         assertNull(sessions.currentAccessTokenId(UserId(1)))
         assertEquals(1, limiter.resets)
+    }
+
+    @Test
+    fun `락을 기다리는 사이 바뀐 프로필 이미지를 덮어쓰지 않고 바뀐 이미지를 지운다`() {
+        seed(imageKey = "1/a.png")
+        concurrentChange = {
+            users.stored[1] = User.reconstitute(
+                id = UserId(1), username = Username.of("user_01"), passwordHash = PasswordHash("hashed:password1"),
+                nickname = Nickname.of("길동이"), profileImageKey = ProfileImageKey.of("1/b.png"), role = UserRole.USER,
+            )
+        }
+
+        service.withdraw(WithdrawCommand(1L, "password1"))
+
+        assertEquals(listOf("1/b.png"), storage.deleted)
+        assertNull(users.stored[1]!!.profileImageKey)
     }
 
     @Test
