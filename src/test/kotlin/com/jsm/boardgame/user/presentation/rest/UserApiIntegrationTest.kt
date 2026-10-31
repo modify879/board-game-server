@@ -3,8 +3,8 @@ package com.jsm.boardgame.user.presentation.rest
 import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
 import com.jayway.jsonpath.JsonPath
-import com.jsm.boardgame.user.presentation.config.ProfileImageProperties
 import org.assertj.core.api.Assertions.assertThat
+import org.hamcrest.Matchers.nullValue
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
@@ -30,9 +30,6 @@ class UserApiIntegrationTest {
 
     @Autowired
     private lateinit var mockMvc: MockMvc
-
-    @Autowired
-    private lateinit var profileImageProperties: ProfileImageProperties
 
     private fun uniqueUsername(): String =
         "u" + UniqueNames.suffix()
@@ -104,7 +101,8 @@ class UserApiIntegrationTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.username").value(username))
             .andExpect(jsonPath("$.nickname").value(nickname))
-            .andExpect(jsonPath("$.profileImageUrl").value(profileImageProperties.defaultUrl))
+            .andExpect(jsonPath("$.profileImageUrl").hasJsonPath())
+            .andExpect(jsonPath("$.profileImageUrl").value(nullValue()))
     }
 
     @Test
@@ -213,7 +211,7 @@ class UserApiIntegrationTest {
     }
 
     @Test
-    fun `존재하지 않는 경로로 요청하면 404와 REQUEST_INVALID 를 응답하고 detail 을 노출하지 않는다`() {
+    fun `존재하지 않는 경로로 요청하면 404와 RESOURCE_NOT_FOUND 를 응답하고 detail 을 노출하지 않는다`() {
         val accessToken = signUpAndLogin()
 
         mockMvc.perform(
@@ -221,7 +219,7 @@ class UserApiIntegrationTest {
                 .header("Authorization", "Bearer $accessToken"),
         )
             .andExpect(status().isNotFound)
-            .andExpect(jsonPath("$.errorCode").value("REQUEST_INVALID"))
+            .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"))
             .andExpect(jsonPath("$.traceId").isNotEmpty())
             .andExpect(jsonPath("$.detail").doesNotExist())
     }

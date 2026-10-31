@@ -60,7 +60,7 @@ class UserController(
     @GetMapping("/{id}")
     fun getProfile(@PathVariable id: Long): UserProfileResponse {
         val profile = userQueryService.findProfile(id)
-        return UserProfileResponse.from(profile, profileImageUrlResolver.resolve(profile.profileImageKey))
+        return UserProfileResponse.from(profile, profile.profileImageKey?.let(profileImageUrlResolver::resolve))
     }
 
     @PatchMapping("/me/nickname")

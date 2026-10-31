@@ -6,10 +6,10 @@ data class UserProfileResponse(
     val id: Long,
     val username: String,
     val nickname: String,
-    val profileImageUrl: String,
+    val profileImageUrl: String?,
 ) {
     companion object {
-        fun from(profile: UserProfile, profileImageUrl: String): UserProfileResponse =
+        fun from(profile: UserProfile, profileImageUrl: String?): UserProfileResponse =
             UserProfileResponse(
                 id = profile.id,
                 username = profile.username,

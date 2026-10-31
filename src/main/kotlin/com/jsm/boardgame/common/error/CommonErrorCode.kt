@@ -6,8 +6,10 @@ enum class CommonErrorCode(override val kind: ErrorKind) : ErrorCode {
     ACCESS_DENIED(ErrorKind.FORBIDDEN),
     TEMPORARILY_UNAVAILABLE(ErrorKind.UNAVAILABLE),
     INTERNAL_ERROR(ErrorKind.INTERNAL),
-    // 스프링 MVC 가 직접 던지는 4xx(잘못된 JSON, 미지원 메서드 등). GlobalExceptionHandler 가 쓴다.
+    // 스프링 MVC 가 직접 던지는 404 외의 4xx(잘못된 JSON, 미지원 메서드 등). GlobalExceptionHandler 가 쓴다.
     REQUEST_INVALID(ErrorKind.INVALID),
+    // 스프링 MVC 가 던지는 404 — 없는 경로·없는 정적 리소스.
+    RESOURCE_NOT_FOUND(ErrorKind.NOT_FOUND),
     ;
 
     override val code: String get() = name

@@ -82,7 +82,11 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
         // 이 순서를 뒤집지 말 것 — 뒤집으면 위 경로들에서 errorCode/traceId 가 응답에서 사라지는
         // 버그가 재현된다.
         val response = super.handleExceptionInternal(ex, body, headers, statusCode, request)
-        val errorCode = (if (statusCode.is5xxServerError) CommonErrorCode.INTERNAL_ERROR else CommonErrorCode.REQUEST_INVALID).code
+        val errorCode = when {
+            statusCode.is5xxServerError -> CommonErrorCode.INTERNAL_ERROR
+            statusCode.value() == 404 -> CommonErrorCode.RESOURCE_NOT_FOUND
+            else -> CommonErrorCode.REQUEST_INVALID
+        }.code
 
         (response?.body as? ProblemDetail)?.let {
             // 스프링이 채운 영문 detail 을 지운다. 내용은 아래 로그에 traceId 와 함께 남는다.
