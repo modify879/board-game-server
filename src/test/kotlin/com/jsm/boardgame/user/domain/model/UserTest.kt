@@ -60,4 +60,13 @@ class UserTest {
 
         assertEquals(Nickname.of("새닉네임"), user.nickname)
     }
+
+    @Test
+    fun `changePassword 하면 비밀번호 해시가 바뀐다`() {
+        val user = newUser()
+
+        user.changePassword(PasswordHash("new-hash"))
+
+        assertEquals(PasswordHash("new-hash"), user.passwordHash)
+    }
 }

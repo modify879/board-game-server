@@ -28,6 +28,10 @@ class User private constructor(
         this.role = role
     }
 
+    fun changePassword(passwordHash: PasswordHash) {
+        this.passwordHash = passwordHash
+    }
+
     fun changeNickname(nickname: Nickname) {
         this.nickname = nickname
     }

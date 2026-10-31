@@ -26,3 +26,10 @@ class AccountLockedException(logMessage: String) : BusinessException(UserErrorCo
  */
 class InvalidRefreshTokenException(logMessage: String) :
     BusinessException(UserErrorCode.REFRESH_TOKEN_INVALID, logMessage)
+
+/**
+ * 비밀번호 변경 때 현재 비밀번호가 틀렸다. 이미 로그인한 사용자의 입력 오류라 401 이 아니다 —
+ * 클라이언트는 401 을 "로그아웃됨" 으로 다룬다.
+ */
+class CurrentPasswordMismatchException(logMessage: String) :
+    BusinessException(UserErrorCode.CURRENT_PASSWORD_MISMATCH, logMessage)
