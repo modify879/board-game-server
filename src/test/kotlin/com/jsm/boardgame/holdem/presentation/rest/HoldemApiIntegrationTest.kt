@@ -127,6 +127,20 @@ class HoldemApiIntegrationTest {
         return id to login(username, password)
     }
 
+    /** 공유 DB 에 열린 테이블이 100개를 넘어도 새 테이블을 찾도록 모든 페이지를 훑는다. */
+    private fun allTableRows(accessToken: String): List<Map<String, Any>> {
+        val rows = mutableListOf<Map<String, Any>>()
+        var page = 0
+        do {
+            val body = mockMvc.perform(
+                get("/api/holdem/tables?page=$page&size=100").header("Authorization", "Bearer $accessToken"),
+            ).andExpect(status().isOk).andReturn().response.contentAsString
+            rows += JsonPath.read<List<Map<String, Any>>>(body, "$.content")
+            val totalPages = JsonPath.read<Int>(body, "$.page.totalPages")
+        } while (++page < totalPages)
+        return rows
+    }
+
     private fun authGet(url: String, accessToken: String?): ResultActions {
         val builder = get(url)
         if (accessToken != null) builder.header("Authorization", "Bearer $accessToken")
@@ -299,10 +313,10 @@ class HoldemApiIntegrationTest {
         val idle = seatedWithoutHand()
         val (_, viewer) = signUpAndLogin()
 
-        authGet("/api/holdem/tables?size=2000", viewer)
-            .andExpect(status().isOk)
-            .andExpect(jsonPath("$.content[?(@.tableId==${busy.tableId})].handInProgress").value(true))
-            .andExpect(jsonPath("$.content[?(@.tableId==${idle.tableId})].handInProgress").value(false))
+        val rows = allTableRows(viewer).associateBy { (it["tableId"] as Number).toLong() }
+
+        assertThat(rows[busy.tableId]?.get("handInProgress")).isEqualTo(true)
+        assertThat(rows[idle.tableId]?.get("handInProgress")).isEqualTo(false)
     }
 
     @Test

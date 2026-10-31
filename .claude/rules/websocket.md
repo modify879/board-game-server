@@ -9,6 +9,7 @@ paths:
 
 - 개인 채널은 `/user/queue/...` 로만 구독한다. 원시 `/queue` 구독은 `StompDestinationGuard` 가 막는다 —
   열어두면 세션 id 만 알아도 남의 개인 큐를 엿본다
+- join-queue 목적지(`/user/queue/holdem/join-queue`)는 `HoldemSubscriptionInterceptor` 가 인증 여부만 본다. 인증 없는 SUBSCRIBE 는 ERROR 프레임을 받는다.
 - 구독 인가는 두 겹이다. `StompDestinationGuard` 는 모든 SUBSCRIBE 에서 패턴 문자(`*?{}`)와 원시 `/queue` 를
   거부한다. `HoldemSubscriptionInterceptor` 는 홀덤 테이블 목적지로 보이는 것(`/topic/tables/`,
   `/user/queue/tables/`)만 대상으로, 그중 id 를 해석하지 못하면 거부한다(fail-closed) — 그 밖의 목적지는
