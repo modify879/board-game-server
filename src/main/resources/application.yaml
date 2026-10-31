@@ -98,9 +98,9 @@ app:
   profile-image:
     # 업로드한 파일을 두는 로컬 디스크 위치. /images/profiles/** 로 그대로 서빙한다.
     storage-dir: ./data/profile-images
-    # 실제 CDN 이 붙기 전까지의 로컬 기본값
-    base-url: "http://localhost:8080/images/profiles/"
-    default-url: "http://localhost:8080/images/profiles/default.png"
+    # 클라이언트는 same-origin(nginx 프록시)으로 붙으므로 호스트 없이 경로만 내보낸다. CDN 을 붙이면 절대 URL 로 바꾼다
+    base-url: "/images/profiles/"
+    default-url: "/images/profiles/default.png"
   wallet:
     min-deposit-amount: 1000
     min-withdrawal-amount: 1000
