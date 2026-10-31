@@ -8,6 +8,7 @@ import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Index
 import jakarta.persistence.Table
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import java.time.Instant
 
@@ -53,6 +54,12 @@ class HandHistoryPlayerJpaEntity(
     var shown: Boolean,
 )
 
-interface HandHistoryJpaRepository : JpaRepository<HandHistoryJpaEntity, Long>, KotlinJdslJpqlExecutor
+interface HandHistoryJpaRepository : JpaRepository<HandHistoryJpaEntity, Long>, KotlinJdslJpqlExecutor {
+    fun findTopByTableIdOrderByIdDesc(tableId: Long): HandHistoryJpaEntity?
 
-interface HandHistoryPlayerJpaRepository : JpaRepository<HandHistoryPlayerJpaEntity, Long>, KotlinJdslJpqlExecutor
+    fun findAllByEndedAtBefore(cutoff: Instant, pageable: Pageable): List<HandHistoryJpaEntity>
+}
+
+interface HandHistoryPlayerJpaRepository : JpaRepository<HandHistoryPlayerJpaEntity, Long>, KotlinJdslJpqlExecutor {
+    fun findByHandIdAndUserId(handId: Long, userId: Long): HandHistoryPlayerJpaEntity?
+}

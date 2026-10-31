@@ -19,6 +19,7 @@ private class MySeatQueryFakeTableQueryRepository : HoldemTableQueryRepository {
     override fun findEmptyTableIds(): List<Long> = emptyList()
     override fun findPolicyOf(tableId: Long): TablePolicyView? = throw UnsupportedOperationException()
     override fun existsHandInProgress(tableId: Long): Boolean = tableId in handsInProgress
+    override fun findTableIdsWithHandInProgress(tableIds: Collection<Long>): Set<Long> = tableIds.filter { it in handsInProgress }.toSet()
 }
 
 class MySeatQueryServiceTest {

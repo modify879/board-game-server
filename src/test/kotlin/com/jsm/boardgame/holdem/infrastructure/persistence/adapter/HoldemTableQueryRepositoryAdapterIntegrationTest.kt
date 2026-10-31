@@ -5,10 +5,13 @@ import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.query.port.HoldemTableQueryRepository
 import com.jsm.boardgame.holdem.domain.model.Chips
+import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.query.view.TableSummaryView
+import com.jsm.boardgame.holdem.domain.repository.HandStore
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
+import com.jsm.boardgame.holdem.domain.service.Shuffler
 import com.jsm.boardgame.user.domain.model.Nickname
 import com.jsm.boardgame.user.domain.model.PasswordHash
 import com.jsm.boardgame.user.domain.model.User
@@ -34,6 +37,12 @@ class HoldemTableQueryRepositoryAdapterIntegrationTest {
 
     @Autowired
     private lateinit var users: UserRepository
+
+    @Autowired
+    private lateinit var handStore: HandStore
+
+    @Autowired
+    private lateinit var shuffler: Shuffler
 
     // fk_holdem_seats_user 가 걸려 있어 합성 userId 로는 착석 행을 저장할 수 없다 — 실제 사용자 행을 만든다.
     private fun uniqueUserId(): UserId {
@@ -96,5 +105,22 @@ class HoldemTableQueryRepositoryAdapterIntegrationTest {
         assertEquals(0, summary2.occupiedSeats)
         assertEquals(HoldemTable.MAX_SEATS, summary2.maxSeats)
         assertTrue(summaries.map { it.tableId }.toSet().containsAll(listOf(saved1.id!!.value, saved2.id!!.value)))
+    }
+
+    @Test
+    fun `findTableIdsWithHandInProgress - 핸드가 있는 테이블 id 만 돌려주고 빈 입력은 빈 집합이다`() {
+        val withHand = tables.save(HoldemTable.create("h-${System.nanoTime()}", TestTablePolicy)).id!!
+        val without = tables.save(HoldemTable.create("e-${System.nanoTime()}", TestTablePolicy)).id!!
+        handStore.save(
+            withHand,
+            Hand.start(
+                stacks = mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000), 3 to Chips.of(10_000)),
+                buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3,
+                smallBlind = Chips.of(100), bigBlind = Chips.of(200), shuffler = shuffler,
+            ),
+        )
+
+        assertEquals(setOf(withHand.value), tableQuery.findTableIdsWithHandInProgress(listOf(withHand.value, without.value)))
+        assertEquals(emptySet(), tableQuery.findTableIdsWithHandInProgress(emptyList()))
     }
 }

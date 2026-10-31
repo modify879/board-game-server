@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Import
 import org.springframework.core.annotation.Order
 import org.springframework.http.MediaType
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
@@ -28,7 +27,6 @@ import org.springframework.web.bind.annotation.RestController
  * 프레임워크 동작이 바뀌어 이 테스트가 깨지면 그 결정을 다시 볼 때다.
  */
 @IntegrationTest
-@Import(ValueClassBindingIntegrationTest.SpikeConfig::class)
 class ValueClassBindingIntegrationTest {
 
     @JvmInline
