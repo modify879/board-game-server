@@ -46,7 +46,10 @@ paths: ["**/holdem/**"]
   예약에는 종류가 있다 — `DELETE /api/holdem/seat?after=SPECTATE|LEAVE`(기본 SPECTATE, 잘못된 값은 400 `REQUEST_INVALID`). 서버 실행은 종류와 무관하고 클라이언트가 기립 뒤 행동(관전 유지 / 방 목록 이동)을 정하는 데만 쓴다.
   같은 종류 재요청은 브로드캐스트 없는 멱등이고, 다른 종류는 202 를 유지한 채 종류만 바꿔 브로드캐스트한다(개인 뷰 갱신). 개인 뷰 `SeatPrivateView.leaveReservation`(null | "SPECTATE" | "LEAVE")으로 재접속 뒤에도 노출하고 공개 뷰는 `leaveReserved` 불리언 그대로다.
   종류는 `holdem_seats.leave_reservation`(nullable)에 저장하며 `leave_after_hand` 도 함께 쓴다. 종류가 생기기 전의 행(`leave_after_hand=true`, 종류 null)은 SPECTATE 로 복원한다
-- 개인 뷰 `SeatPrivateView.currentHand`({category: HandCategory 이름, tiebreakers: Rank 값, 비교 우선순위 순} | 홀카드가 없으면 null)는 홀카드 + 보드의 현재 족보다. 프리플랍은 2장 기준이라 PAIR/HIGH_CARD 만 나온다. 공개·브로드캐스트 뷰에는 싣지 않는다.
+- 개인 뷰는 모든 브로드캐스트·구독 스냅샷마다 그 테이블의 착석자 전원에게 간다. 핸드에 묶인 필드(`holeCards`·`currentHand`·`availableActions`)는 `SeatPrivateView.hand`(`PrivateHandView`) 아래에 있고 `null` = 핸드 없음 / 이번 핸드에 참가하지 않음이다. 끝난 핸드도 참가 좌석에는 그대로 실린다(`availableActions` 만 null). 이는 금지된 "마스킹으로 비우는 nullable 홀카드" 가 아니다 — 개인 큐에는 주인 본인의 데이터만 흐른다. 공개 뷰에 대한 규칙 6의 컴파일러 보장은 그대로다.
+- 공개 뷰 좌석 `status` 는 핸드 참가 좌석이면 핸드 안의 상태, 아니면 `NOT_IN_HAND`(핸드 없을 때 포함 — sit-out 은 없다). BB 를 기다리는 중이면 `awaitingBigBlind=true`.
+- 연결 상태(`presence`)가 실제로 바뀌면 `UpdateSeatPresenceService` 가 표시 전용(`handProgressed=false`) 브로드캐스트를 낸다.
+- 개인 뷰 `SeatPrivateView.hand.currentHand`({category: HandCategory 이름, tiebreakers: Rank 값, 비교 우선순위 순} | 홀카드가 없으면 null)는 홀카드 + 보드의 현재 족보다. 프리플랍은 2장 기준이라 PAIR/HIGH_CARD 만 나온다. 공개·브로드캐스트 뷰에는 싣지 않는다.
 - **BB 대기 규칙은 판을 굶겨 죽이지 않는다.** 후보(스택 양수 점유 좌석)가 2명 이상인데 대기를
   빼면 2명 미만이면, 전원의 대기를 풀고 참가시킨다. 없으면 영구 데드락이다 — 참가자 부족 예외가
   `@Transactional` 을 롤백해 블라인드 전진과 플래그 해제가 취소되고, 다음 호출도 같은 상태라 영원히 실패한다.
@@ -81,7 +84,7 @@ paths: ["**/holdem/**"]
   그 핸드가 끝날 때까지 그 좌석 번호에는 앉을 수 없다(정산이 새 착석자를 덮어쓴다)
 - **바이인 자동 합산은 없다.** 지갑에 들어온 돈(충전 승인·출금 취소/반려·관리자 증액)은 지갑에만 남고
   `WalletCredited` 를 듣는 쪽은 holdem 에 없다. 스택에 넣는 길은 두 가지뿐이다 — 착석 때의 바이인과 **칩 추가**(`AddChipsService`:
-  핸드 중에 그 핸드의 참가자가 부르면 바로 더하지 않고 좌석의 `chipsReservation`(`holdem_seats.chips_reservation`, 요청 금액)에 예약만 걸어 **202**(`AddChipsResult.RESERVED`, 덮어쓴다, 개인 뷰 `SeatPrivateView.chipsReservation`(Long|null)으로 노출, 공개 뷰엔 없다).
+  핸드 중에 그 핸드의 참가자가 부르면 바로 더하지 않고 좌석의 `chipsReservation`(`holdem_seats.chips_reservation`, 요청 금액)에 예약만 걸어 **202**(`AddChipsResult.RESERVED`, 덮어쓴다, 개인 뷰 `SeatPrivateView.chipsReservation`(Long|null, 핸드 밖에서도 실린다)으로 노출, 공개 뷰엔 없다).
   예약 때는 단위·양수만 본다(0 은 `CHIP_ADD_OUT_OF_RANGE`) — 한도·잔액은 적용 때 본다. 핸드가 없거나 핸드 도중 앉아 참가하지 않은 좌석은 즉시 더하고 204.
   취소는 `DELETE /api/holdem/seat/chips-reservation`(204, 멱등, 미착석 404). 적용은 `HandSettler.settle`·`CancelHandService` 가 `JoinRequestsDue` **앞에** 발행하는 `ChipsReservationsDue` 를
   `ChipsReservationsProcessor` 가 커밋 후 테이블 실행기에 올려 `ApplyChipsReservationsService`(트랜잭션 없음) → 좌석마다 `ApplySeatChipsReservationService`(REQUIRES_NEW)로 돈다 — 지갑 실패가 정산을 롤백하지 않게.

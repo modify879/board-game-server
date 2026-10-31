@@ -12,6 +12,7 @@ import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.presentation.ws.payload.PayoutPublicView
+import com.jsm.boardgame.holdem.presentation.ws.payload.SeatPrivateView
 import com.jsm.boardgame.holdem.presentation.ws.payload.TablePublicView
 import org.springframework.messaging.Message
 import org.springframework.messaging.MessageChannel
@@ -23,6 +24,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 private class HandBroadcasterFakeChannel : MessageChannel {
     val payloads = mutableListOf<Any?>()
@@ -60,6 +62,66 @@ class HandBroadcasterTest {
         payouts = listOf(LastHandResult.Payout(1, UserId(1000L), 2_000)),
         shownHands = emptyList(),
     )
+
+    private fun privateViewsOf(hand: Hand?, reserved: Boolean = false): List<SeatPrivateView> {
+        val channel = HandBroadcasterFakeChannel()
+        val broadcaster = HandBroadcaster(
+            SimpMessagingTemplate(channel),
+            HandBroadcasterFakeUserRegistry(),
+            TableViewSequence(),
+            FakeNextHandCountdown(),
+            HandBroadcasterFakeTurnCountdown(),
+            HandBroadcasterFakeLastHandResultStore(null),
+        )
+        val table = HoldemTable.create("t", TestTablePolicy)
+        table.sitDown(UserId(1L), Chips.of(10_000))
+        table.sitDown(UserId(2L), Chips.of(10_000))
+        table.sitDown(UserId(3L), Chips.of(10_000))
+        if (reserved) table.reserveChips(UserId(3L), Chips.of(500))
+
+        broadcaster.publish(TableId(1L), table, hand, null, 1L)
+
+        return channel.payloads.filterIsInstance<SeatPrivateView>()
+    }
+
+    private fun handOfSeats12(): Hand = Hand.start(
+        mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
+        buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2,
+        smallBlind = TestTablePolicy.smallBlind, bigBlind = TestTablePolicy.bigBlind, shuffler = { it },
+    )
+
+    @Test
+    fun `핸드가 없어도 착석자 전원에게 hand 가 null 인 개인 뷰를 보내고 칩 예약이 실린다`() {
+        val views = privateViewsOf(hand = null, reserved = true)
+
+        assertEquals(setOf(1, 2, 3), views.map { it.seatNo }.toSet())
+        assertEquals(3, views.size)
+        assertTrue(views.all { it.hand == null })
+        assertEquals(500L, views.first { it.seatNo == 3 }.chipsReservation)
+    }
+
+    @Test
+    fun `핸드 중에는 참가 좌석만 hand 를 받고 참가하지 않은 좌석은 hand 가 null 이다`() {
+        val views = privateViewsOf(handOfSeats12())
+
+        assertEquals(3, views.size)
+        assertEquals(2, views.first { it.seatNo == 1 }.hand!!.holeCards.size)
+        assertEquals(2, views.first { it.seatNo == 2 }.hand!!.holeCards.size)
+        assertNull(views.first { it.seatNo == 3 }.hand)
+    }
+
+    @Test
+    fun `끝난 핸드의 브로드캐스트도 참가 좌석에는 hand 를 싣고 availableActions 는 null 이다`() {
+        val hand = handOfSeats12()
+        hand.act(1, BettingAction.Fold)
+
+        val views = privateViewsOf(hand)
+
+        val dealt = views.first { it.seatNo == 1 }.hand!!
+        assertEquals(2, dealt.holeCards.size)
+        assertNull(dealt.availableActions)
+        assertNull(views.first { it.seatNo == 3 }.hand)
+    }
 
     private fun publish(stored: LastHandResult?, hand: Hand?, eventLastResult: LastHandResult?): TablePublicView {
         val channel = HandBroadcasterFakeChannel()

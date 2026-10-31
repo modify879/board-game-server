@@ -68,10 +68,9 @@ class HandBroadcaster(
                 publicViewOf(tableId, table, hand, lastResult, seq, nextHandCountdown.remaining(tableId), turnCountdown.remaining(tableId), turnCountdown.turnTimeout),
             )
 
-            hand ?: return
-            for (seatNo in hand.seatNos) {
-                val seat = table.seatAt(seatNo) ?: continue
-                sendPrivate(tableId, seat.userId, privateViewOf(tableId, seatNo, hand, seq, seat.leaveReservation, seat.chipsReservation))
+            // 핸드가 없어도, 참가하지 않아도 착석자 전원에게 보낸다 — 핸드 정보는 privateViewOf 가 참가 좌석에만 채운다.
+            for (seat in table.occupiedSeats()) {
+                sendPrivate(tableId, seat.userId, privateViewOf(tableId, seat.seatNo, hand, seq, seat.leaveReservation, seat.chipsReservation))
             }
         } catch (e: Exception) {
             log.error("broadcast failed: tableId={}, seq={}", tableId.value, seq, e)

@@ -137,17 +137,15 @@ class HoldemSubscriptionSnapshotListener(
 
         // 관전자(좌석 없음)는 여기서 끝난다 — 개인 뷰는 그 사용자가 이 테이블에 착석해 있을 때만 나간다.
         val seat = table.seatOf(userId) ?: return
-        if (hand != null && seat.seatNo in hand.seatNos) {
-            // websocket.md: 대상 세션이 없으면 조용히 버려지므로 WARN 을 남기되 전송은 그대로 한다.
-            if (userRegistry.getUser(userId.value.toString()) == null) {
-                log.warn("private view dropped: no active session for userId={}, tableId={}", userId, rawTableId)
-            }
-            messagingTemplate.convertAndSendToUser(
-                userId.value.toString(),
-                HoldemDestinations.privateQueueSendTargetOf(rawTableId),
-                privateViewOf(tableId, seat.seatNo, hand, seq, seat.leaveReservation, seat.chipsReservation),
-            )
+        // 핸드가 없거나 참가하지 않아도 보낸다(hand=null). websocket.md: 대상 세션이 없으면 조용히 버려지므로 WARN 을 남기되 전송은 그대로 한다.
+        if (userRegistry.getUser(userId.value.toString()) == null) {
+            log.warn("private view dropped: no active session for userId={}, tableId={}", userId, rawTableId)
         }
+        messagingTemplate.convertAndSendToUser(
+            userId.value.toString(),
+            HoldemDestinations.privateQueueSendTargetOf(rawTableId),
+            privateViewOf(tableId, seat.seatNo, hand, seq, seat.leaveReservation, seat.chipsReservation),
+        )
     }
 
     /**
