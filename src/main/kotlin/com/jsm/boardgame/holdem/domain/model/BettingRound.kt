@@ -233,8 +233,12 @@ class BettingRound private constructor(
         if (contenders.size <= 1) return true
         val activeSeats = seats.filter { it.status == SeatStatus.ACTIVE }
         if (activeSeats.isEmpty()) return true
-        // 나머지가 전부 올인/폴드이고 유일한 ACTIVE 좌석이 이미 콜 이상이면 응답할 사람이 없다.
-        if (activeSeats.size == 1 && activeSeats[0].committed >= currentBet) return true
+        // 나머지가 전부 올인/폴드이고 유일한 ACTIVE 좌석이 올인 좌석들의 투입액을 이미 맞췄으면 응답할 사람이 없다.
+        // currentBet 이 아니라 올인 쪽 최대 투입액과 비교한다 — 짧은 BB 올인은 currentBet(full BB) 에 못 미친다.
+        if (activeSeats.size == 1) {
+            val matched = contenders.filter { it !== activeSeats[0] }.maxOf { it.committed }
+            if (activeSeats[0].committed >= matched) return true
+        }
         return activeSeats.all { it.committed == currentBet && it.seatNo in actedSinceLastFullRaise }
     }
 
