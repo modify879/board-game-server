@@ -26,5 +26,9 @@ data class JwtProperties(
             "app.jwt.secret 은 HS256 서명에 최소 ${MIN_SECRET_BYTES}바이트가 필요합니다 " +
                 "(현재 ${bytes.size}바이트). APP_JWT_SECRET 환경변수를 더 긴 값으로 설정하세요."
         }
+        // Redis rotate Lua 의 SET ... PX 가 0 이하를 거부한다 — Lua 는 롤백이 없어 앞선 쓰기가 남은 채 500 이 된다.
+        check(refreshReuseGrace >= Duration.ofMillis(1)) {
+            "app.jwt.refresh-reuse-grace 는 1ms 이상이어야 합니다 (현재 $refreshReuseGrace)."
+        }
     }
 }

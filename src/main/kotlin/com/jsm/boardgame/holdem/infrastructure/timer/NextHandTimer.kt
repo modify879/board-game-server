@@ -20,6 +20,8 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import org.springframework.transaction.event.TransactionalEventListener
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 
 /**
  * 다음 핸드 자동 시작 타이머. [TurnTimer] 와 예약/토큰 패턴이 같다 — 테이블별 단조 증가 토큰으로
@@ -53,16 +55,32 @@ class NextHandTimer(
     private val tokens = ConcurrentHashMap<TableId, AtomicLong>()
 
     override fun restart(tableId: TableId) {
-        cancel(tableId)
+        cancelNow(tableId)
         val token = tokens.computeIfAbsent(tableId) { AtomicLong() }.incrementAndGet()
-        // ponytail: 호출자의 트랜잭션 커밋 전에 건다. 그 트랜잭션이 롤백돼도 이 예약은 그대로
-        // 남지만 해롭지 않다 — 발화 시 onFire 가 tableExecutor 안에서 실제 조건(핸드 없음, 후보
-        // 2명 이상)을 다시 확인하기 때문이다.
+        // ponytail: restart 는 호출자의 트랜잭션 커밋 전에 즉시 건다(cancel 과 달리 커밋 뒤로 미루지 않는다).
+        // 그 트랜잭션이 롤백돼도 예약이 남지만 해롭지 않다 — 발화 시 onFire 가 tableExecutor 안에서 실제
+        // 조건(핸드 없음, 후보 2명 이상)을 다시 확인해 조건이 안 맞으면 시작하지 않는다.
         val future = taskScheduler.schedule({ onFire(tableId, token) }, Instant.now(clock).plus(nextHandDelay))
         scheduled[tableId] = ScheduledStart(future, token)
     }
 
+    /**
+     * 트랜잭션 안이면 커밋 뒤에 취소한다 — 롤백되면 DB 에는 후보가 그대로라 카운트다운이 남아야 한다.
+     * 그 사이 같은 트랜잭션에서 [restart] 가 불렸다면(토큰이 올랐다면) 새 예약을 죽이지 않도록 취소하지 않는다.
+     * 커밋 뒤 콜백은 등록 순서로 돌고 HandBroadcaster 의 전송 콜백은 커밋 시점(BEFORE_COMMIT)에 등록되므로
+     * 이 취소가 먼저 반영돼 그 콜백의 [remaining] 은 취소된 값을 본다.
+     */
     override fun cancel(tableId: TableId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) return cancelNow(tableId)
+        val tokenAtCancel = tokens[tableId]?.get()
+        TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+            override fun afterCommit() {
+                if (tokens[tableId]?.get() == tokenAtCancel) cancelNow(tableId)
+            }
+        })
+    }
+
+    private fun cancelNow(tableId: TableId) {
         // 토큰도 올린다 - 실패 경로의 restart 가 취소 뒤에 카운트다운을 되살리지 못하게 한다.
         tokens[tableId]?.incrementAndGet()
         scheduled.remove(tableId)?.future?.cancel(false)
@@ -71,7 +89,7 @@ class NextHandTimer(
     /** 테이블이 닫히면 예약과 토큰을 치운다. 토큰이 사라지면 이미 깨어난 낡은 실행도 걸러진다. */
     @TransactionalEventListener
     fun onTableClosed(event: TableClosed) {
-        cancel(event.tableId)
+        cancelNow(event.tableId)
         tokens.remove(event.tableId)
     }
 

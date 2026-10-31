@@ -1,5 +1,7 @@
-package com.jsm.boardgame.holdem.presentation.ws
+package com.jsm.boardgame.holdem.presentation.ws.subscription
 
+import com.jsm.boardgame.holdem.presentation.ws.broadcast.TableViewSequence
+import com.jsm.boardgame.holdem.presentation.ws.HoldemDestinations
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HandStore
 import com.jsm.boardgame.holdem.application.port.JoinQueue

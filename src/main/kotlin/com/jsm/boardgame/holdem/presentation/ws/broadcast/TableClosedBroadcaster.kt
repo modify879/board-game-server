@@ -1,5 +1,6 @@
-package com.jsm.boardgame.holdem.presentation.ws
+package com.jsm.boardgame.holdem.presentation.ws.broadcast
 
+import com.jsm.boardgame.holdem.presentation.ws.HoldemDestinations
 import com.jsm.boardgame.holdem.application.event.TableClosed
 import com.jsm.boardgame.holdem.presentation.ws.payload.TableClosedView
 import org.slf4j.LoggerFactory

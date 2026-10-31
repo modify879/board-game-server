@@ -32,14 +32,15 @@ com.jsm.boardgame
     ├── domain/      model/ repository/ service/ exception/
     │                repository·service = 출력 포트. service 는 도메인 규칙이 필요로 하는 것(해싱, 셔플)
     ├── application/ command/{usecase,service,support}  config/  port/  event/  exception/  query/{service,port,view}
-    │                port = 유스케이스가 필요로 하는 출력 포트(세션, 토큰, 타 컨텍스트)
+    │                port = 유스케이스가 필요로 하는 출력 포트(세션, 토큰, 타 컨텍스트, 애그리거트가 아닌 영속 기록 — 핸드 이력·최근 이탈·조정 키 등)
     ├── infrastructure/ persistence/{entity,adapter}  security/{adapter,config}  acl/
     │                acl = 타 컨텍스트를 부르는 어댑터. DB 를 안 건드리므로 persistence 가 아니다
-    └── presentation/ config/ exception/ rest/{request,response}  ws/{config,payload}  support/
+    └── presentation/ config/ exception/ rest/{request,response}  ws/  support/
 ```
 
 - **한 패키지에 역할이 섞이면 가른다. 크기는 기준이 아니다.** 파일 1개짜리 하위 패키지도 그대로 둔다
 - `domain/model` 처럼 패키지명이 이미 역할인 곳은 더 가르지 않는다
+- `presentation/ws/` 하위도 역할 이름으로 만든다(holdem: `config/` `payload/` `assembler/` `broadcast/` `subscription/`, 목적지 상수 `HoldemDestinations` 는 `ws/` 바로 아래)
 - `infrastructure/` 의 위 셋은 최소 형태다. DB·보안·타 컨텍스트가 아닌 기술 어댑터는 역할 이름으로 하위 패키지를 만든다(holdem: `timer/` `event/` `job/` `retry/` `config/` `executor/` `queue/` `memory/` `recovery/` `shuffle/` `stomp/`)
 - 계층 이름은 `domain`/`application`/`infrastructure`/`presentation`. `interfaces` 는 쓰지 않는다
 - 새 게임은 최상위에 자기 컨텍스트를 갖는다(`com.jsm.boardgame.<game>`). `game/` 같은 상위 묶음 금지
