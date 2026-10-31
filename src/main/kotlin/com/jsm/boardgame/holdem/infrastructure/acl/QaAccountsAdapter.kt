@@ -10,8 +10,12 @@ import com.jsm.boardgame.wallet.application.command.usecase.RejectWithdrawalRequ
 import com.jsm.boardgame.wallet.application.command.usecase.RejectWithdrawalRequestUseCase
 import com.jsm.boardgame.wallet.application.query.service.DepositRequestQueryService
 import com.jsm.boardgame.wallet.application.query.service.WithdrawalRequestQueryService
+import com.jsm.boardgame.wallet.application.query.view.DepositRequestView
+import com.jsm.boardgame.wallet.application.query.view.WithdrawalRequestView
 import org.springframework.context.annotation.Profile
+import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Component
 import java.util.UUID
 
@@ -28,15 +32,34 @@ class QaAccountsAdapter(
 
     override fun userIdOf(username: String): Long? = users.findIdByUsername(username)
 
-    // ponytail: 최근 200건만 본다 — qa 계정의 대기 요청이 그보다 많을 일은 없다.
+    // findMine 은 상태와 무관하게 id 내림차순이라 반려해도 페이지 경계가 움직이지 않는다 — 끝까지 넘기며 대기 건을 모은다.
     override fun rejectPendingRequests(userId: Long, adminUserId: Long, reason: String) {
-        val page = PageRequest.of(0, 200)
-        deposits.findMine(userId, page).content.filter { it.status == "PENDING" }
-            .forEach { rejectDeposit.reject(RejectDepositRequestCommand(it.id, adminUserId, reason)) }
-        withdrawals.findMine(userId, page).content.filter { it.status == "PENDING" }
-            .forEach { rejectWithdrawal.reject(RejectWithdrawalRequestCommand(it.id, adminUserId, reason)) }
+        pendingIds(deposits::findMine, userId, DepositRequestView::id, DepositRequestView::status)
+            .forEach { rejectDeposit.reject(RejectDepositRequestCommand(it, adminUserId, reason)) }
+        pendingIds(withdrawals::findMine, userId, WithdrawalRequestView::id, WithdrawalRequestView::status)
+            .forEach { rejectWithdrawal.reject(RejectWithdrawalRequestCommand(it, adminUserId, reason)) }
+    }
+
+    private fun <T : Any> pendingIds(
+        find: (Long, Pageable) -> Page<T>,
+        userId: Long,
+        id: (T) -> Long,
+        status: (T) -> String,
+    ): List<Long> {
+        val ids = mutableListOf<Long>()
+        var pageable: Pageable = PageRequest.of(0, PAGE_SIZE)
+        do {
+            val page = find(userId, pageable)
+            page.content.filter { status(it) == "PENDING" }.mapTo(ids, id)
+            pageable = page.nextPageable()
+        } while (page.hasNext())
+        return ids
     }
 
     override fun adjustBalance(userId: Long, delta: Long, adminUserId: Long, reason: String) =
         adjust.adjust(AdjustWalletBalanceCommand(userId, delta, reason, adminUserId, "qa-reset-${UUID.randomUUID()}"))
+
+    private companion object {
+        const val PAGE_SIZE = 200
+    }
 }

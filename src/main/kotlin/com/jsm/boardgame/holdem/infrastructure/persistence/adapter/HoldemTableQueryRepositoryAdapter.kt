@@ -85,14 +85,16 @@ class HoldemTableQueryRepositoryAdapter(
         return page.map { it.copy(occupiedSeats = occupiedCounts[it.tableId] ?: 0) }
     }
 
-    // ponytail: 열린 테이블 id 전체와 좌석이 있는 테이블 id 전체를 읽어 빼는 단순 차집합이다 — 15초마다 한 번이고
-    // 테이블 수만큼만 읽는다. 테이블이 수만 개가 되면 NOT EXISTS 서브쿼리로 바꾼다.
-    override fun findEmptyTableIds(): List<Long> {
-        val open = tableJpa.findAll {
+    override fun findEmptyTableIds(): List<Long> =
+        tableJpa.findAll {
             select(path(HoldemTableJpaEntity::id)).from(entity(HoldemTableJpaEntity::class))
-                .where(path(HoldemTableJpaEntity::closedAt).isNull())
+                .where(
+                    and(
+                        path(HoldemTableJpaEntity::closedAt).isNull(),
+                        path(HoldemTableJpaEntity::id).notIn(
+                            select(path(HoldemSeatJpaEntity::tableId)).from(entity(HoldemSeatJpaEntity::class)).asSubquery(),
+                        ),
+                    ),
+                )
         }.filterNotNull()
-        val occupied = seatJpa.findAll().map { it.tableId }.toSet()
-        return open.filter { it !in occupied }
-    }
 }

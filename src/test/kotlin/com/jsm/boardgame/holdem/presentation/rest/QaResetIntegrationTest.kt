@@ -99,6 +99,19 @@ class QaResetIntegrationTest {
     }
 
     @Test
+    fun `대기 요청이 한 페이지를 넘어도 전부 반려한다`() {
+        val token = adminToken()
+        val (username, id) = signUp()
+        repeat(201) { requestDeposit.request(RequestDepositCommand(id, 1_000, "d$it-${UniqueNames.suffix()}")) }
+
+        reset(token, username).andExpect(status().isNoContent)
+
+        val all = deposits.findMine(id, PageRequest.of(0, 500)).content
+        assertThat(all).hasSize(201)
+        assertThat(all.map { it.status }).containsOnly("REJECTED")
+    }
+
+    @Test
     fun `없는 아이디가 섞이면 404 USER_NOT_FOUND 이고 다른 계정도 바뀌지 않는다`() {
         val token = adminToken()
         val (username, id) = signUp()
