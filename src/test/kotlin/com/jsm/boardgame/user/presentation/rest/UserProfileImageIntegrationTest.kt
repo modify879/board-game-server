@@ -66,7 +66,7 @@ class UserProfileImageIntegrationTest {
         val result = upload(account.accessToken, png).andExpect(status().isOk).andReturn()
         val url = JsonPath.read<String>(result.response.contentAsString, "$.profileImageUrl")
 
-        assertThat(url).matches("http://localhost:8080/images/profiles/${account.id}/[0-9a-f-]{36}\\.png")
+        assertThat(url).matches("/images/profiles/${account.id}/[0-9a-f-]{36}\\.png")
         assertThat(profileImageUrl(account)).isEqualTo(url)
 
         val served = mockMvc.perform(get(URI.create(url).path))
