@@ -41,3 +41,8 @@ class WithdrawalSeatedAtTableException(logMessage: String) :
 /** 탈퇴하려는 사용자의 지갑에 잔액이 있거나 처리 중인 충전·환전 요청이 있다. */
 class WithdrawalWalletNotEmptyException(logMessage: String) :
     BusinessException(UserErrorCode.WITHDRAWAL_WALLET_NOT_EMPTY, logMessage)
+
+/** 프로필 이미지 크기 상한은 업로드 유스케이스의 정책이다 — `User` 는 바이트를 모른다. */
+class ProfileImageTooLargeException(
+    logMessage: String,
+) : BusinessException(UserErrorCode.PROFILE_IMAGE_TOO_LARGE, logMessage)

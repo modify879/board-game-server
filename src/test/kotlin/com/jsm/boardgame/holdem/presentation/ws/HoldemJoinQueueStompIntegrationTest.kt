@@ -36,12 +36,16 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import org.springframework.transaction.support.TransactionTemplate
 
 /** 착석 대기열 개인 채널(/user/queue/holdem/join-queue)이 실제 STOMP 클라이언트에 SEATED 를 전달하는지. */
 @IntegrationTest
 class HoldemJoinQueueStompIntegrationTest {
 
     @Autowired private lateinit var mockMvc: MockMvc
+    @Autowired
+    private lateinit var tx: TransactionTemplate
+
     @Autowired private lateinit var walletRepository: WalletRepository
     @Autowired private lateinit var ledgerEntryRepository: LedgerEntryRepository
     @Autowired private lateinit var holdemTableRepository: HoldemTableRepository
@@ -69,7 +73,7 @@ class HoldemJoinQueueStompIntegrationTest {
     }
 
     private fun fundWallet(userId: Long, amount: Long) {
-        val wallet = walletRepository.findOrOpen(WalletUserId(userId))
+        val wallet = tx.execute { walletRepository.findOrOpen(WalletUserId(userId)) }!!
         val entry = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT,
             amount = Money.of(amount),

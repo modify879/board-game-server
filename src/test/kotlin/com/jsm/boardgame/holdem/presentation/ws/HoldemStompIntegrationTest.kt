@@ -57,6 +57,7 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import javax.crypto.spec.SecretKeySpec
 import jakarta.servlet.http.Cookie
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * holdem STOMP CONNECT 인증과 SUBSCRIBE 인가 통합 테스트.
@@ -72,6 +73,9 @@ class HoldemStompIntegrationTest {
 
     @Autowired
     private lateinit var mockMvc: MockMvc
+
+    @Autowired
+    private lateinit var tx: TransactionTemplate
 
     @Autowired
     private lateinit var walletRepository: WalletRepository
@@ -178,7 +182,7 @@ class HoldemStompIntegrationTest {
     }
 
     private fun fundWallet(userId: Long, amount: Long) {
-        val wallet = walletRepository.findOrOpen(WalletUserId(userId))
+        val wallet = tx.execute { walletRepository.findOrOpen(WalletUserId(userId)) }!!
         val entry = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT,
             amount = Money.of(amount),

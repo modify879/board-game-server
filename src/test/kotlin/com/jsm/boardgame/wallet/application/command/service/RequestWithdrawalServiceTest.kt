@@ -42,7 +42,7 @@ class RequestWithdrawalServiceTest {
         val entry = ledger.stored.single()
         assertEquals(LedgerEntryType.WITHDRAWAL_HOLD, entry.type)
         assertEquals(LedgerReferenceType.WITHDRAWAL_REQUEST, entry.reference.type)
-        assertEquals(id.value, entry.reference.id)
+        assertEquals(id, entry.reference.id)
     }
 
     @Test

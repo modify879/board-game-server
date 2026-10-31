@@ -51,6 +51,9 @@ class RequestIdempotencyConcurrencyIntegrationTest {
     private lateinit var users: UserRepository
 
     @Autowired
+    private lateinit var tx: TransactionTemplate
+
+    @Autowired
     private lateinit var wallets: WalletRepository
 
     @Autowired
@@ -129,7 +132,7 @@ class RequestIdempotencyConcurrencyIntegrationTest {
     @Test
     fun `같은 키의 동시 환전 요청은 한 번만 차감되고 나중 요청은 409 IDEMPOTENCY_KEY_CONFLICT 를 받는다`() {
         val userId = newUserId()
-        val wallet = wallets.findOrOpen(UserId(userId))
+        val wallet = tx.execute { wallets.findOrOpen(UserId(userId)) }!!
         val credit = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT,
             amount = Money.of(10_000L),
@@ -152,8 +155,8 @@ class RequestIdempotencyConcurrencyIntegrationTest {
         val e = assertFailsWith<BusinessException> { second.getOrThrow() }
         assertEquals(WalletErrorCode.IDEMPOTENCY_KEY_CONFLICT, e.errorCode)
         assertEquals(1, count("withdrawal_requests", userId))
-        assertEquals(Money.of(6_000L), wallets.findByUserId(UserId(userId))!!.balance)
+        assertEquals(Money.of(6_000L), tx.execute { wallets.findByUserId(UserId(userId)) }!!.balance)
         assertEquals(created, requestWithdrawal.request(command))
-        assertEquals(Money.of(6_000L), wallets.findByUserId(UserId(userId))!!.balance)
+        assertEquals(Money.of(6_000L), tx.execute { wallets.findByUserId(UserId(userId)) }!!.balance)
     }
 }

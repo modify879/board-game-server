@@ -6,10 +6,6 @@ class InsufficientBalanceException(
     logMessage: String,
 ) : BusinessException(WalletErrorCode.INSUFFICIENT_BALANCE, logMessage)
 
-class ConcurrentWalletUpdateException(
-    logMessage: String,
-) : BusinessException(WalletErrorCode.CONCURRENT_WALLET_UPDATE, logMessage)
-
 class WalletOwnerNotFoundException(
     logMessage: String,
 ) : BusinessException(WalletErrorCode.WALLET_OWNER_NOT_FOUND, logMessage)

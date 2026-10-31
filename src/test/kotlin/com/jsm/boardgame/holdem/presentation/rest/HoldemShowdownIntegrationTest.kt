@@ -55,6 +55,7 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 실제 HTTP API 로 핸드를 쇼다운까지 끌고 가 정산과 칩 보존을 검증하는 유일한 통합 테스트.
@@ -84,6 +85,9 @@ class HoldemShowdownIntegrationTest {
 
     @Autowired
     private lateinit var mockMvc: MockMvc
+
+    @Autowired
+    private lateinit var tx: TransactionTemplate
 
     @Autowired
     private lateinit var walletRepository: WalletRepository
@@ -160,7 +164,7 @@ class HoldemShowdownIntegrationTest {
         mockMvc.perform(delete(url).header("Authorization", "Bearer $accessToken"))
 
     private fun fundWallet(userId: Long, amount: Long) {
-        val wallet = walletRepository.findOrOpen(WalletUserId(userId))
+        val wallet = tx.execute { walletRepository.findOrOpen(WalletUserId(userId)) }!!
         val entry = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT,
             amount = Money.of(amount),
@@ -171,7 +175,7 @@ class HoldemShowdownIntegrationTest {
         ledgerEntryRepository.save(entry)
     }
 
-    private fun balanceOf(userId: Long): Long = walletRepository.findByUserId(WalletUserId(userId))?.balance?.amount ?: 0L
+    private fun balanceOf(userId: Long): Long = tx.execute { walletRepository.findByUserId(WalletUserId(userId)) }?.balance?.amount ?: 0L
 
     // REST 생성은 만든 사람을 대기열에 넣는다(CreateTableService) — 이 헬퍼는 대기열이 비어 있는 테이블이 필요해
     // 저장소로 직접 만든다. accessToken 은 호출부 시그니처를 유지하려고 남겼다.

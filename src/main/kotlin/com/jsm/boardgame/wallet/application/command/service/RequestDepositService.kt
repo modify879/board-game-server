@@ -5,7 +5,6 @@ import com.jsm.boardgame.wallet.application.command.usecase.RequestDepositComman
 import com.jsm.boardgame.wallet.application.config.WalletProperties
 import com.jsm.boardgame.wallet.application.exception.IdempotencyKeyReusedException
 import com.jsm.boardgame.wallet.domain.model.DepositRequest
-import com.jsm.boardgame.wallet.domain.model.DepositRequestId
 import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import org.springframework.stereotype.Service
@@ -22,7 +21,7 @@ class RequestDepositService(
     private val properties: WalletProperties,
 ) : RequestDepositUseCase {
 
-    override fun request(command: RequestDepositCommand): DepositRequestId {
+    override fun request(command: RequestDepositCommand): Long {
         val key = requireValidIdempotencyKey(command.idempotencyKey)
         val userId = UserId(command.userId)
         val request = DepositRequest.request(userId = userId, amount = command.amount, minAmount = properties.minDepositAmount, idempotencyKey = key, at = Instant.now(clock))
@@ -33,11 +32,11 @@ class RequestDepositService(
             if (existing.requestedAmount != request.requestedAmount) {
                 throw IdempotencyKeyReusedException("같은 키로 다른 충전 요청: requestId=${existing.id}")
             }
-            return checkNotNull(existing.id)
+            return checkNotNull(existing.id).value
         }
 
         val saved = depositRequests.save(request)
 
-        return checkNotNull(saved.id) { "save 이후에는 DepositRequest.id 가 채워져 있어야 한다" }
+        return checkNotNull(saved.id) { "save 이후에는 DepositRequest.id 가 채워져 있어야 한다" }.value
     }
 }

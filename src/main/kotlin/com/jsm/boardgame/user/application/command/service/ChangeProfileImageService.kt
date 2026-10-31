@@ -3,7 +3,7 @@ package com.jsm.boardgame.user.application.command.service
 import com.jsm.boardgame.user.application.command.usecase.ChangeProfileImageCommand
 import com.jsm.boardgame.user.application.command.usecase.ChangeProfileImageUseCase
 import com.jsm.boardgame.user.application.port.ProfileImageStorage
-import com.jsm.boardgame.user.domain.exception.ProfileImageTooLargeException
+import com.jsm.boardgame.user.application.exception.ProfileImageTooLargeException
 import com.jsm.boardgame.user.domain.exception.UserNotFoundException
 import com.jsm.boardgame.user.domain.model.ProfileImageType
 import com.jsm.boardgame.user.domain.model.UserId

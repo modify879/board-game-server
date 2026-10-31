@@ -20,7 +20,7 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-private class FakeUserRepository : UserRepository {
+private class SignUpFakeUserRepository : UserRepository {
     val stored = mutableListOf<User>()
     private var sequence = 0L
 
@@ -49,15 +49,15 @@ private class FakeUserRepository : UserRepository {
     }
 }
 
-private class FixedPasswordHasher : PasswordHasher {
+private class SignUpFixedPasswordHasher : PasswordHasher {
     override fun hash(raw: RawPassword): PasswordHash = PasswordHash("hashed:${raw.value}")
     override fun matches(raw: RawPassword, hash: PasswordHash): Boolean = hash.value == "hashed:${raw.value}"
 }
 
 class SignUpServiceTest {
 
-    private val users = FakeUserRepository()
-    private val service = SignUpService(users, FixedPasswordHasher())
+    private val users = SignUpFakeUserRepository()
+    private val service = SignUpService(users, SignUpFixedPasswordHasher())
 
     @Test
     fun `정상 가입은 0 이 아닌 식별자를 돌려준다`() {
