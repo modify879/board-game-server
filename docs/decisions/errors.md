@@ -10,7 +10,7 @@ and that's an MVC or API concern **not a domain model concern**."*
 예외를 한 계층 옮기는 리팩터링이 API 변경이 되어선 안 된다.
 
 `XxxNotFoundException` 을 domain 에 두는 것은 **문헌이 실제로 갈리는 지점**이라 그대로 둔다
-("존재하지 않음"이 도메인 불변식인지 유스케이스 관심사인지 합의가 없다).
+("존재하지 않음"이 도메인 불변식인지 유스케이스 관심사인지 합의가 없다). 그래서 user·wallet 은 domain 에, holdem 은 application/exception(`TableNotFoundException`·`HandNotFoundException`·`JoinRequestNotFoundException`)에 둔다 — 둘 다 허용이고 불일치가 아니다.
 
 ### `common` 에 범용 예외를 두지 않는 이유
 타입이 아니라 메시지 문자열이 의미를 나르게 되어 아이디 중복인지 닉네임 중복인지 구분할 수 없다.

@@ -5,7 +5,7 @@ enum class HandCategory {
 }
 
 /**
- * [tiebreakers] 는 항상 내림차순, [Rank.value] 숫자다. 같은 [category] 끼리는 길이가 항상 같아
+ * [tiebreakers] 는 비교 우선순위 순(FULL_HOUSE = [트립스, 페어], PAIR = [페어, 키커...], 휠 스트레이트 = [5]), [Rank.value] 숫자다. 같은 [category] 끼리는 길이가 항상 같아
  * 원소별 비교가 안전하다.
  */
 data class HandRank(val category: HandCategory, val tiebreakers: List<Int>) : Comparable<HandRank> {
