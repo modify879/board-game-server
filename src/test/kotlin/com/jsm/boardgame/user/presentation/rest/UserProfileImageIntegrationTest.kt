@@ -52,7 +52,7 @@ class UserProfileImageIntegrationTest {
                 .apply { if (accessToken != null) header(HttpHeaders.AUTHORIZATION, "Bearer $accessToken") },
         )
 
-    private fun profileImageUrl(account: Account): String =
+    private fun profileImageUrl(account: Account): String? =
         JsonPath.read(
             mockMvc.perform(get("/api/users/${account.id}").header(HttpHeaders.AUTHORIZATION, "Bearer ${account.accessToken}"))
                 .andExpect(status().isOk).andReturn().response.contentAsString,
@@ -121,14 +121,20 @@ class UserProfileImageIntegrationTest {
     }
 
     @Test
-    fun `삭제하면 204 이고 프로필이 기본 이미지로 돌아간다`() {
+    fun `삭제하면 204 이고 profileImageUrl 이 null 이 된다`() {
         val account = signUpAndLogin()
-        val defaultUrl = profileImageUrl(account)
         upload(account.accessToken, png).andExpect(status().isOk)
 
         mockMvc.perform(delete("/api/users/me/profile-image").header(HttpHeaders.AUTHORIZATION, "Bearer ${account.accessToken}"))
             .andExpect(status().isNoContent)
 
-        assertThat(profileImageUrl(account)).isEqualTo(defaultUrl)
+        assertThat(profileImageUrl(account)).isNull()
+    }
+
+    @Test
+    fun `없는 프로필 이미지 파일을 GET 하면 404 RESOURCE_NOT_FOUND 다`() {
+        mockMvc.perform(get("/images/profiles/no-such-file.png"))
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"))
     }
 }

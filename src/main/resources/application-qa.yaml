@@ -20,4 +20,3 @@ app:
   profile-image:
     storage-dir: ./data-qa/profile-images
     base-url: "/images/profiles/"
-    default-url: "/images/profiles/default.png"

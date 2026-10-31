@@ -10,16 +10,8 @@ class ProfileImageUrlResolverTest {
         ProfileImageUrlResolver(
             ProfileImageProperties(
                 baseUrl = baseUrl,
-                defaultUrl = "https://cdn.example.com/default.png",
             ),
         )
-
-    @Test
-    fun `key 가 null 이면 defaultUrl 을 그대로 반환한다`() {
-        val resolver = resolverWith("https://cdn.example.com/images")
-
-        assertEquals("https://cdn.example.com/default.png", resolver.resolve(null))
-    }
 
     @Test
     fun `key 가 있으면 baseUrl 과 이어붙인 URL 을 반환한다`() {
