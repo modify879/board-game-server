@@ -42,17 +42,17 @@ class DepositRequest private constructor(
     var rejectionReason: String? = rejectionReason
         private set
 
-    fun approve(adminUserId: UserId, creditedAmount: Long, at: Instant) {
+    fun approve(adminUserId: UserId, creditedAmount: Money, at: Instant) {
         requirePending()
 
         // 최소 금액(minAmount)을 여기서는 적용하지 않는다 — 관리자는 실제 입금된 금액
         // (예: 900원)을 그대로 채워줄 수 있어야 한다. 단위(MONEY_UNIT)는 그대로 지킨다.
-        if (creditedAmount <= 0L || creditedAmount % MONEY_UNIT != 0L) {
+        if (creditedAmount.isZero() || creditedAmount.amount % MONEY_UNIT != 0L) {
             throw InvalidDepositAmountException("승인 금액이 유효하지 않음: creditedAmount=$creditedAmount")
         }
 
         status = DepositRequestStatus.APPROVED
-        this.creditedAmount = Money.of(creditedAmount)
+        this.creditedAmount = creditedAmount
         this.processedBy = adminUserId
         this.processedAt = at
     }

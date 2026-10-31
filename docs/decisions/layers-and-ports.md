@@ -45,5 +45,6 @@ BuckPal 의 ArchUnit 규칙이 검사하는 것도 `applicationLayer.doesNotDepe
 ### `common` 을 넷으로 나눈 이유
 가장 중요한 경계는 `error` 와 `web` 사이다 — `error` 는 `domain` 이 import 하는 유일한 common
 패키지이고 `web` 은 `domain` 이 절대 참조하지 않는다. 한 패키지에 있으면 이 선이 보이지 않는다.
+`web` 안에서도 역할이 섞이면 가른다 — `error`(오류 응답 변환·시큐리티 401/403)·`filter`·`stomp`·`rest`.
 `ConstraintViolations` 는 오류 응답 경로가 아니라 어댑터가 쓰는 파싱 유틸이라 `persistence` 다.
 `config` 는 어느 컨텍스트에도 속하지 않는 빈 설정(`Clock`·보안 필터 체인·WebSocket·Kotlin JDSL·STOMP 세션 스케줄러·QA 프로필 가드)이다.

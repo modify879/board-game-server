@@ -1,4 +1,4 @@
-package com.jsm.boardgame.user.infrastructure.security.adapter
+package com.jsm.boardgame.user.infrastructure.security.crypto
 
 import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.domain.model.UserRole

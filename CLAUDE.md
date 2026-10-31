@@ -35,7 +35,7 @@ com.jsm.boardgame
     │                port = 유스케이스가 필요로 하는 출력 포트(세션, 토큰, 타 컨텍스트)
     ├── infrastructure/ persistence/{entity,adapter}  security/{adapter,config}  acl/
     │                acl = 타 컨텍스트를 부르는 어댑터. DB 를 안 건드리므로 persistence 가 아니다
-    └── presentation/ config/ exception/ rest/{request,response}  ws/{config,payload}
+    └── presentation/ config/ exception/ rest/{request,response}  ws/{config,payload}  support/
 ```
 
 - **한 패키지에 역할이 섞이면 가른다. 크기는 기준이 아니다.** 파일 1개짜리 하위 패키지도 그대로 둔다
@@ -93,6 +93,7 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
    | 출력 포트 | `domain/repository` | `application/query/port` |
    | 쿼리 | Spring Data 파생 쿼리 | Kotlin JDSL 생성자 프로젝션 |
 
+   애그리거트가 없는 상태(인메모리 대기열, 인증 세션 저장소)를 바꾸는 명령은 애그리거트 없이 그 출력 포트를 직접 부른다.
    조회가 `JpaEntity → 도메인 → DTO` 로 두 번 매핑되면 안 된다. JDSL 은 조회 경로에만 쓴다.
    명령이 토큰처럼 값을 돌려줄 때도 출력 포트 타입을 그대로 돌려주지 않는다(`AuthTokens` vs `IssuedTokens`)
 4. UseCase 이름은 의도를 드러낸다. 유스케이스당 하나. `UserService`/`UserServiceImpl` 같은 별칭 인터페이스 금지

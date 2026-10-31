@@ -6,7 +6,7 @@ import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.common.error.CommonErrorCode
-import com.jsm.boardgame.common.web.StompSessionRegistry
+import com.jsm.boardgame.common.web.stomp.StompSessionRegistry
 import com.jsm.boardgame.holdem.application.command.usecase.CloseIdleTableCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CloseIdleTableUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand

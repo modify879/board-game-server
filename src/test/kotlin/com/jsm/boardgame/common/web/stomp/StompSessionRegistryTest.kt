@@ -1,4 +1,4 @@
-package com.jsm.boardgame.common.web
+package com.jsm.boardgame.common.web.stomp
 
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test

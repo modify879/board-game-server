@@ -1,7 +1,8 @@
-package com.jsm.boardgame.common.web
+package com.jsm.boardgame.common.web.error
 
 import com.jsm.boardgame.common.error.BusinessException
 import com.jsm.boardgame.common.error.CommonErrorCode
+import com.jsm.boardgame.common.web.filter.RequestIdFilter
 import jakarta.servlet.http.HttpServletRequest
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC

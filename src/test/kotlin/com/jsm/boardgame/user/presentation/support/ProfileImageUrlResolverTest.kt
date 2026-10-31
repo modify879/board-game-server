@@ -1,5 +1,6 @@
-package com.jsm.boardgame.user.presentation.config
+package com.jsm.boardgame.user.presentation.support
 
+import com.jsm.boardgame.user.presentation.config.ProfileImageProperties
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

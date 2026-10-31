@@ -1,8 +1,8 @@
 package com.jsm.boardgame.user.presentation.exception
 
-import com.jsm.boardgame.common.web.logByStatus
-import com.jsm.boardgame.common.web.problemDetail
-import com.jsm.boardgame.common.web.toHttpStatus
+import com.jsm.boardgame.common.web.error.logByStatus
+import com.jsm.boardgame.common.web.error.problemDetail
+import com.jsm.boardgame.common.web.error.toHttpStatus
 import com.jsm.boardgame.user.domain.exception.UserErrorCode
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.core.Ordered

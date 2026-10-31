@@ -3,6 +3,7 @@ package com.jsm.boardgame.wallet.application.command.service
 import com.jsm.boardgame.wallet.application.command.usecase.ApproveDepositRequestCommand
 import com.jsm.boardgame.wallet.domain.exception.DepositRequestAlreadyProcessedException
 import com.jsm.boardgame.wallet.domain.exception.DepositRequestNotFoundException
+import com.jsm.boardgame.wallet.domain.exception.InvalidDepositAmountException
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
 import com.jsm.boardgame.wallet.domain.model.DepositRequest
 import com.jsm.boardgame.wallet.domain.model.DepositRequestId
@@ -110,9 +111,23 @@ class ApproveDepositRequestServiceTest {
     }
 
     @Test
+    fun `creditedAmount 가 음수거나 0 이거나 100원 배수가 아니면 DEPOSIT_AMOUNT_INVALID 이고 지갑은 그대로다`() {
+        val request = pendingRequest()
+
+        listOf(-1_000L, 0L, 950L).forEach { invalid ->
+            val e = assertFailsWith<InvalidDepositAmountException> {
+                service.approve(ApproveDepositRequestCommand(requestId = request.id!!.value, adminUserId = 99, creditedAmount = invalid))
+            }
+            assertEquals(WalletErrorCode.DEPOSIT_AMOUNT_INVALID, e.errorCode)
+        }
+        assertEquals(DepositRequestStatus.PENDING, depositRequests.findById(request.id!!)!!.status)
+        assertNull(wallets.findByUserId(UserId(1)))
+    }
+
+    @Test
     fun `이미 처리된 요청을 승인하면 DEPOSIT_REQUEST_ALREADY_PROCESSED 이고 지갑 잔액이 변하지 않는다`() {
         val request = pendingRequest()
-        request.approve(UserId(1), 10_000, Instant.now())
+        request.approve(UserId(1), Money.of(10_000), Instant.now())
         depositRequests.save(request)
 
         val e = assertFailsWith<DepositRequestAlreadyProcessedException> {

@@ -1,6 +1,7 @@
-package com.jsm.boardgame.common.web
+package com.jsm.boardgame.common.web.error
 
 import com.jsm.boardgame.common.error.ErrorKind
+import com.jsm.boardgame.common.web.filter.RequestIdFilter
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
 import org.springframework.http.HttpStatus
@@ -8,7 +9,7 @@ import org.springframework.http.HttpStatusCode
 import org.springframework.http.ProblemDetail
 import java.net.URI
 
-private val logger = LoggerFactory.getLogger("com.jsm.boardgame.common.web.GlobalExceptionHandler")
+private val logger = LoggerFactory.getLogger("com.jsm.boardgame.common.web.error.GlobalExceptionHandler")
 
 /** `@RestControllerAdvice` 들이 공유하는 응답·로그 조립(규칙 8). `ErrorKind` → 상태 매핑은 여기 하나다. */
 internal fun ErrorKind.toHttpStatus(): HttpStatus = when (this) {

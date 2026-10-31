@@ -29,12 +29,17 @@ class AdjustmentKeyRegistryAdapterIntegrationTest {
     @Test
     fun `같은 키를 두 트랜잭션에서 두 번 claim 하면 두 번째는 AdjustmentAlreadyAppliedException`() {
         val key = UUID.randomUUID().toString()
+        val admin = UserId(syntheticUserId())
+        val target = UserId(admin.value + 1)
 
-        registry.claim(key, adminUserId = UserId(1), targetUserId = UserId(2), at = now)
+        registry.claim(key, adminUserId = admin, targetUserId = target, at = now)
 
         val e = assertFailsWith<AdjustmentAlreadyAppliedException> {
-            registry.claim(key, adminUserId = UserId(1), targetUserId = UserId(2), at = now)
+            registry.claim(key, adminUserId = admin, targetUserId = target, at = now)
         }
         assertEquals(WalletErrorCode.ADJUSTMENT_ALREADY_APPLIED, e.errorCode)
     }
+
+    /** 실제 IDENTITY id 와 겹치지 않는 대역(1조~)의 합성 userId. */
+    private fun syntheticUserId(): Long = 1_000_000_000_000L + (System.nanoTime() ushr 1)
 }

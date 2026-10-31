@@ -27,7 +27,7 @@ class DepositRequestRepositoryAdapterIntegrationTest {
 
     @Test
     fun `저장 후 findById 가 상태 금액 처리자 사유를 그대로 돌려준다`() {
-        val request = DepositRequest.request(userId = UserId(System.nanoTime()), amount = 10_000, minAmount = 1_000, idempotencyKey = "key", at = now)
+        val request = DepositRequest.request(userId = UserId(syntheticUserId()), amount = 10_000, minAmount = 1_000, idempotencyKey = "key", at = now)
         val saved = depositRequests.save(request)
 
         val reloaded = requireNotNull(tx.execute { depositRequests.findById(saved.id!!) })
@@ -40,4 +40,7 @@ class DepositRequestRepositoryAdapterIntegrationTest {
         assertEquals(UserId(7), final.processedBy)
         assertEquals("증빙 불충분", final.rejectionReason)
     }
+
+    /** 실제 IDENTITY id 와 겹치지 않는 대역(1조~)의 합성 userId. */
+    private fun syntheticUserId(): Long = 1_000_000_000_000L + (System.nanoTime() ushr 1)
 }

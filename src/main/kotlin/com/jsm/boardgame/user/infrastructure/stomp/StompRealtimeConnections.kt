@@ -1,6 +1,6 @@
 package com.jsm.boardgame.user.infrastructure.stomp
 
-import com.jsm.boardgame.common.web.StompSessionRegistry
+import com.jsm.boardgame.common.web.stomp.StompSessionRegistry
 import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.application.port.RealtimeConnections
 import org.springframework.beans.factory.annotation.Value

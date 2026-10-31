@@ -19,7 +19,6 @@ class QaProfileGuardMissingMarkerIntegrationTest {
                 .profiles("qa")
                 .web(WebApplicationType.NONE)
                 .properties(
-                    "spring.docker.compose.enabled=false",
                     "spring.datasource.url=${unmarked.jdbcUrl}",
                     "spring.datasource.username=${unmarked.username}",
                     "spring.datasource.password=${unmarked.password}",

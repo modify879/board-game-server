@@ -32,7 +32,7 @@ class PendingRequestQueryAdapterIntegrationTest {
 
     @Test
     fun `대기 중인 충전 요청은 있다고 하고 처리되면 없다고 한다`() {
-        val userId = System.nanoTime()
+        val userId = syntheticUserId()
         assertFalse(depositQuery.existsPendingByUserId(userId))
 
         val saved = depositRequests.save(DepositRequest.request(UserId(userId), 10_000, 1_000, "k", now))
@@ -46,7 +46,7 @@ class PendingRequestQueryAdapterIntegrationTest {
 
     @Test
     fun `대기 중인 환전 요청은 있다고 하고 처리되면 없다고 한다`() {
-        val userId = System.nanoTime()
+        val userId = syntheticUserId()
         assertFalse(withdrawalQuery.existsPendingByUserId(userId))
 
         val bank = BankAccount.of("국민은행", "123456789012", "홍길동")
@@ -61,8 +61,11 @@ class PendingRequestQueryAdapterIntegrationTest {
 
     @Test
     fun `다른 사용자의 대기 요청은 세지 않는다`() {
-        depositRequests.save(DepositRequest.request(UserId(System.nanoTime()), 10_000, 1_000, "k", now))
+        depositRequests.save(DepositRequest.request(UserId(syntheticUserId()), 10_000, 1_000, "k", now))
 
-        assertFalse(depositQuery.existsPendingByUserId(System.nanoTime() + 1))
+        assertFalse(depositQuery.existsPendingByUserId(syntheticUserId() + 1))
     }
+
+    /** 실제 IDENTITY id 와 겹치지 않는 대역(1조~)의 합성 userId. */
+    private fun syntheticUserId(): Long = 1_000_000_000_000L + (System.nanoTime() ushr 1)
 }

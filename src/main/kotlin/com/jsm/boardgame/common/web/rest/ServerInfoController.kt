@@ -1,4 +1,4 @@
-package com.jsm.boardgame.common.web
+package com.jsm.boardgame.common.web.rest
 
 import com.jsm.boardgame.common.config.QaProfileGuard
 import org.springframework.beans.factory.ObjectProvider

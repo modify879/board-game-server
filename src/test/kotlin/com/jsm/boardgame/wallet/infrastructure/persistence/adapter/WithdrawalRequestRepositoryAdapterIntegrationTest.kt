@@ -29,7 +29,7 @@ class WithdrawalRequestRepositoryAdapterIntegrationTest {
 
     @Test
     fun `저장 후 findById 가 상태 금액 계좌 세 필드를 그대로 돌려준다`() {
-        val request = WithdrawalRequest.request(userId = UserId(System.nanoTime()), amount = 10_000, minAmount = 1_000, bankAccount = bankAccount, idempotencyKey = "key", at = now)
+        val request = WithdrawalRequest.request(userId = UserId(syntheticUserId()), amount = 10_000, minAmount = 1_000, bankAccount = bankAccount, idempotencyKey = "key", at = now)
         val saved = withdrawalRequests.save(request)
 
         val reloaded = requireNotNull(tx.execute { withdrawalRequests.findById(saved.id!!) })
@@ -43,4 +43,7 @@ class WithdrawalRequestRepositoryAdapterIntegrationTest {
         assertEquals("123456789012", final.bankAccount.accountNumber)
         assertEquals("홍길동", final.bankAccount.accountHolder)
     }
+
+    /** 실제 IDENTITY id 와 겹치지 않는 대역(1조~)의 합성 userId. */
+    private fun syntheticUserId(): Long = 1_000_000_000_000L + (System.nanoTime() ushr 1)
 }

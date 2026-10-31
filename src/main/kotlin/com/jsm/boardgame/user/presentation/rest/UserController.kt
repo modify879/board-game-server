@@ -9,7 +9,7 @@ import com.jsm.boardgame.user.application.command.usecase.RemoveProfileImageUseC
 import com.jsm.boardgame.user.application.command.usecase.WithdrawUseCase
 import com.jsm.boardgame.user.application.command.usecase.SignUpUseCase
 import com.jsm.boardgame.user.application.query.service.UserQueryService
-import com.jsm.boardgame.user.presentation.config.ProfileImageUrlResolver
+import com.jsm.boardgame.user.presentation.support.ProfileImageUrlResolver
 import com.jsm.boardgame.user.presentation.rest.request.ChangeNicknameRequest
 import com.jsm.boardgame.user.presentation.rest.request.ChangePasswordRequest
 import com.jsm.boardgame.user.presentation.rest.request.SignUpRequest

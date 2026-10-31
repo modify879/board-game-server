@@ -63,7 +63,7 @@ class DepositRequestTest {
     fun `approve 가 상태 금액 처리자를 채운다`() {
         val request = pendingRequest()
 
-        request.approve(adminUserId = UserId(99), creditedAmount = 10_000, at = now)
+        request.approve(adminUserId = UserId(99), creditedAmount = Money.of(10_000), at = now)
 
         assertEquals(DepositRequestStatus.APPROVED, request.status)
         assertEquals(Money.of(10_000), request.creditedAmount)
@@ -74,10 +74,10 @@ class DepositRequestTest {
     @Test
     fun `두 번 approve 하면 두 번째가 DEPOSIT_REQUEST_ALREADY_PROCESSED`() {
         val request = pendingRequest()
-        request.approve(UserId(99), 10_000, now)
+        request.approve(UserId(99), Money.of(10_000), now)
 
         val e = assertFailsWith<DepositRequestAlreadyProcessedException> {
-            request.approve(UserId(99), 10_000, now)
+            request.approve(UserId(99), Money.of(10_000), now)
         }
         assertEquals(WalletErrorCode.DEPOSIT_REQUEST_ALREADY_PROCESSED, e.errorCode)
     }
@@ -88,7 +88,7 @@ class DepositRequestTest {
         request.reject(UserId(99), "사유", now)
 
         val e = assertFailsWith<DepositRequestAlreadyProcessedException> {
-            request.approve(UserId(99), 10_000, now)
+            request.approve(UserId(99), Money.of(10_000), now)
         }
         assertEquals(WalletErrorCode.DEPOSIT_REQUEST_ALREADY_PROCESSED, e.errorCode)
     }
@@ -99,7 +99,7 @@ class DepositRequestTest {
         request.cancel(UserId(1), now)
 
         val e = assertFailsWith<DepositRequestAlreadyProcessedException> {
-            request.approve(UserId(99), 10_000, now)
+            request.approve(UserId(99), Money.of(10_000), now)
         }
         assertEquals(WalletErrorCode.DEPOSIT_REQUEST_ALREADY_PROCESSED, e.errorCode)
     }
@@ -128,7 +128,7 @@ class DepositRequestTest {
     fun `approve 의 creditedAmount 는 1000원 미만도 허용되지만 100원 배수여야 한다`() {
         val request = pendingRequest()
 
-        request.approve(UserId(99), 900, now)
+        request.approve(UserId(99), Money.of(900), now)
 
         assertEquals(Money.of(900), request.creditedAmount)
     }
@@ -138,24 +138,19 @@ class DepositRequestTest {
         val request = pendingRequest()
 
         val e = assertFailsWith<InvalidDepositAmountException> {
-            request.approve(UserId(99), 950, now)
+            request.approve(UserId(99), Money.of(950), now)
         }
         assertEquals(WalletErrorCode.DEPOSIT_AMOUNT_INVALID, e.errorCode)
     }
 
     @Test
-    fun `approve 의 creditedAmount 가 음수거나 0 이면 DEPOSIT_AMOUNT_INVALID`() {
-        val negative = pendingRequest()
+    fun `approve 의 creditedAmount 가 0 이면 DEPOSIT_AMOUNT_INVALID`() {
         val zero = pendingRequest()
 
-        val eNegative = assertFailsWith<InvalidDepositAmountException> {
-            negative.approve(UserId(99), -1_000, now)
-        }
-        val eZero = assertFailsWith<InvalidDepositAmountException> {
-            zero.approve(UserId(99), 0, now)
+        val e = assertFailsWith<InvalidDepositAmountException> {
+            zero.approve(UserId(99), Money.ZERO, now)
         }
 
-        assertEquals(WalletErrorCode.DEPOSIT_AMOUNT_INVALID, eNegative.errorCode)
-        assertEquals(WalletErrorCode.DEPOSIT_AMOUNT_INVALID, eZero.errorCode)
+        assertEquals(WalletErrorCode.DEPOSIT_AMOUNT_INVALID, e.errorCode)
     }
 }

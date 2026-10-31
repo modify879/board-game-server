@@ -6,6 +6,7 @@ import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.domain.model.UserRole
 import com.jsm.boardgame.user.domain.repository.UserRepository
+import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
@@ -63,23 +64,47 @@ class AdminUserSearchIntegrationTest {
         return mockMvc.perform(builder.header("Authorization", "Bearer $token"))
     }
 
+    // 공유 DB 라 다른 가입에 기대지 않는다 — 방금 만든 두 회원의 상대 순서만 본다. 이 둘이 가장 최신이므로
+    // 동시에 다른 가입이 수십 건 끼지 않는 한 첫 페이지(50)에 있다.
     @Test
-    fun `검색어 없이 조회하면 가입 최신순으로 모든 회원을 돌려주고 페이지 메타가 있다`() {
+    fun `검색어 없이 조회하면 가입 최신순으로 돌려주고 페이지 메타가 있다`() {
         val token = adminToken()
         val first = signUp("u" + UniqueNames.suffix(), "n" + UniqueNames.suffix())
         val second = signUp("u" + UniqueNames.suffix(), "n" + UniqueNames.suffix())
 
-        search(token, extra = "size=2")
+        val body = search(token, extra = "size=50")
             .andExpect(status().isOk)
-            .andExpect(jsonPath("$.content.length()").value(2))
-            .andExpect(jsonPath("$.content[0].id").value(second))
-            .andExpect(jsonPath("$.content[1].id").value(first))
-            .andExpect(jsonPath("$.content[0].role").value("USER"))
-            .andExpect(jsonPath("$.content[0].locked").value(false))
-            .andExpect(jsonPath("$.page.size").value(2))
+            .andExpect(jsonPath("$.content[0].role").exists())
+            .andExpect(jsonPath("$.page.size").value(50))
             .andExpect(jsonPath("$.page.totalElements").exists())
             .andExpect(jsonPath("$.page.totalPages").exists())
             .andExpect(jsonPath("$.page.number").value(0))
+            .andReturn().response.contentAsString
+        val ids = JsonPath.read<List<Number>>(body, "$.content[*].id").map { it.toLong() }
+
+        assertThat(ids).contains(first, second)
+        assertThat(ids.indexOf(second)).isLessThan(ids.indexOf(first))
+    }
+
+    @Test
+    fun `공통 검색어로 걸러도 가입 최신순이고 페이지 크기가 적용된다`() {
+        val token = adminToken()
+        val tag = UniqueNames.suffix()
+        val first = signUp("u${tag}a", "n" + UniqueNames.suffix())
+        val second = signUp("u${tag}b", "n" + UniqueNames.suffix())
+
+        search(token, "u$tag", extra = "size=1")
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.content.length()").value(1))
+            .andExpect(jsonPath("$.content[0].id").value(second))
+            .andExpect(jsonPath("$.content[0].role").value("USER"))
+            .andExpect(jsonPath("$.content[0].locked").value(false))
+            .andExpect(jsonPath("$.page.size").value(1))
+            .andExpect(jsonPath("$.page.totalElements").value(2))
+            .andExpect(jsonPath("$.page.totalPages").value(2))
+            .andExpect(jsonPath("$.page.number").value(0))
+        search(token, "u$tag", extra = "size=1&page=1")
+            .andExpect(jsonPath("$.content[0].id").value(first))
     }
 
     @Test
