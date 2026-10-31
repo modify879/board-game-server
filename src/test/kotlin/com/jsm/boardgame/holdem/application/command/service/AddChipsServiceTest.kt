@@ -106,6 +106,19 @@ class AddChipsServiceTest {
     }
 
     @Test
+    fun `핸드 도중 참가하지 않은 좌석이 바로 더해도 브로드캐스트는 진행 중 핸드를 싣고 핸드 진행으로 알리지 않는다`() {
+        val tableId = seatedTable()
+        startHand(tableId, 2, 3)
+        wallet.balance = 50_000
+
+        assertEquals(AddChipsResult.ADDED, service.addChips(AddChipsCommand(1, 5_000)))
+
+        val broadcast = events.events.filterIsInstance<HandBroadcastRequested>().single()
+        assertNotNull(broadcast.hand)
+        assertEquals(false, broadcast.handProgressed)
+    }
+
+    @Test
     fun `핸드 중 칩 단위가 아니면 CHIPS_NOT_UNIT 이고 예약하지 않는다`() {
         val tableId = seatedTable()
         startHand(tableId, 1, 2)

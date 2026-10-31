@@ -56,7 +56,7 @@ class AddChipsService(
         }
         walletTransfer.toGame(userId, amount.amount, tableId, memo = "holdem")
         tables.save(table)
-        eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, null))
+        eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand, handProgressed = hand == null))
         return AddChipsResult.ADDED
     }
 }
