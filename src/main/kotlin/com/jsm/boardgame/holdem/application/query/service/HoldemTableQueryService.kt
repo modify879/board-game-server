@@ -22,9 +22,8 @@ class HoldemTableQueryService(
         if (location != null && holdemTableQuery.existsHandInProgress(location.tableId)) {
             throw HandInProgressException("진행 중인 핸드가 있어 로비를 볼 수 없습니다: userId=$userId, tableId=${location.tableId}")
         }
-        // ponytail: 페이지 크기만큼 존재 조회를 반복한다(쿼리 N번). 페이지가 커지면 일괄 조회 메서드를 포트에 둔다.
-        return holdemTableQuery.findAllTables(pageable).map {
-            it.copy(handInProgress = holdemTableQuery.existsHandInProgress(it.tableId))
-        }
+        val page = holdemTableQuery.findAllTables(pageable)
+        val inProgress = holdemTableQuery.findTableIdsWithHandInProgress(page.content.map { it.tableId })
+        return page.map { it.copy(handInProgress = it.tableId in inProgress) }
     }
 }

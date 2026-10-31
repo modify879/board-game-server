@@ -22,6 +22,7 @@ private class PresenceFakeTableQuery(var seated: Boolean) : HoldemTableQueryRepo
     override fun findEmptyTableIds(): List<Long> = emptyList()
     override fun findPolicyOf(tableId: Long): TablePolicyView? = throw UnsupportedOperationException()
     override fun existsHandInProgress(tableId: Long): Boolean = throw UnsupportedOperationException()
+    override fun findTableIdsWithHandInProgress(tableIds: Collection<Long>): Set<Long> = throw UnsupportedOperationException()
 }
 
 private class PresenceFakeJoinQueue(var queued: Boolean) : JoinQueue {

@@ -26,6 +26,7 @@ private class BuyInFakeTableQuery : HoldemTableQueryRepository {
     override fun findPolicyOf(tableId: Long): TablePolicyView? = policies[tableId]
     override fun findSeatOf(userId: Long): SeatLocation? = throw UnsupportedOperationException()
     override fun existsHandInProgress(tableId: Long): Boolean = throw UnsupportedOperationException()
+    override fun findTableIdsWithHandInProgress(tableIds: Collection<Long>): Set<Long> = throw UnsupportedOperationException()
     override fun findAllTables(pageable: Pageable): Page<TableSummaryView> = throw UnsupportedOperationException()
     override fun findEmptyTableIds(): List<Long> = throw UnsupportedOperationException()
 }

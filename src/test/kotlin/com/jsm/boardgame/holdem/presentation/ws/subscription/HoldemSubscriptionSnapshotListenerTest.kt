@@ -67,6 +67,7 @@ class HoldemSubscriptionSnapshotListenerTest {
         override fun findEmptyTableIds(): List<Long> = error("unused")
         override fun findPolicyOf(tableId: Long): com.jsm.boardgame.holdem.application.query.view.TablePolicyView? = error("unused")
         override fun existsHandInProgress(tableId: Long): Boolean = error("unused")
+        override fun findTableIdsWithHandInProgress(tableIds: Collection<Long>): Set<Long> = throw UnsupportedOperationException()
     }
 
     private class Sent(val user: String, val dest: String, val payload: Any, val headers: MessageHeaders?)

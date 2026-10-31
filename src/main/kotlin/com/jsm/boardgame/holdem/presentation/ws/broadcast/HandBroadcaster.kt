@@ -10,8 +10,8 @@ import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.presentation.ws.payload.SeatPrivateView
-import com.jsm.boardgame.holdem.presentation.ws.payload.privateViewOf
-import com.jsm.boardgame.holdem.presentation.ws.payload.publicViewOf
+import com.jsm.boardgame.holdem.presentation.ws.assembler.privateViewOf
+import com.jsm.boardgame.holdem.presentation.ws.assembler.publicViewOf
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.messaging.simp.user.SimpUserRegistry

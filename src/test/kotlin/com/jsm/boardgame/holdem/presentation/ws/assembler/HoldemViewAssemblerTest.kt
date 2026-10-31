@@ -1,5 +1,6 @@
-package com.jsm.boardgame.holdem.presentation.ws.payload
+package com.jsm.boardgame.holdem.presentation.ws.assembler
 
+import com.jsm.boardgame.holdem.presentation.ws.payload.*
 import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.LastHandResult
