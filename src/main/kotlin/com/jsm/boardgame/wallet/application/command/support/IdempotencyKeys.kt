@@ -1,4 +1,4 @@
-package com.jsm.boardgame.wallet.application.command.service
+package com.jsm.boardgame.wallet.application.command.support
 
 import com.jsm.boardgame.wallet.application.exception.IdempotencyKeyInvalidException
 

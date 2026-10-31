@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicLong
  */
 // ClockTestConfig(아래, public @Bean 메서드의 반환 타입)에서 써야 하므로 private 로 좁히지 않는다 —
 // Kotlin 은 public 선언이 그보다 좁은 가시성의 타입을 노출하는 것을 컴파일 에러로 막는다.
-class MutableClock(
+class RedisSessionMutableClock(
     startingAt: Instant,
     private val zone: ZoneId = ZoneOffset.UTC,
 ) : Clock() {
@@ -47,7 +47,7 @@ class MutableClock(
 
     override fun getZone(): ZoneId = zone
 
-    override fun withZone(zone: ZoneId): Clock = MutableClock(instant, zone)
+    override fun withZone(zone: ZoneId): Clock = RedisSessionMutableClock(instant, zone)
 
     override fun instant(): Instant = instant
 
@@ -65,7 +65,7 @@ class MutableClock(
  * 직전 토큰 유예 칸은 [start] 로는 만들 수 없다 — 로그인은 항상 그 칸을 비운다. 여러 세대를
  * 재현해야 하는 테스트는 [AuthSessionStore.rotate] 를 연달아 호출해 상태를 만든다.
  *
- * [ClockTestConfig] 가 애플리케이션의 `Clock.systemUTC()` 빈을 `@Primary` [MutableClock] 으로
+ * [ClockTestConfig] 가 애플리케이션의 `Clock.systemUTC()` 빈을 `@Primary` [RedisSessionMutableClock] 으로
  * 덮어써서, `authSessionStore`(스프링이 주입한 실 구현체) 가 보는 시각을 테스트가 직접
  * 조작할 수 있게 한다 — 유예 만료를 기다리려고 실제로 잠들 필요가 없다.
  * 단, 동시성 테스트는 실제 스레드 경합을 검증하는 것이므로 시계를 앞당기지 않는다.
@@ -80,7 +80,7 @@ class RedisAuthSessionStoreIntegrationTest {
     private lateinit var redisTemplate: StringRedisTemplate
 
     @Autowired
-    private lateinit var clock: MutableClock
+    private lateinit var clock: RedisSessionMutableClock
 
     @TestConfiguration
     class ClockTestConfig {
@@ -89,7 +89,7 @@ class RedisAuthSessionStoreIntegrationTest {
         // 이름을 달리하고 @Primary 로 타입 기준 주입에서 이 빈이 이기게 한다.
         @Bean
         @Primary
-        fun testClock(): MutableClock = MutableClock(Instant.now())
+        fun testClock(): RedisSessionMutableClock = RedisSessionMutableClock(Instant.now())
     }
 
     @Test
@@ -199,7 +199,7 @@ class RedisAuthSessionStoreIntegrationTest {
 
     @Test
     fun `유예가 지나면 직전 토큰이 거부된다`() {
-        val shortGraceClock = MutableClock(Instant.now())
+        val shortGraceClock = RedisSessionMutableClock(Instant.now())
         val shortGraceStore = RedisAuthSessionStore(
             redisTemplate,
             JwtProperties(

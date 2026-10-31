@@ -60,7 +60,7 @@ class WalletPessimisticLockIntegrationTest {
         // 지갑을 미리 열어 둔다 — 둘 다 지갑이 없는 채로 동시에 들어오면 findOrOpen 이 각자
         // Wallet.open 을 시도해 uk_wallets_user 위반으로 떨어진다(WalletRepository 문서 참조).
         // 이 테스트가 보려는 건 그 경합이 아니라 이미 있는 지갑 행의 PESSIMISTIC_WRITE 잠금이다.
-        tx.execute { wallets.findOrOpen(UserId(userId)) }!!
+        tx.execute { wallets.findOrOpen(UserId(userId)) }
         val keyBase = UUID.randomUUID().toString()
         val executor = Executors.newFixedThreadPool(2)
         val readyLatch = CountDownLatch(2)
