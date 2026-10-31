@@ -3,6 +3,7 @@ paths:
   - "**/presentation/ws/**"
   - "**/common/web/stomp/**"
   - "**/common/config/WebSocket*"
+  - "**/common/config/StompSessionSchedulerConfig*"
 ---
 
 # WebSocket·STOMP

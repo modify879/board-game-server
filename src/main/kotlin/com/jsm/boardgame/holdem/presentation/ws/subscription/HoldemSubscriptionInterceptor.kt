@@ -1,5 +1,6 @@
-package com.jsm.boardgame.holdem.presentation.ws
+package com.jsm.boardgame.holdem.presentation.ws.subscription
 
+import com.jsm.boardgame.holdem.presentation.ws.HoldemDestinations
 import com.jsm.boardgame.common.error.PermissionDeniedException
 import com.jsm.boardgame.common.error.AuthenticationRequiredException
 import com.jsm.boardgame.holdem.application.query.port.HoldemTableQueryRepository
