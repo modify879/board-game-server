@@ -5,7 +5,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.AddChipsResult
 import com.jsm.boardgame.holdem.application.command.usecase.AddChipsUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.exception.InsufficientBalanceException
-import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.domain.repository.HandStore
 import com.jsm.boardgame.holdem.application.port.WalletBalance
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException

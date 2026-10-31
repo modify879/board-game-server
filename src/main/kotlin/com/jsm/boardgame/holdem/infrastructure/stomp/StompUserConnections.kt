@@ -1,4 +1,4 @@
-package com.jsm.boardgame.holdem.presentation.ws
+package com.jsm.boardgame.holdem.infrastructure.stomp
 
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.port.UserConnections

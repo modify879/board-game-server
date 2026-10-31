@@ -3,7 +3,7 @@ package com.jsm.boardgame.holdem.application.command.service
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
-import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.domain.repository.HandStore
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.slf4j.LoggerFactory

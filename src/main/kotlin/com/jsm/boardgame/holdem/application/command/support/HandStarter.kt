@@ -1,8 +1,8 @@
-package com.jsm.boardgame.holdem.application.command.service
+package com.jsm.boardgame.holdem.application.command.support
 
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.FoldWinnerCards
-import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.domain.repository.HandStore
 import com.jsm.boardgame.holdem.application.port.LastHandResultStore
 import com.jsm.boardgame.holdem.application.port.NewHandShuffler
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown

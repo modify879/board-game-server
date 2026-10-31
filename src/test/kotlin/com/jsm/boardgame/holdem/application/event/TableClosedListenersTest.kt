@@ -27,7 +27,7 @@ class TableClosedListenersTest {
         // 스캔이 조용히 아무것도 못 찾으면 검사가 무의미해진다.
         val names = holders.map { it.simpleName }.toSet()
         assertTrue(
-            names.containsAll(setOf("TurnTimer", "SerialTableExecutor", "InMemoryJoinQueue", "TableViewSequence")),
+            names.containsAll(setOf("TurnTimer", "SerialTableExecutor", "InMemoryJoinQueue", "InMemoryFoldWinnerCards", "TableViewSequence")),
             "TableId 키 상태를 못 찾았다: $names",
         )
 

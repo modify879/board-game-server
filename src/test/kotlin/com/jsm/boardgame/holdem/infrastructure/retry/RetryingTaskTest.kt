@@ -1,4 +1,4 @@
-package com.jsm.boardgame.holdem.infrastructure.timer
+package com.jsm.boardgame.holdem.infrastructure.retry
 
 import org.springframework.core.task.TaskRejectedException
 import org.springframework.scheduling.TaskScheduler

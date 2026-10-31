@@ -22,7 +22,7 @@ import org.springframework.stereotype.Service
  * 하나의 실패가 다른 항목 처리에 영향을 주지 않게 하는 것이 AdmitJoinRequestService 의
  * REQUIRES_NEW 격리 목적이라, 이 메서드 전체를 하나의 트랜잭션으로 묶으면 그 목적이 무의미해진다.
  *
- * 직렬화는 이 클래스가 아니라 호출자([com.jsm.boardgame.holdem.infrastructure.timer.JoinRequestsProcessor])
+ * 직렬화는 이 클래스가 아니라 호출자([com.jsm.boardgame.holdem.infrastructure.event.JoinRequestsProcessor])
  * 책임이다 — 그 쪽이 이 메서드 전체를 테이블의 [com.jsm.boardgame.holdem.application.port.TableExecutor]
  * 스레드에 올려 실행하므로, 같은 테이블에 대한 AdmitJoinRequestService/CancelJoinRequestService 호출과는
  * 이미 한 스레드 위에서만 순서대로 만난다. 그래서 이 클래스 자체는 락을 갖지 않는다.

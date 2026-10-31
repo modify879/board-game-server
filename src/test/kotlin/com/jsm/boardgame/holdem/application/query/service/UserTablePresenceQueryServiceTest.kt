@@ -5,6 +5,7 @@ import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
 import com.jsm.boardgame.holdem.application.port.QueuePosition
 import com.jsm.boardgame.holdem.application.query.port.HoldemTableQueryRepository
 import com.jsm.boardgame.holdem.application.query.view.SeatLocation
+import com.jsm.boardgame.holdem.application.query.view.TablePolicyView
 import com.jsm.boardgame.holdem.application.query.view.TableSummaryView
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.TableId
@@ -19,6 +20,8 @@ private class PresenceFakeTableQuery(var seated: Boolean) : HoldemTableQueryRepo
     override fun findSeatOf(userId: Long): SeatLocation? = if (seated) SeatLocation(1, 1, 100) else null
     override fun findAllTables(pageable: Pageable): Page<TableSummaryView> = throw UnsupportedOperationException()
     override fun findEmptyTableIds(): List<Long> = emptyList()
+    override fun findPolicyOf(tableId: Long): TablePolicyView? = throw UnsupportedOperationException()
+    override fun existsHandInProgress(tableId: Long): Boolean = throw UnsupportedOperationException()
 }
 
 private class PresenceFakeJoinQueue(var queued: Boolean) : JoinQueue {

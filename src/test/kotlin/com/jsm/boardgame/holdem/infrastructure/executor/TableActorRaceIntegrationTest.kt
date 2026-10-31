@@ -8,7 +8,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.PlayActionCommand
 import com.jsm.boardgame.holdem.application.command.usecase.PlayActionUseCase
-import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.domain.repository.HandStore
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips

@@ -38,6 +38,6 @@ class RecentDeparturesAdapter(
     override fun obligationOf(userId: UserId): Departure? {
         val row = jpa.findById(userId.value).orElse(null) ?: return null
         if (!row.expiresAt.isAfter(clock.instant())) return null
-        return Departure(Chips.of(row.amount), row.expiresAt)
+        return Departure(Chips.reconstitute(row.amount), row.expiresAt)
     }
 }

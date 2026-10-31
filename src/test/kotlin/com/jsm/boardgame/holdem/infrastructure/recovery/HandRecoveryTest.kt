@@ -17,7 +17,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCo
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceCommand
 import com.jsm.boardgame.holdem.application.command.usecase.UpdateSeatPresenceUseCase
-import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.domain.repository.HandStore
 import com.jsm.boardgame.holdem.application.port.JoinQueueEntry
 import com.jsm.boardgame.holdem.application.port.JoinQueueNotifier
 import com.jsm.boardgame.holdem.application.port.TableExecutor
@@ -143,9 +143,9 @@ private class HandRecoveryFakeUpdateSeatPresenceUseCase : UpdateSeatPresenceUseC
 }
 
 private class HandRecoveryFakeExpireConnectionUseCase(
-    private val reservedTableId: TableId?,
+    private val reservedTableId: Long?,
 ) : ExpireConnectionUseCase {
-    override fun expire(command: ExpireConnectionCommand): TableId? = reservedTableId
+    override fun expire(command: ExpireConnectionCommand): Long? = reservedTableId
 }
 
 private class HandRecoveryFakeResumeHandUseCase(var failuresLeft: Int = 0) : ResumeHandUseCase {

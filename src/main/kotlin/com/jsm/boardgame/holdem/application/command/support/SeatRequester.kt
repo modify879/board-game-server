@@ -1,11 +1,11 @@
-package com.jsm.boardgame.holdem.application.command.service
+package com.jsm.boardgame.holdem.application.command.support
 
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
 import com.jsm.boardgame.holdem.application.exception.InsufficientBalanceException
 import com.jsm.boardgame.holdem.application.exception.NotConnectedException
-import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.domain.repository.HandStore
 import com.jsm.boardgame.holdem.application.port.JoinQueue
 import com.jsm.boardgame.holdem.application.port.RecentDepartures
 import com.jsm.boardgame.holdem.application.port.UserConnections

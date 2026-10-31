@@ -23,6 +23,10 @@ enum class HoldemErrorCode(override val kind: ErrorKind) : ErrorCode {
     DEPARTURE_NOT_FOLDED(ErrorKind.CONFLICT),
     NOT_ENOUGH_PLAYERS(ErrorKind.INVALID),
 
+    CARD_NOTATION_INVALID(ErrorKind.INVALID),
+    SEAT_PRESENCE_INVALID(ErrorKind.INVALID),
+    LEAVE_RESERVATION_INVALID(ErrorKind.INVALID),
+
     TABLE_NAME_INVALID(ErrorKind.INVALID),
     TABLE_POLICY_INVALID(ErrorKind.INVALID),
     SEAT_TAKEN(ErrorKind.CONFLICT),

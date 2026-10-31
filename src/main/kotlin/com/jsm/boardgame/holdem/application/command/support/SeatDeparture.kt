@@ -1,4 +1,4 @@
-package com.jsm.boardgame.holdem.application.command.service
+package com.jsm.boardgame.holdem.application.command.support
 
 import com.jsm.boardgame.holdem.application.port.RecentDepartures
 import com.jsm.boardgame.holdem.application.port.WalletTransfer

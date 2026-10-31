@@ -3,7 +3,7 @@ package com.jsm.boardgame.holdem.application.command.service
 import com.jsm.boardgame.holdem.application.command.usecase.CancelLeaveReservationCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CancelLeaveReservationUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
-import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.domain.repository.HandStore
 import com.jsm.boardgame.holdem.domain.exception.NotSeatedException
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository

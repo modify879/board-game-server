@@ -1,5 +1,6 @@
-package com.jsm.boardgame.holdem.infrastructure.timer
+package com.jsm.boardgame.holdem.infrastructure.job
 
+import com.jsm.boardgame.holdem.infrastructure.persistence.entity.HandHistoryJpaEntity
 import com.jsm.boardgame.holdem.infrastructure.persistence.entity.HandHistoryJpaRepository
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -31,7 +32,12 @@ class HandHistoryPurger(
 
     fun purge() {
         try {
-            val deleted = hands.deleteByEndedAtBefore(clock.instant().minus(retention))
+            val cutoff = clock.instant().minus(retention)
+            val deleted = hands.delete {
+                // 자식 행은 FK 의 ON DELETE CASCADE 가 지운다.
+                deleteFrom(entity(HandHistoryJpaEntity::class))
+                    .where(path(HandHistoryJpaEntity::endedAt).lt(cutoff))
+            }
             if (deleted > 0) log.info("hand history purge: deleted={}", deleted)
         } catch (e: Exception) {
             log.error("hand history purge 실패", e)

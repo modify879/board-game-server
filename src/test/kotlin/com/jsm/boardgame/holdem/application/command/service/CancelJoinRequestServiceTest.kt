@@ -46,7 +46,7 @@ class CancelJoinRequestServiceTest {
         queue.enqueue(tableId, userId = UserId(1L), postBlindImmediately = false, buyIn = Chips.of(8_000))
         queue.enqueue(tableId, userId = UserId(2L), postBlindImmediately = false, buyIn = Chips.of(8_000))
 
-        service.cancel(CancelJoinRequestCommand(userId = 1L))
+        service.cancel(CancelJoinRequestCommand(tableId = 1L, userId = 1L))
 
         assertTrue(!queue.isQueued(UserId(1L)))
         assertEquals(listOf(UserId(2L)), notifier.positionsCalls.last().second.map { it.userId })
@@ -59,7 +59,7 @@ class CancelJoinRequestServiceTest {
         val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
 
         val e = assertFailsWith<JoinRequestNotFoundException> {
-            service.cancel(CancelJoinRequestCommand(userId = 1L))
+            service.cancel(CancelJoinRequestCommand(tableId = 1L, userId = 1L))
         }
         assertEquals(HoldemErrorCode.JOIN_REQUEST_NOT_FOUND, e.errorCode)
     }
@@ -73,7 +73,7 @@ class CancelJoinRequestServiceTest {
         queue.enqueue(tableId, userId = UserId(1L), postBlindImmediately = false, buyIn = Chips.of(8_000))
         queue.enqueue(tableId, userId = UserId(2L), postBlindImmediately = false, buyIn = Chips.of(8_000))
 
-        service.cancel(CancelJoinRequestCommand(userId = 2L))
+        service.cancel(CancelJoinRequestCommand(tableId = 1L, userId = 2L))
 
         assertTrue(queue.isQueued(UserId(1L)))
         assertEquals(UserId(1L), queue.peekHead(tableId)?.userId)
@@ -89,8 +89,22 @@ class CancelJoinRequestServiceTest {
         queue.removeByUserId(UserId(1L))
 
         val e = assertFailsWith<JoinRequestNotFoundException> {
-            service.cancel(CancelJoinRequestCommand(userId = 1L))
+            service.cancel(CancelJoinRequestCommand(tableId = 1L, userId = 1L))
         }
         assertEquals(HoldemErrorCode.JOIN_REQUEST_NOT_FOUND, e.errorCode)
+    }
+
+    @Test
+    fun `다른 테이블 대기열의 요청을 취소하면 JOIN_REQUEST_NOT_FOUND 이고 항목은 그대로다`() {
+        val queue = InMemoryJoinQueue(50)
+        val notifier = CancelJoinRequestFakeJoinQueueNotifier()
+        val service = CancelJoinRequestService(queue, notifier, CancelJoinRequestFakeTableExecutor())
+        queue.enqueue(TableId(1L), userId = UserId(1L), postBlindImmediately = false, buyIn = Chips.of(8_000))
+
+        val e = assertFailsWith<JoinRequestNotFoundException> {
+            service.cancel(CancelJoinRequestCommand(tableId = 2L, userId = 1L))
+        }
+        assertEquals(HoldemErrorCode.JOIN_REQUEST_NOT_FOUND, e.errorCode)
+        assertTrue(queue.isQueued(UserId(1L)))
     }
 }

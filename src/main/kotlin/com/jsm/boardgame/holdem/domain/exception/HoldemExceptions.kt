@@ -22,6 +22,9 @@ class IllegalHandStateException(
     logMessage: String,
 ) : BusinessException(code, logMessage)
 
+class InvalidCardNotationException(logMessage: String) : BusinessException(HoldemErrorCode.CARD_NOTATION_INVALID, logMessage)
+class InvalidSeatPresenceException(logMessage: String) : BusinessException(HoldemErrorCode.SEAT_PRESENCE_INVALID, logMessage)
+class InvalidLeaveReservationException(logMessage: String) : BusinessException(HoldemErrorCode.LEAVE_RESERVATION_INVALID, logMessage)
 class InvalidTableNameException(logMessage: String) : BusinessException(HoldemErrorCode.TABLE_NAME_INVALID, logMessage)
 class InvalidTablePolicyException(logMessage: String) : BusinessException(HoldemErrorCode.TABLE_POLICY_INVALID, logMessage)
 class SeatTakenException(logMessage: String) : BusinessException(HoldemErrorCode.SEAT_TAKEN, logMessage)

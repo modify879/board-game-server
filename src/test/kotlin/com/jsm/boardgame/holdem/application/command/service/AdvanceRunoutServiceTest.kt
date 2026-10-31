@@ -1,5 +1,8 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.command.support.LeaveReservations
+import com.jsm.boardgame.holdem.application.command.support.SeatDeparture
+import com.jsm.boardgame.holdem.application.command.support.HandSettler
 import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
@@ -9,7 +12,7 @@ import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.FakeHandHistory
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.FakeWalletTransfer
-import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.domain.repository.HandStore
 import com.jsm.boardgame.holdem.domain.model.BettingAction
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand

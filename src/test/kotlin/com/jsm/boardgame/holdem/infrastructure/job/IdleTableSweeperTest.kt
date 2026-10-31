@@ -1,10 +1,11 @@
-package com.jsm.boardgame.holdem.infrastructure.timer
+package com.jsm.boardgame.holdem.infrastructure.job
 
 import com.jsm.boardgame.holdem.application.command.usecase.CloseIdleTableCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CloseIdleTableUseCase
 import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.application.query.port.HoldemTableQueryRepository
 import com.jsm.boardgame.holdem.application.query.view.SeatLocation
+import com.jsm.boardgame.holdem.application.query.view.TablePolicyView
 import com.jsm.boardgame.holdem.application.query.view.TableSummaryView
 import com.jsm.boardgame.holdem.domain.model.TableId
 import org.springframework.data.domain.Page
@@ -29,6 +30,8 @@ private class IdleSweeperFakeQueries : HoldemTableQueryRepository {
     override fun findSeatOf(userId: Long): SeatLocation? = null
     override fun findAllTables(pageable: Pageable): Page<TableSummaryView> = throw UnsupportedOperationException()
     override fun findEmptyTableIds(): List<Long> = emptyIds
+    override fun findPolicyOf(tableId: Long): TablePolicyView? = throw UnsupportedOperationException()
+    override fun existsHandInProgress(tableId: Long): Boolean = throw UnsupportedOperationException()
 }
 
 private class IdleSweeperFakeCloseUseCase : CloseIdleTableUseCase {

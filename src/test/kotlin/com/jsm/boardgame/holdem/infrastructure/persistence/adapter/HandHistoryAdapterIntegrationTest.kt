@@ -8,7 +8,7 @@ import com.jsm.boardgame.holdem.infrastructure.persistence.entity.HandHistoryJpa
 import com.jsm.boardgame.holdem.infrastructure.persistence.entity.HandHistoryJpaRepository
 import com.jsm.boardgame.holdem.infrastructure.persistence.entity.HandHistoryPlayerJpaEntity
 import com.jsm.boardgame.holdem.infrastructure.persistence.entity.HandHistoryPlayerJpaRepository
-import com.jsm.boardgame.holdem.infrastructure.timer.HandHistoryPurger
+import com.jsm.boardgame.holdem.infrastructure.job.HandHistoryPurger
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import java.time.Clock

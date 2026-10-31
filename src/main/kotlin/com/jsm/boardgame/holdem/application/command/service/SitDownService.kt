@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.command.support.SeatRequester
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.command.usecase.SitDownCommand
 import com.jsm.boardgame.holdem.application.command.usecase.SitDownUseCase

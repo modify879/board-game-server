@@ -1,4 +1,4 @@
-package com.jsm.boardgame.holdem.infrastructure.timer
+package com.jsm.boardgame.holdem.infrastructure.event
 
 import com.jsm.boardgame.holdem.application.command.usecase.CloseIdleTableCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CloseIdleTableUseCase
@@ -6,6 +6,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.ProcessJoinRequestsC
 import com.jsm.boardgame.holdem.application.command.usecase.ProcessJoinRequestsUseCase
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.TableExecutor
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import org.springframework.transaction.event.TransactionalEventListener
 
@@ -29,10 +30,19 @@ class JoinRequestsProcessor(
 ) {
     @TransactionalEventListener
     fun onJoinRequestsDue(event: JoinRequestsDue) {
-        tableExecutor.post(event.tableId) {
-            processJoinRequestsUseCase.process(ProcessJoinRequestsCommand(event.tableId.value))
-            // 대기열을 먼저 처리해 기다리던 사람을 앉힌 뒤, 그래도 비어 있으면(좌석·핸드·대기열 재확인은 서비스가 한다) 즉시 닫는다
-            closeIdleTableUseCase.close(CloseIdleTableCommand(event.tableId.value))
+        // AFTER_COMMIT 리스너는 예외를 던지지 않는다(transactions.md) — 이미 커밋된 정산이 실패로 보이고 뒤 콜백이 건너뛰어진다.
+        try {
+            tableExecutor.post(event.tableId) {
+                processJoinRequestsUseCase.process(ProcessJoinRequestsCommand(event.tableId.value))
+                // 대기열을 먼저 처리해 기다리던 사람을 앉힌 뒤, 그래도 비어 있으면(좌석·핸드·대기열 재확인은 서비스가 한다) 즉시 닫는다
+                closeIdleTableUseCase.close(CloseIdleTableCommand(event.tableId.value))
+            }
+        } catch (e: Exception) {
+            log.error("참가 요청 처리를 올리지 못했습니다: tableId={}", event.tableId.value, e)
         }
+    }
+
+    private companion object {
+        val log = LoggerFactory.getLogger(JoinRequestsProcessor::class.java)
     }
 }

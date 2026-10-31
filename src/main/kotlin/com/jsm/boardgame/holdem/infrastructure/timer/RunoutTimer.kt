@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.timer
 
+import com.jsm.boardgame.holdem.infrastructure.retry.runRetrying
 import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutCommand
 import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
@@ -48,21 +49,30 @@ class RunoutTimer(
 
     @TransactionalEventListener
     fun onHandBroadcastRequested(event: HandBroadcastRequested) {
-        if (!event.handProgressed) return
-        scheduled.remove(event.tableId)?.future?.cancel(false)
-        // 런아웃이 아닌 이벤트에서도 올린다 — 이미 돌고 있는 낡은 걸음이 토큰 검사에서 걸러져야 한다.
-        val token = tokens.computeIfAbsent(event.tableId) { AtomicLong() }.incrementAndGet()
+        // AFTER_COMMIT 리스너는 예외를 던지지 않는다 — TurnTimer 와 같다.
+        try {
+            if (!event.handProgressed) return
+            scheduled.remove(event.tableId)?.future?.cancel(false)
+            // 런아웃이 아닌 이벤트에서도 올린다 — 이미 돌고 있는 낡은 걸음이 토큰 검사에서 걸러져야 한다.
+            val token = tokens.computeIfAbsent(event.tableId) { AtomicLong() }.incrementAndGet()
 
-        if (event.hand?.isRunningOut != true) return
-        // 새 핸드가 블라인드만으로 바로 런아웃되면 첫 보드는 클라이언트 딜 연출이 끝난 뒤(deal-grace)에 깐다.
-        schedule(event.tableId, token, if (event.handStarted) dealGrace else stepDelay)
+            if (event.hand?.isRunningOut != true) return
+            // 새 핸드가 블라인드만으로 바로 런아웃되면 첫 보드는 클라이언트 딜 연출이 끝난 뒤(deal-grace)에 깐다.
+            schedule(event.tableId, token, if (event.handStarted) dealGrace else stepDelay)
+        } catch (e: Exception) {
+            log.error("런아웃 진행 예약에 실패했습니다: tableId={}", event.tableId.value, e)
+        }
     }
 
     /** 테이블이 닫히면 예약과 토큰을 치운다. 토큰이 사라지면 이미 깨어난 낡은 걸음도 걸러진다. */
     @TransactionalEventListener
     fun onTableClosed(event: TableClosed) {
-        scheduled.remove(event.tableId)?.future?.cancel(false)
-        tokens.remove(event.tableId)
+        try {
+            scheduled.remove(event.tableId)?.future?.cancel(false)
+            tokens.remove(event.tableId)
+        } catch (e: Exception) {
+            log.error("런아웃 타이머 정리에 실패했습니다: tableId={}", event.tableId.value, e)
+        }
     }
 
     // AFTER_COMMIT 리스너라 호출자에게 던지면 안 된다.

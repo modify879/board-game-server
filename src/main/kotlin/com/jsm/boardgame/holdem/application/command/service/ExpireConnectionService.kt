@@ -5,8 +5,7 @@ import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionComm
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireConnectionUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpUseCase
-import com.jsm.boardgame.holdem.application.port.HandStore
-import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.repository.HandStore
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -31,7 +30,7 @@ class ExpireConnectionService(
     private val standUpUseCase: StandUpUseCase,
 ) : ExpireConnectionUseCase {
 
-    override fun expire(command: ExpireConnectionCommand): TableId? {
+    override fun expire(command: ExpireConnectionCommand): Long? {
         val table = tables.findByUserId(UserId(command.userId)) ?: return null
         val tableId = table.id!!
 
@@ -41,7 +40,7 @@ class ExpireConnectionService(
                 command.userId,
                 tableId.value,
             )
-            return tableId
+            return tableId.value
         }
 
         standUpUseCase.standUp(StandUpCommand(command.userId))

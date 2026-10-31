@@ -2,7 +2,7 @@ package com.jsm.boardgame.holdem.infrastructure.persistence.adapter
 
 import com.jsm.boardgame.common.persistence.violatedConstraint
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
-import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.domain.repository.HandStore
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.service.Shuffler

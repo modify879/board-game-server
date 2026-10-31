@@ -1,9 +1,7 @@
 package com.jsm.boardgame.holdem.application.query.service
 
-import com.jsm.boardgame.holdem.application.port.HandStore
 import com.jsm.boardgame.holdem.application.query.port.HoldemTableQueryRepository
 import com.jsm.boardgame.holdem.application.query.view.MySeatView
-import com.jsm.boardgame.holdem.domain.model.TableId
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -17,11 +15,10 @@ import org.springframework.transaction.annotation.Transactional
 @Transactional(readOnly = true)
 class MySeatQueryService(
     private val holdemTableQuery: HoldemTableQueryRepository,
-    private val handStore: HandStore,
 ) {
     fun findMine(userId: Long): MySeatView? {
         val location = holdemTableQuery.findSeatOf(userId) ?: return null
-        val handInProgress = handStore.findInProgress(TableId(location.tableId)) != null
+        val handInProgress = holdemTableQuery.existsHandInProgress(location.tableId)
         return MySeatView(location.tableId, location.seatNo, handInProgress, location.stack)
     }
 }

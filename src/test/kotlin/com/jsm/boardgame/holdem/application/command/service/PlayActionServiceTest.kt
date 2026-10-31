@@ -1,5 +1,8 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.command.support.LeaveReservations
+import com.jsm.boardgame.holdem.application.command.support.SeatDeparture
+import com.jsm.boardgame.holdem.application.command.support.HandSettler
 import com.jsm.boardgame.holdem.application.port.FakeCopyingHoldemTableRepository
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown

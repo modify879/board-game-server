@@ -103,7 +103,7 @@ paths: ["**/holdem/**"]
 - **테이블의 상태를 바꾸는 명령은 전부 `TableExecutor` 로 그 테이블의 스레드에서 실행한다 — 한 테이블에 쓰는 쪽은 하나다(single writer).** 새 명령 진입점도 반드시 거친다. 트랜잭션은 그 스레드 안에서 연다. 같은 테이블 스레드 안에서 다시 `call` 하면 인라인으로 돈다(트랜잭션이 활성이면 예외 — `transactions.md`). 서버 한 대 전제.
 - **공개/개인 뷰에는 테이블별 순번(`seq`, `TableViewSequence`)이 붙는다.** `HandBroadcaster` 는 커밋 후가 아니라
   `BEFORE_COMMIT` 에서 순번을 따는데, 같은 행을 바꾸는 트랜잭션들은 `saveAndFlush` 의 행 락으로 커밋 순서대로만
-  여기 도달하기 때문이다(순번 순서 = 커밋 순서). 구독 스냅샷도 테이블 실행기에서 읽는다 — 같은 seq 는 같은 상태다. 실제 전송은 여전히 `afterCommit` 이라 규칙 6은 그대로 지켜진다.
+  여기 도달하기 때문이다(순번 순서 = 커밋 순서). 구독 스냅샷도 테이블 실행기에서 읽는다 — 같은 seq 는 같은 상태다. (`HoldemSubscriptionSnapshotListener` 가 `HoldemTableRepository`·`HandStore` 를 직접 읽는 것은 규칙 3 의 의도된 예외다 — `HandBroadcaster` 와 같은 애그리거트에서 스냅샷을 조립해야 한다.) 실제 전송은 여전히 `afterCommit` 이라 규칙 6은 그대로 지켜진다.
   `TableViewSequence` 는 메모리 전용이라 재시작하면 0부터 다시 세지만, 클라이언트가 재구독 시 채널별 last seq 를 리셋하면 문제없다.
   `WebSocketConfig` 의 `setPreservePublishOrder(true)` 와 함께 써야 한다 — 순번만 있고 세션별 발행 순서가 안 지켜지면 같은 세션 안에서도 메시지가 뒤섞인다
 - **테이블별 인메모리 상태는 `TableId` 를 키로 두고 `TableClosed` 커밋 후 리스너로 스스로 치운다.** `TableClosedListenersTest` 가 `TableId` 키 필드를 가진 컴포넌트를 스캔해 리스너를 강제한다 — Long 키로 두면 이 검사에 보이지 않는다

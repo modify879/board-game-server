@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.command.support.SeatRequester
 import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
 import com.jsm.boardgame.holdem.application.config.TablePolicyProperties
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
@@ -17,6 +18,7 @@ import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.service.Shuffler
 import com.jsm.boardgame.holdem.infrastructure.queue.InMemoryJoinQueue
@@ -64,8 +66,8 @@ class CreateTableServiceTest {
     fun `이름을 주면 테이블이 생성되고 id 가 발급된다`() {
         val id = service.create(CreateTableCommand(ownerUserId = 1, name = "새 테이블", buyIn = 8_000))
 
-        assertNotNull(tables.findById(id))
-        assertEquals("새 테이블", tables.findById(id)!!.name)
+        assertNotNull(tables.findById(TableId(id)))
+        assertEquals("새 테이블", tables.findById(TableId(id))!!.name)
     }
 
     @Test
@@ -96,7 +98,7 @@ class CreateTableServiceTest {
     fun `만든 사람은 새 테이블의 대기열에 들어간다`() {
         val id = service.create(CreateTableCommand(ownerUserId = 1, name = "새 테이블", buyIn = 8_000))
 
-        assertEquals(id, joinQueue.tableOf(UserId(1L)))
+        assertEquals(TableId(id), joinQueue.tableOf(UserId(1L)))
     }
 
     @Test

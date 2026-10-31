@@ -1,4 +1,4 @@
-package com.jsm.boardgame.holdem.infrastructure.timer
+package com.jsm.boardgame.holdem.infrastructure.retry
 
 import org.slf4j.LoggerFactory
 import org.springframework.core.task.TaskRejectedException
@@ -7,7 +7,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
-private val log = LoggerFactory.getLogger("com.jsm.boardgame.holdem.infrastructure.timer.RetryingTask")
+private val log = LoggerFactory.getLogger("com.jsm.boardgame.holdem.infrastructure.retry.RetryingTask")
 
 /**
  * [task] 를 지금 돌리고, 던지면 base*2^(n-1) 뒤 다시 건다. 스케줄러 스레드에서 불린다고 가정한다.

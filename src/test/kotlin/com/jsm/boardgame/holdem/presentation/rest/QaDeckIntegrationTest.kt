@@ -6,7 +6,7 @@ import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
-import com.jsm.boardgame.holdem.application.port.HandStore
+import com.jsm.boardgame.holdem.domain.repository.HandStore
 import com.jsm.boardgame.holdem.domain.model.Card
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
@@ -159,10 +159,17 @@ class QaDeckIntegrationTest {
     }
 
     @Test
-    fun `잘못된 카드 코드나 중복이나 범위 밖 좌석은 400 REQUEST_INVALID 다`() {
+    fun `잘못된 카드 표기는 400 CARD_NOTATION_INVALID 다`() {
+        val (_, adminToken) = signUpAndLogin(admin = true)
+        authPost("/api/admin/qa/holdem/tables/1/next-deck", adminToken, """{"board":["Xx"]}""")
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("CARD_NOTATION_INVALID"))
+    }
+
+    @Test
+    fun `중복이나 범위 밖 좌석은 400 REQUEST_INVALID 다`() {
         val (_, adminToken) = signUpAndLogin(admin = true)
         listOf(
-            """{"board":["Xx"]}""",
             """{"holeCards":{"1":["As","As"]}}""",
             """{"holeCards":{"1":["As"],"2":["As"]}}""",
             """{"holeCards":{"10":["As"]}}""",
