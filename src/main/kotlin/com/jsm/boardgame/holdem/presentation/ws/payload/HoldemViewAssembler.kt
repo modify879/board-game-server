@@ -47,6 +47,7 @@ fun publicViewOf(
                 lastAction = lastAction,
                 presence = seat.presence.name,
                 leaveReserved = seat.leaveReserved,
+                awaitingBigBlind = false,
             )
         } else {
             SeatPublicView(
@@ -55,7 +56,8 @@ fun publicViewOf(
                 stack = seat.stack.amount,
                 totalContributed = 0L,
                 streetBet = 0L,
-                status = "SITTING_OUT",
+                status = "NOT_IN_HAND",
+                awaitingBigBlind = seat.awaitingBigBlind,
                 lastAction = lastAction,
                 presence = seat.presence.name,
                 leaveReserved = seat.leaveReserved,
@@ -92,11 +94,23 @@ private fun handResultPublicViewOf(result: LastHandResult): HandResultPublicView
         result.shownHands.map { ShownHandView(it.seatNo, it.userId.value, it.holeCards, it.category) },
     )
 
-/** [seatNo] 자신의 홀카드와 지금 할 수 있는 행동만 담는다. 다른 좌석의 카드는 이 함수의 인자로도 들어오지 않는다. */
-fun privateViewOf(tableId: TableId, seatNo: Int, hand: Hand, seq: Long, leaveReservation: LeaveReservation?, chipsReservation: Chips? = null): SeatPrivateView =
+/**
+ * [seatNo] 자신의 개인 뷰. 좌석 정보(예약)는 항상 담고, [hand] 가 있고 이 좌석이 참가했을 때만 [PrivateHandView] 를 만든다.
+ * 끝난 핸드도 참가 좌석이면 그대로 담는다(홀카드는 본인 것, availableActions 는 null).
+ * 다른 좌석의 카드는 이 함수의 인자로도 들어오지 않는다.
+ */
+fun privateViewOf(tableId: TableId, seatNo: Int, hand: Hand?, seq: Long, leaveReservation: LeaveReservation?, chipsReservation: Chips? = null): SeatPrivateView =
     SeatPrivateView(
         tableId = tableId.value,
         seatNo = seatNo,
+        leaveReservation = leaveReservation?.name,
+        chipsReservation = chipsReservation?.amount,
+        hand = if (hand != null && seatNo in hand.seatNos) privateHandViewOf(hand, seatNo) else null,
+        seq = seq,
+    )
+
+private fun privateHandViewOf(hand: Hand, seatNo: Int): PrivateHandView =
+    PrivateHandView(
         holeCards = hand.holeCardsOf(seatNo).map { it.toString() },
         currentHand = hand.currentRankOf(seatNo)?.let { CurrentHandView(it.category.name, it.tiebreakers) },
         availableActions = hand.availableActionsFor(seatNo)?.let { actions ->
@@ -107,7 +121,4 @@ fun privateViewOf(tableId: TableId, seatNo: Int, hand: Hand, seq: Long, leaveRes
                 maxRaiseTo = actions.maxRaiseTo?.amount,
             )
         },
-        leaveReservation = leaveReservation?.name,
-        chipsReservation = chipsReservation?.amount,
-        seq = seq,
     )

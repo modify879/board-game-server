@@ -47,7 +47,7 @@ private fun lastOf(hand: Hand): LastHandResult = LastHandResult.of(hand, hand.se
 class HoldemViewAssemblerTest {
 
     @Test
-    fun `핸드가 없으면 공개 뷰는 진행 중이 아니고 좌석은 SITTING_OUT 이다`() {
+    fun `핸드가 없으면 공개 뷰는 진행 중이 아니고 좌석은 NOT_IN_HAND 이다`() {
         val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
 
         val view = publicViewOf(TableId(1), table, null, null, 1L, null, null, null)
@@ -61,7 +61,8 @@ class HoldemViewAssemblerTest {
         assertNull(view.toActSeatNo)
         assertNull(view.result)
         assertEquals(2, view.seats.size)
-        assertTrue(view.seats.all { it.status == "SITTING_OUT" })
+        assertTrue(view.seats.all { it.status == "NOT_IN_HAND" })
+        assertTrue(view.seats.all { it.awaitingBigBlind })
         assertTrue(view.seats.all { it.lastAction == null })
         assertTrue(view.seats.all { it.presence == "SEATED" })
         assertEquals(10_000L, view.seats.first { it.seatNo == 1 }.stack)
@@ -135,9 +136,9 @@ class HoldemViewAssemblerTest {
         val viewA = privateViewOf(TableId(1), 1, hand, 1L, null)
         val viewB = privateViewOf(TableId(1), 2, hand, 1L, null)
 
-        assertEquals(listOf("2s", "4s"), viewA.holeCards)
-        assertEquals(listOf("3s", "5s"), viewB.holeCards)
-        assertTrue(viewA.holeCards.none { it in viewB.holeCards })
+        assertEquals(listOf("2s", "4s"), viewA.hand!!.holeCards)
+        assertEquals(listOf("3s", "5s"), viewB.hand!!.holeCards)
+        assertTrue(viewA.hand.holeCards.none { it in viewB.hand.holeCards })
     }
 
     @Test
@@ -525,7 +526,7 @@ class HoldemViewAssemblerTest {
             fixedShuffler("3s", "2s", "5s", "4s"),
         )
 
-        assertEquals(CurrentHandView("HIGH_CARD", listOf(4, 2)), privateViewOf(TableId(1), 1, hand, 1L, null).currentHand)
+        assertEquals(CurrentHandView("HIGH_CARD", listOf(4, 2)), privateViewOf(TableId(1), 1, hand, 1L, null).hand!!.currentHand)
 
         hand.act(1, BettingAction.Call)
         hand.act(2, BettingAction.Check) // 플랍
@@ -534,7 +535,7 @@ class HoldemViewAssemblerTest {
         assertEquals(3, hand.board.size)
         assertEquals(
             CurrentHandView(expected.category.name, expected.tiebreakers),
-            privateViewOf(TableId(1), 1, hand, 2L, null).currentHand,
+            privateViewOf(TableId(1), 1, hand, 2L, null).hand!!.currentHand,
         )
     }
 
@@ -557,8 +558,8 @@ class HoldemViewAssemblerTest {
         val otherSeatNo = hand.seatNos.first { it != toAct }
         val otherView = privateViewOf(TableId(1), otherSeatNo, hand, 1L, null)
 
-        assertTrue(actingView.availableActions != null)
-        assertNull(otherView.availableActions)
+        assertTrue(actingView.hand!!.availableActions != null)
+        assertNull(otherView.hand!!.availableActions)
     }
 
     @Test
@@ -578,7 +579,7 @@ class HoldemViewAssemblerTest {
 
         val view = privateViewOf(TableId(1), 1, hand, 1L, null)
 
-        assertNull(view.availableActions)
+        assertNull(view.hand!!.availableActions)
     }
 
     @Test
@@ -639,6 +640,44 @@ class HoldemViewAssemblerTest {
         val view = publicViewOf(TableId(1), table, null, null, 1L, null, null, null)
 
         assertNull(view.nextHandInMs)
+    }
+
+    @Test
+    fun `핸드 중 참가하지 않은 좌석은 NOT_IN_HAND 와 awaitingBigBlind 를 싣고 참가 좌석은 awaitingBigBlind 가 false 다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+        table.placeButtonAtFirstSeat()
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
+            table.buttonSeatNo!!, smallBlindSeatNo = 1, bigBlindSeatNo = 2, table.smallBlind, table.bigBlind, identityShuffler,
+        )
+
+        val view = publicViewOf(TableId(1), table, hand, null, 1L, null, null, null)
+
+        assertEquals("NOT_IN_HAND", view.seats.first { it.seatNo == 3 }.status)
+        assertTrue(view.seats.first { it.seatNo == 3 }.awaitingBigBlind)
+        assertTrue(view.seats.filter { it.seatNo != 3 }.none { it.awaitingBigBlind || it.status == "NOT_IN_HAND" })
+    }
+
+    @Test
+    fun `핸드가 없으면 개인 뷰의 hand 는 null 이고 예약은 그대로 실린다`() {
+        val view = privateViewOf(TableId(1), 1, null, 5L, LeaveReservation.LEAVE, Chips.of(3_000))
+
+        assertNull(view.hand)
+        assertEquals("LEAVE", view.leaveReservation)
+        assertEquals(3_000L, view.chipsReservation)
+    }
+
+    @Test
+    fun `핸드에 참가하지 않은 좌석의 개인 뷰는 hand 가 null 이다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+        table.placeButtonAtFirstSeat()
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
+            table.buttonSeatNo!!, smallBlindSeatNo = 1, bigBlindSeatNo = 2, table.smallBlind, table.bigBlind, identityShuffler,
+        )
+
+        assertNull(privateViewOf(TableId(1), 3, hand, 1L, null).hand)
+        assertEquals(2, privateViewOf(TableId(1), 1, hand, 1L, null).hand!!.holeCards.size)
     }
 
     @Test

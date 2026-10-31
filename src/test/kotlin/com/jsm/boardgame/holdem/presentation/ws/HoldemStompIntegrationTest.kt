@@ -575,10 +575,13 @@ class HoldemStompIntegrationTest {
         // 목적지(topic 이든 개인 큐든)에 관계없이 구독마다 공개 채널로 한 번씩 스냅샷을 보낸다 —
         // 이 테이블에 대한 구독은 sessionA 의 topic·개인 큐(2회) + sessionB 의 개인 큐(1회) 로 총
         // 3번이라, publicQueueA(구독 중)에 정확히 3개가 쌓인다. "더 없다" 를 500ms 대기로
-        // 증명하는 대신 그 개수만 받는다. 핸드가 아직 없으니 개인 큐에는 애초에 아무것도 오지
-        // 않는다(개인 뷰는 핸드 진행 중에만 나간다) — 비울 것이 없다.
+        // 증명하는 대신 그 개수만 받는다. 핸드가 없어도 개인 큐 스냅샷은 hand=null 로 온다.
         // 개수를 잘못 세면 여기서 바로 실패하게 한다.
         repeat(3) { assertThat(publicQueueA.poll(3, TimeUnit.SECONDS)).isNotNull() }
+        for (queue in listOf(privateQueueA, privateQueueB)) {
+            val snapshot = checkNotNull(queue.poll(5, TimeUnit.SECONDS))
+            assertThat(JsonPath.read<Any?>(snapshot, "$.hand")).isNull()
+        }
 
         startHandRest(pair.tableId)
 
@@ -591,8 +594,8 @@ class HoldemStompIntegrationTest {
         assertThat(privateJsonB).isNotNull()
         assertThat(JsonPath.read<Boolean>(publicJson, "$.handInProgress")).isTrue()
 
-        val holeCardsA = JsonPath.read<List<String>>(privateJsonA, "$.holeCards")
-        val holeCardsB = JsonPath.read<List<String>>(privateJsonB, "$.holeCards")
+        val holeCardsA = JsonPath.read<List<String>>(privateJsonA, "$.hand.holeCards")
+        val holeCardsB = JsonPath.read<List<String>>(privateJsonB, "$.hand.holeCards")
         assertThat(holeCardsA).hasSize(2)
         assertThat(holeCardsB).hasSize(2)
         for (card in holeCardsB) {
@@ -631,6 +634,52 @@ class HoldemStompIntegrationTest {
     }
 
     @Test
+    fun `핸드가 없어도 착석자는 개인 큐 스냅샷을 hand 가 null 인 채로 받는다`() {
+        val pair = seatTwoUsersAtSameTable()
+
+        val (session, _) = tryConnect(pair.a.accessToken)
+        checkNotNull(session)
+        val (privateHandler, privateQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandler)
+
+        val snapshot = checkNotNull(privateQueue.poll(5, TimeUnit.SECONDS))
+        assertThat(JsonPath.read<Any?>(snapshot, "$.hand")).isNull()
+        assertThat(JsonPath.read<Any?>(snapshot, "$.chipsReservation")).isNull()
+
+        session.disconnect()
+    }
+
+    @Test
+    fun `핸드 중 건 칩 추가 예약은 정산 뒤 개인 큐에서 사라진다`() {
+        val pair = seatTwoUsersAtSameTable()
+        startHandRest(pair.tableId)
+        authPost("/api/holdem/seat/chips", pair.a.accessToken, """{"amount":3000}""").andExpect(status().isAccepted)
+
+        val (session, _) = tryConnect(pair.a.accessToken)
+        checkNotNull(session)
+        val (publicHandler, publicQueue) = capturingFrameHandler()
+        val (privateHandler, privateQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.publicTopicOf(pair.tableId), publicHandler)
+        session.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandler)
+        val snapshot = checkNotNull(privateQueue.poll(5, TimeUnit.SECONDS))
+        assertThat(JsonPath.read<Number>(snapshot, "$.chipsReservation").toLong()).isEqualTo(3_000L)
+        val toActSeatNo = JsonPath.read<Int>(checkNotNull(publicQueue.poll(5, TimeUnit.SECONDS)), "$.toActSeatNo")
+        val actingToken = if (toActSeatNo == 1) pair.a.accessToken else pair.b.accessToken
+
+        authPost("/api/holdem/tables/${pair.tableId}/hands/actions", actingToken, """{"action":"FOLD"}""")
+
+        val deadline = System.currentTimeMillis() + 5_000
+        var cleared = false
+        while (!cleared && System.currentTimeMillis() < deadline) {
+            val json = privateQueue.poll(500, TimeUnit.MILLISECONDS) ?: continue
+            cleared = JsonPath.read<Any?>(json, "$.chipsReservation") == null
+        }
+        assertThat(cleared).withFailMessage("정산 뒤에도 chipsReservation 이 개인 큐에서 사라지지 않았다").isTrue()
+
+        session.disconnect()
+    }
+
+    @Test
     fun `핸드가 이미 진행 중인 테이블을 구독하면 그 시점 상태를 스냅샷으로 즉시 받는다`() {
         val pair = seatTwoUsersAtSameTable()
         startHandRest(pair.tableId)
@@ -656,8 +705,8 @@ class HoldemStompIntegrationTest {
         assertThat(privateJsonB).isNotNull()
         assertThat(JsonPath.read<Boolean>(publicJson, "$.handInProgress")).isTrue()
 
-        val holeCardsA = JsonPath.read<List<String>>(privateJsonA, "$.holeCards")
-        val holeCardsB = JsonPath.read<List<String>>(privateJsonB, "$.holeCards")
+        val holeCardsA = JsonPath.read<List<String>>(privateJsonA, "$.hand.holeCards")
+        val holeCardsB = JsonPath.read<List<String>>(privateJsonB, "$.hand.holeCards")
         assertThat(holeCardsA).hasSize(2)
         assertThat(holeCardsB).hasSize(2)
         assertThat(holeCardsA).doesNotContainAnyElementsOf(holeCardsB)
@@ -692,13 +741,13 @@ class HoldemStompIntegrationTest {
         checkNotNull(sessionA)
         val (privateHandlerA, privateQueueA) = capturingFrameHandler()
         sessionA.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandlerA)
-        val holeCardsA = JsonPath.read<List<String>>(privateQueueA.poll(5, TimeUnit.SECONDS), "$.holeCards")
+        val holeCardsA = JsonPath.read<List<String>>(privateQueueA.poll(5, TimeUnit.SECONDS), "$.hand.holeCards")
 
         val (sessionB, _) = tryConnect(pair.b.accessToken)
         checkNotNull(sessionB)
         val (privateHandlerB, privateQueueB) = capturingFrameHandler()
         sessionB.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandlerB)
-        val holeCardsB = JsonPath.read<List<String>>(privateQueueB.poll(5, TimeUnit.SECONDS), "$.holeCards")
+        val holeCardsB = JsonPath.read<List<String>>(privateQueueB.poll(5, TimeUnit.SECONDS), "$.hand.holeCards")
 
         // 관전자 — 어느 테이블에도 앉아 있지 않다.
         val (_, spectatorToken) = signUpAndLogin()
