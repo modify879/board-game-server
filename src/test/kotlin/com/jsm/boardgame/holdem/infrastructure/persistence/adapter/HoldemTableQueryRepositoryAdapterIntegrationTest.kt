@@ -77,6 +77,19 @@ class HoldemTableQueryRepositoryAdapterIntegrationTest {
     }
 
     @Test
+    fun `findEmptyTableIds - 열린 빈 테이블만 돌려준다`() {
+        val empty = tables.save(HoldemTable.create("e1", TestTablePolicy))
+        val seated = tables.save(HoldemTable.create("e2", TestTablePolicy).also { it.sitDown(uniqueUserId(), buyIn) })
+        val closed = tables.save(HoldemTable.create("e3", TestTablePolicy).also { it.close(java.time.Instant.now()) })
+
+        val ids = tableQuery.findEmptyTableIds()
+
+        assertTrue(empty.id!!.value in ids)
+        assertTrue(seated.id!!.value !in ids)
+        assertTrue(closed.id!!.value !in ids)
+    }
+
+    @Test
     fun `findAllTables - 페이지네이션과 occupiedSeats, maxSeats 가 올바르다`() {
         val userA = uniqueUserId()
         val userB = uniqueUserId()
