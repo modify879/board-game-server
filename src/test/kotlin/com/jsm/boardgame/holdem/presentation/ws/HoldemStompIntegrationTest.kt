@@ -198,9 +198,6 @@ class HoldemStompIntegrationTest {
         ledgerEntryRepository.save(entry)
     }
 
-    // REST 생성은 만든 사람을 대기열에 넣는다(CreateTableService) — 이 헬퍼는 대기열이 비어 있는 테이블이 필요해
-    // 저장소로 직접 만든다. accessToken 은 호출부 시그니처를 유지하려고 남겼다.
-    @Suppress("UNUSED_PARAMETER")
     /** 공유 DB 에 열린 테이블이 100개를 넘어도 새 테이블을 찾도록 모든 페이지를 훑는다. */
     private fun allTableRows(accessToken: String): List<Map<String, Any>> {
         val rows = mutableListOf<Map<String, Any>>()
@@ -215,6 +212,9 @@ class HoldemStompIntegrationTest {
         return rows
     }
 
+    // REST 생성은 만든 사람을 대기열에 넣는다(CreateTableService) — 이 헬퍼는 대기열이 비어 있는 테이블이 필요해
+    // 저장소로 직접 만든다. accessToken 은 호출부 시그니처를 유지하려고 남겼다.
+    @Suppress("UNUSED_PARAMETER")
     private fun createTable(accessToken: String, name: String = "t-${UUID.randomUUID().toString().take(8)}"): Long =
         holdemTableRepository.save(HoldemTable.create(name, TestTablePolicy)).id!!.value
 
