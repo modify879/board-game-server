@@ -2,7 +2,9 @@ package com.jsm.boardgame.user.application.command.service
 
 import com.jsm.boardgame.user.application.command.support.CurrentPasswordVerifier
 import com.jsm.boardgame.user.application.command.usecase.WithdrawCommand
+import com.jsm.boardgame.common.error.CommonErrorCode
 import com.jsm.boardgame.user.application.exception.CurrentPasswordMismatchException
+import com.jsm.boardgame.user.application.exception.WalletLockContendedException
 import com.jsm.boardgame.user.application.exception.WithdrawalSeatedAtTableException
 import com.jsm.boardgame.user.application.exception.WithdrawalWalletNotEmptyException
 import com.jsm.boardgame.user.application.port.AuthSession
@@ -24,6 +26,7 @@ import com.jsm.boardgame.user.domain.model.UserRole
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import com.jsm.boardgame.user.domain.service.PasswordHasher
+import org.springframework.transaction.support.TransactionOperations
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -93,9 +96,23 @@ class WithdrawServiceTest {
     private val storage = WithdrawFakeStorage()
     private var seated = false
     private var walletBusy = false
+    private val calls = mutableListOf<String>()
+    private var contendedLocks = 0
     private val logout = LogoutService(sessions, realtime, Duration.ofMinutes(30), Clock.systemUTC())
     private val verifier = CurrentPasswordVerifier(users, WithdrawFakeHasher(), limiter, logout, 5, Duration.ofMinutes(15), Clock.systemUTC())
-    private val service = WithdrawService(users, verifier, { seated }, { walletBusy }, storage, logout, limiter, Clock.systemUTC())
+    private val service = WithdrawService(
+        users, verifier,
+        { calls += "presence"; seated },
+        {
+            calls += "walletLock"
+            if (contendedLocks > 0) {
+                contendedLocks--
+                throw WalletLockContendedException("경합", IllegalStateException())
+            }
+            walletBusy
+        },
+        storage, logout, limiter, TransactionOperations.withoutTransaction(), Clock.systemUTC(),
+    )
 
     private fun seed(imageKey: String? = null) {
         users.stored[1] = User.reconstitute(
@@ -170,6 +187,51 @@ class WithdrawServiceTest {
 
         assertEquals(UserErrorCode.WITHDRAWAL_WALLET_NOT_EMPTY, e.errorCode)
         assertNull(users.stored[1]!!.withdrawnAt)
+    }
+
+    @Test
+    fun `지갑 락을 좌석 확인보다 먼저 잡는다`() {
+        seed()
+
+        service.withdraw(WithdrawCommand(1L, "password1"))
+
+        assertEquals(listOf("walletLock", "presence"), calls)
+    }
+
+    @Test
+    fun `좌석과 지갑이 둘 다 걸리면 WITHDRAWAL_SEATED_AT_TABLE 이 우선한다`() {
+        seed()
+        seated = true
+        walletBusy = true
+
+        val e = assertFailsWith<WithdrawalSeatedAtTableException> { service.withdraw(WithdrawCommand(1L, "password1")) }
+
+        assertEquals(UserErrorCode.WITHDRAWAL_SEATED_AT_TABLE, e.errorCode)
+    }
+
+    @Test
+    fun `지갑 락이 첫 지갑 생성과 한 번 엇갈리면 트랜잭션째 다시 해서 탈퇴된다`() {
+        seed()
+        contendedLocks = 1
+
+        service.withdraw(WithdrawCommand(1L, "password1"))
+
+        assertEquals(listOf("walletLock", "walletLock", "presence"), calls)
+        assertNotNull(users.stored[1]!!.withdrawnAt)
+        assertNull(sessions.currentAccessTokenId(UserId(1)))
+    }
+
+    @Test
+    fun `두 번 엇갈리면 더 재시도하지 않고 TEMPORARILY_UNAVAILABLE 이 나가며 아무것도 안 바뀐다`() {
+        seed()
+        contendedLocks = 2
+
+        val e = assertFailsWith<WalletLockContendedException> { service.withdraw(WithdrawCommand(1L, "password1")) }
+
+        assertEquals(CommonErrorCode.TEMPORARILY_UNAVAILABLE, e.errorCode)
+        assertEquals(listOf("walletLock", "walletLock"), calls)
+        assertNull(users.stored[1]!!.withdrawnAt)
+        assertEquals("jti-1", sessions.currentAccessTokenId(UserId(1)))
     }
 
     @Test

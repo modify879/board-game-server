@@ -79,6 +79,8 @@ interface DepositRequestJpaRepository :
     fun findByIdForUpdate(@Param("id") id: Long): DepositRequestJpaEntity?
 
     fun findByUserIdAndIdempotencyKey(userId: Long, idempotencyKey: String): DepositRequestJpaEntity?
+
+    fun existsByUserIdAndStatus(userId: Long, status: String): Boolean
 }
 
 fun DepositRequestJpaEntity.toDomain(): DepositRequest =

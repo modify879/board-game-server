@@ -30,18 +30,6 @@ class DepositRequestQueryRepositoryAdapter(
                 .orderBy(path(DepositRequestJpaEntity::id).desc())
         }
 
-    override fun existsPendingByUserId(userId: Long): Boolean =
-        jpa.findAll {
-            select(path(DepositRequestJpaEntity::id))
-                .from(entity(DepositRequestJpaEntity::class))
-                .where(
-                    and(
-                        path(DepositRequestJpaEntity::userId).eq(userId),
-                        path(DepositRequestJpaEntity::status).eq(DepositRequestStatus.PENDING.name),
-                    ),
-                )
-        }.isNotEmpty()
-
     // status 가 null 이면 whereAnd 에 null 조건만 남아 전체를 돌려준다 — 선택적 조건을 JDSL 로 표현하는 지점.
     override fun findByStatus(status: DepositRequestStatus?, pageable: Pageable): Page<DepositRequestView> =
         jpa.findPage(pageable) {

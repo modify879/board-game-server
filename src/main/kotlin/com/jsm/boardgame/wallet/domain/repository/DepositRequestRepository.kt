@@ -8,4 +8,5 @@ interface DepositRequestRepository {
     fun findById(id: DepositRequestId): DepositRequest?
     fun findByUserAndIdempotencyKey(userId: UserId, idempotencyKey: String): DepositRequest?
     fun save(request: DepositRequest): DepositRequest
+    fun existsPendingByUserId(userId: UserId): Boolean
 }

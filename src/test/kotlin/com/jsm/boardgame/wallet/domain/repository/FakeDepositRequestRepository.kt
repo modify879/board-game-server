@@ -3,6 +3,7 @@ package com.jsm.boardgame.wallet.domain.repository
 import com.jsm.boardgame.wallet.domain.model.DepositRequest
 import com.jsm.boardgame.wallet.domain.model.DepositRequestId
 import com.jsm.boardgame.wallet.domain.model.UserId
+import com.jsm.boardgame.wallet.domain.model.DepositRequestStatus
 
 /** 서비스 테스트가 공유하는 인메모리 대역. id 가 없는 요청은 저장할 때 번호를 매긴다. [put] 은 미리 넣어 둘 때 쓴다. */
 class FakeDepositRequestRepository : DepositRequestRepository {
@@ -17,6 +18,9 @@ class FakeDepositRequestRepository : DepositRequestRepository {
 
     override fun findByUserAndIdempotencyKey(userId: UserId, idempotencyKey: String): DepositRequest? =
         stored.values.firstOrNull { it.userId == userId && it.idempotencyKey == idempotencyKey }
+
+    override fun existsPendingByUserId(userId: UserId): Boolean =
+        stored.values.any { it.userId == userId && it.status == DepositRequestStatus.PENDING }
 
     override fun save(request: DepositRequest): DepositRequest {
         val saved = if (request.id == null) {

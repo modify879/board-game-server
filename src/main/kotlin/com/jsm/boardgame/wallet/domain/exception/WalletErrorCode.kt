@@ -22,6 +22,7 @@ enum class WalletErrorCode(override val kind: ErrorKind) : ErrorCode {
     // 없는 리소스에 접근한 게 아니라 관리자가 보낸 요청의 대상이 틀린 것이므로 NOT_FOUND 가 아니라 INVALID(400)다.
     // UserExistence 사전 체크와 fk_wallets_user 위반이 둘 다 이 코드로 떨어진다 — 조정 전용 이름이면
     // 어댑터가 환전·충전 경로의 FK 위반에도 "조정" 코드를 내보내게 된다.
+    // 탈퇴와 엇갈린 바이인·충전·환전 요청(지갑 락 뒤 활성 확인)도 이 코드다 — 세션이 끊기는 중이라 클라이언트가 볼 일이 거의 없다.
     WALLET_OWNER_NOT_FOUND(ErrorKind.INVALID),
     // Money.of() 는 음수만 막고 100원 단위는 강제하지 않는다(다른 용도로도 쓰이는 범용 VO라서).
     // 바이인·캐시아웃도 DepositRequest/WithdrawalRequest 처럼 단위를 스스로 검사해야 하는데,

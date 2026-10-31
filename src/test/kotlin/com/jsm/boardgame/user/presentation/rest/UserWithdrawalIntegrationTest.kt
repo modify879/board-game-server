@@ -5,6 +5,8 @@ import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.wallet.application.command.usecase.AdjustWalletBalanceCommand
 import com.jsm.boardgame.wallet.application.command.usecase.AdjustWalletBalanceUseCase
+import com.jsm.boardgame.wallet.application.command.usecase.RequestDepositCommand
+import com.jsm.boardgame.wallet.application.command.usecase.RequestDepositUseCase
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -22,6 +24,7 @@ class UserWithdrawalIntegrationTest {
 
     @Autowired private lateinit var mockMvc: MockMvc
     @Autowired private lateinit var adjustWallet: AdjustWalletBalanceUseCase
+    @Autowired private lateinit var requestDeposit: RequestDepositUseCase
 
     private val password = "password123"
 
@@ -94,6 +97,18 @@ class UserWithdrawalIntegrationTest {
     fun `지갑에 잔액이 있으면 409 WITHDRAWAL_WALLET_NOT_EMPTY 이고 탈퇴되지 않는다`() {
         val account = signUpAndLogin()
         adjustWallet.adjust(AdjustWalletBalanceCommand(account.id, 1_000, "테스트", account.id, "k-${UniqueNames.suffix()}"))
+
+        withdraw(account.accessToken)
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("WITHDRAWAL_WALLET_NOT_EMPTY"))
+
+        login(account.username).andExpect(status().isOk)
+    }
+
+    @Test
+    fun `대기 중인 충전 요청이 있으면 409 WITHDRAWAL_WALLET_NOT_EMPTY 이고 탈퇴되지 않는다`() {
+        val account = signUpAndLogin()
+        requestDeposit.request(RequestDepositCommand(account.id, 5_000, "k-${UniqueNames.suffix()}"))
 
         withdraw(account.accessToken)
             .andExpect(status().isConflict)

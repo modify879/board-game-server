@@ -7,6 +7,5 @@ import org.springframework.data.domain.Pageable
 
 interface DepositRequestQueryRepository {
     fun findByUserId(userId: Long, pageable: Pageable): Page<DepositRequestView>
-    fun existsPendingByUserId(userId: Long): Boolean
     fun findByStatus(status: DepositRequestStatus?, pageable: Pageable): Page<DepositRequestView>
 }

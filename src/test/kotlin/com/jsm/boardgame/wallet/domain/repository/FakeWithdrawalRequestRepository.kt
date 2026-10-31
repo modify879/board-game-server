@@ -1,6 +1,7 @@
 package com.jsm.boardgame.wallet.domain.repository
 
 import com.jsm.boardgame.wallet.domain.model.UserId
+import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestStatus
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequest
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestId
 
@@ -17,6 +18,9 @@ class FakeWithdrawalRequestRepository : WithdrawalRequestRepository {
 
     override fun findByUserAndIdempotencyKey(userId: UserId, idempotencyKey: String): WithdrawalRequest? =
         stored.values.firstOrNull { it.userId == userId && it.idempotencyKey == idempotencyKey }
+
+    override fun existsPendingByUserId(userId: UserId): Boolean =
+        stored.values.any { it.userId == userId && it.status == WithdrawalRequestStatus.PENDING }
 
     override fun save(request: WithdrawalRequest): WithdrawalRequest {
         val saved = if (request.id == null) {

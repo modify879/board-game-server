@@ -2,6 +2,8 @@ package com.jsm.boardgame.wallet.application.command.service
 
 import com.jsm.boardgame.wallet.application.command.usecase.TransferToGameCommand
 import com.jsm.boardgame.wallet.application.command.usecase.TransferToGameUseCase
+import com.jsm.boardgame.wallet.application.port.UserExistence
+import com.jsm.boardgame.wallet.domain.exception.WalletOwnerNotFoundException
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
@@ -20,18 +22,25 @@ import java.time.Instant
  * 기본 전파(REQUIRED)를 그대로 쓴다 — REQUIRES_NEW 로 새 트랜잭션을 열면 호출자(게임 착석
  * 유스케이스)의 트랜잭션과 분리되어 지갑 차감과 착석이 원자적이지 않게 된다. 잔액이 부족하면
  * wallet.record() 가 InsufficientBalanceException 을 던지고 호출자 트랜잭션 전체가 롤백된다.
+ *
+ * 활성 확인은 지갑 락을 잡은 **뒤에** 한다 — 탈퇴(LockWalletForAccountClosureService)가 같은 락으로 직렬화하므로
+ * 락을 기다리는 동안 커밋된 탈퇴를 여기서 본다.
  */
 @Service
 @Transactional
 class TransferToGameService(
     private val wallets: WalletRepository,
     private val ledger: LedgerEntryRepository,
+    private val userExistence: UserExistence,
     private val clock: Clock,
 ) : TransferToGameUseCase {
 
     override fun transfer(command: TransferToGameCommand) {
         val amount = gameTransferMoney(command.amount)
         val wallet = wallets.findOrOpen(UserId(command.userId))
+        if (!userExistence.exists(UserId(command.userId))) {
+            throw WalletOwnerNotFoundException("탈퇴했거나 없는 사용자의 바이인: userId=${command.userId}")
+        }
         val entry = wallet.record(
             type = LedgerEntryType.GAME_BUY_IN,
             amount = amount,

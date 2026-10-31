@@ -35,7 +35,7 @@ import kotlin.test.assertFailsWith
 
 /**
  * 같은 키의 동시 요청은 사전 조회를 둘 다 통과하므로, 실제 보장은 요청 테이블의
- * (user_id, idempotency_key) 유니크 제약이다. 첫 트랜잭션을 래치로 열어 둔 채 두 번째를 INSERT 에서
+ * (user_id, idempotency_key) 유니크 제약이다. 첫 트랜잭션을 래치로 열어 둔 채 두 번째를 지갑 락에서
  * 막히게 한 뒤 커밋시켜, 결과를 결정적으로 만든다.
  */
 @IntegrationTest
@@ -92,7 +92,7 @@ class RequestIdempotencyConcurrencyIntegrationTest {
             }
             firstInserted.await(10, TimeUnit.SECONDS)
             val secondResult = executor.submit<Result<T>> { runCatching { second() } }
-            // 두 번째가 INSERT 의 유니크 대기(Lock)에 들어갈 때까지 폴링한다. lock_timeout(3s) 보다 앞서 풀도록 2초로 묶는다.
+            // 두 번째가 지갑 락 대기(Lock)에 들어갈 때까지 폴링한다. lock_timeout(3s) 보다 앞서 풀도록 2초로 묶는다.
             try {
                 val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
                 while (jdbcTemplate.queryForObject(
@@ -115,6 +115,9 @@ class RequestIdempotencyConcurrencyIntegrationTest {
     @Test
     fun `같은 키의 동시 충전 요청은 한 행만 만들고 나중 요청은 409 IDEMPOTENCY_KEY_CONFLICT 를 받으며 재시도하면 원래 결과를 받는다`() {
         val userId = newUserId()
+        // 지갑을 미리 연다 — 없으면 두 번째가 지갑 INSERT(uk_wallets_user)에서 져 CONCURRENT_WALLET_UPDATE 로 떨어진다.
+        // 여기서 보려는 건 지갑 락을 기다린 두 번째가 요청 유니크 제약에 걸리는 경로다.
+        tx.execute { wallets.findOrOpen(UserId(userId)) }
         val command = RequestDepositCommand(userId = userId, amount = 5_000L, idempotencyKey = UUID.randomUUID().toString())
 
         val (first, second) = raceWithOpenFirstTransaction(

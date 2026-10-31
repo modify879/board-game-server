@@ -8,4 +8,5 @@ interface WithdrawalRequestRepository {
     fun findById(id: WithdrawalRequestId): WithdrawalRequest?
     fun findByUserAndIdempotencyKey(userId: UserId, idempotencyKey: String): WithdrawalRequest?
     fun save(request: WithdrawalRequest): WithdrawalRequest
+    fun existsPendingByUserId(userId: UserId): Boolean
 }
