@@ -48,6 +48,9 @@ class UserJpaEntity(
 
     @Column(name = "locked_at", columnDefinition = "timestamptz")
     var lockedAt: Instant?,
+
+    @Column(name = "withdrawn_at", columnDefinition = "timestamptz")
+    var withdrawnAt: Instant?,
 )
 
 // KotlinJdslJpqlExecutor 를 상속하면 Kotlin JDSL 이 findAll/findPage 등의 실행기를
@@ -57,7 +60,10 @@ interface UserJpaRepository :
     JpaRepository<UserJpaEntity, Long>,
     KotlinJdslJpqlExecutor {
 
-    fun findByUsername(username: String): UserJpaEntity?
+    // 탈퇴한 사용자는 명령 경로에서 보이지 않는다 — 가시성은 어댑터 한 곳에서 정한다.
+    fun findByIdAndWithdrawnAtIsNull(id: Long): UserJpaEntity?
+
+    fun findByUsernameAndWithdrawnAtIsNull(username: String): UserJpaEntity?
 
     fun existsByUsername(username: String): Boolean
 
@@ -73,6 +79,7 @@ fun UserJpaEntity.toDomain(): User =
         profileImageKey = profileImageKey?.let(ProfileImageKey::reconstitute),
         role = UserRole.valueOf(role),
         lockedAt = lockedAt,
+        withdrawnAt = withdrawnAt,
     )
 
 fun User.toJpaEntity(): UserJpaEntity =
@@ -84,4 +91,5 @@ fun User.toJpaEntity(): UserJpaEntity =
         profileImageKey = profileImageKey?.value,
         role = role.name,
         lockedAt = lockedAt,
+        withdrawnAt = withdrawnAt,
     )

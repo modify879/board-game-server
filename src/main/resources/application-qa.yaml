@@ -19,5 +19,6 @@ app:
     idle-table-ttl: 15s
     rejoin-obligation-window: 10s
   profile-image:
+    storage-dir: ./data-qa/profile-images
     base-url: "http://localhost:8081/images/profiles/"
     default-url: "http://localhost:8081/images/profiles/default.png"
