@@ -13,21 +13,22 @@ import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
-import org.springframework.stereotype.Service
+import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * 좌석 하나의 칩 추가 예약을 자기만의 트랜잭션으로 적용한다. REQUIRES_NEW 인 이유는 [com.jsm.boardgame.holdem.application.command.service.AdmitJoinRequestService] 와 같다 —
+ * 좌석 하나의 칩 추가 예약을 자기만의 트랜잭션으로 적용한다. 유스케이스가 아니라 [com.jsm.boardgame.holdem.application.command.service.ApplyChipsReservationsService]
+ * 의 협력자다 — 별도 빈인 이유는 클래스 단위 REQUIRES_NEW 가 프록시를 거쳐야 걸리기 때문이다. REQUIRES_NEW 인 이유는 [com.jsm.boardgame.holdem.application.command.service.AdmitJoinRequestService] 와 같다 —
  * 지갑 이체 실패가 앞서 적용한 좌석이나 정산 트랜잭션에 번지지 않아야 하고, 호출자는 커밋 후 실행기 스레드에서 돈다.
  *
  * 스택은 핸드가 끝난 뒤 값이다 — 한도(최대 바이인 − 스택)와 잔액으로 줄이고 [CHIP_UNIT] 으로 내림한 만큼만 지갑에서 가져온다.
  * 더한 뒤에도 스택이 0 이면(예: 파산했는데 잔액이 없다) 0칩 자동 기립과 똑같이 기립시킨다. 칩을 받은 좌석이 남아 후보가 2명 이상이면
  * 새 입장처럼 카운트다운을 다시 센다.
  */
-@Service
+@Component
 @Transactional(propagation = Propagation.REQUIRES_NEW)
-class ApplySeatChipsReservationService(
+class SeatChipsReservationApplier(
     private val tables: HoldemTableRepository,
     private val handStore: HandStore,
     private val walletBalance: WalletBalance,
@@ -42,7 +43,8 @@ class ApplySeatChipsReservationService(
         val seat = table.seatOf(userId) ?: return
         if (seat.chipsReservation == null) return
 
-        val amount = table.applyChipsReservation(userId, walletBalance.balanceOf(userId))
+        // 지갑 잔액은 holdem 밖의 금액이라 경계에서 칩 단위로 내림해 들인다(규칙 7).
+        val amount = table.applyChipsReservation(userId, Chips.floorOf(walletBalance.balanceOf(userId)))
         if (amount.isPositive()) {
             walletTransfer.toGame(userId, amount.amount, tableId, memo = "holdem")
         }
@@ -83,6 +85,6 @@ class ApplySeatChipsReservationService(
     }
 
     private companion object {
-        private val log = LoggerFactory.getLogger(ApplySeatChipsReservationService::class.java)
+        private val log = LoggerFactory.getLogger(SeatChipsReservationApplier::class.java)
     }
 }

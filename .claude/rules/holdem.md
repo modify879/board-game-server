@@ -53,9 +53,9 @@ paths: ["**/holdem/**"]
 - **BB 대기 규칙은 판을 굶겨 죽이지 않는다.** 후보(스택 양수 점유 좌석)가 2명 이상인데 대기를
   빼면 2명 미만이면, 전원의 대기를 풀고 참가시킨다. 없으면 영구 데드락이다 — 참가자 부족 예외가
   `@Transactional` 을 롤백해 블라인드 전진과 플래그 해제가 취소되고, 다음 호출도 같은 상태라 영원히 실패한다.
-  완화가 걸리면 그 핸드의 즉시 포스팅 진입료도 면제한다
+  완화가 걸리면 그 핸드의 즉시 포스팅 진입료도 면제한다. 참가자·진입료·플래그 갱신은 `HoldemTable.seatForNextHand` 한 곳이 정하고 `HandStarter` 는 조율만 한다
 - **정산은 스택을 먼저 반영하고 그다음 0칩 좌석을 내보낸다.** 순서를 뒤집으면 `applyStacks` 가
-  이미 빠진 좌석을 만나 터진다. 0칩 기립은 돌려줄 칩이 없으므로 지갑을 부르지 않는다. 칩 추가 예약이 있는 0칩 좌석(퇴장 예약 없음)은 이 단계에서 건너뛴다 — 커밋 후 `ChipsReservationsDue`(→ `JoinRequestsDue` 앞)가 채우거나 기립시킨다
+  이미 빠진 좌석을 만나 터진다. 0칩 기립 규칙은 `HoldemTable.standUpBusted` 가, 재착석 의무 기록은 `HandSettler` 가 한다. 돌려줄 칩이 없으므로 지갑을 부르지 않는다. 칩 추가 예약이 있는 0칩 좌석(퇴장 예약 없음)은 이 단계에서 건너뛴다 — 커밋 후 `ChipsReservationsDue`(→ `JoinRequestsDue` 앞)가 채우거나 기립시킨다
 - **좌석의 `awaitingBigBlind` 와 `owesImmediatePost` 는 다른 축이다.** 즉시 포스팅을 고르면 대기는
   바로 풀리지만 진입료는 아직 안 낸 상태라, 한 필드로는 "이미 정상 참가 중" 과 구분되지 않는다
 - **포지션은 두 단계다. 테이블에 저장하는 것은 명목 포지션뿐이다.** `advanceBlinds` 는 대기 좌석까지 포함한
@@ -87,8 +87,8 @@ paths: ["**/holdem/**"]
   핸드 중에 그 핸드의 참가자가 부르면 바로 더하지 않고 좌석의 `chipsReservation`(`holdem_seats.chips_reservation`, 요청 금액)에 예약만 걸어 **202**(`AddChipsResult.RESERVED`, 덮어쓴다, 개인 뷰 `SeatPrivateView.chipsReservation`(Long|null, 핸드 밖에서도 실린다)으로 노출, 공개 뷰엔 없다).
   예약 때는 단위·양수만 본다(0 은 `CHIP_ADD_OUT_OF_RANGE`) — 한도·잔액은 적용 때 본다. 핸드가 없거나 핸드 도중 앉아 참가하지 않은 좌석은 즉시 더하고 204.
   취소는 `DELETE /api/holdem/seat/chips-reservation`(204, 멱등, 미착석 404). 적용은 `HandSettler.settle`·`CancelHandService` 가 `JoinRequestsDue` **앞에** 발행하는 `ChipsReservationsDue` 를
-  `ChipsReservationsProcessor` 가 커밋 후 테이블 실행기에 올려 `ApplyChipsReservationsService`(트랜잭션 없음) → 좌석마다 `ApplySeatChipsReservationService`(REQUIRES_NEW)로 돈다 — 지갑 실패가 정산을 롤백하지 않게.
-  적용액 = min(요청, 최대 스택 − 핸드 끝 스택, 지갑 잔액)을 100 단위로 내림(0 이면 이체 없이 예약만 지운다). 예약이 있는 0칩 좌석은 `HandSettler` 가 기립시키지 않고 적용을 기다린다(퇴장 예약이 함께 있으면 퇴장이 이기고 예약은 좌석과 함께 사라진다).
+  `ChipsReservationsProcessor` 가 커밋 후 테이블 실행기에 올려 `ApplyChipsReservationsService`(트랜잭션 없음) → 좌석마다 `SeatChipsReservationApplier`(REQUIRES_NEW)로 돈다 — 지갑 실패가 정산을 롤백하지 않게.
+  적용액 = min(요청, 최대 스택 − 핸드 끝 스택, 지갑 잔액)을 100 단위로 내림(0 이면 이체 없이 예약만 지운다). 예약이 있는 0칩 좌석은 0칩 자동 기립(`HoldemTable.standUpBusted`)이 건너뛰어 적용을 기다린다(퇴장 예약이 함께 있으면 퇴장이 이기고 예약은 좌석과 함께 사라진다).
   적용 뒤에도 0칩이면 기립(지갑 없이, 재착석 의무 0), 기립하지 않았고(적용액이 0 이어도) 후보가 2명 이상이면 카운트다운을 다시 센다. 좌석 적용이 던지면 예약을 버리고(0칩이면 기립) 넘어간다(버리기마저 실패하면 `ApplyChipsReservationsService` 가 ERROR 로그를 남기고 다음 좌석으로 계속한다) — 0칩 좌석이 영영 앉아 있지 않게. 부팅 시 `HandRecovery` 가 핸드 없는 테이블의 남은 예약 적용을 다시 올린다.
   결과 스택이 테이블 정책의 최대 바이인(기본 100BB)을 넘으면 `CHIP_ADD_OUT_OF_RANGE`, 테이블 실행기 안에서 지갑 이체를 먼저 하고 `tables.save` 한 뒤 공개 뷰를 브로드캐스트).
   범위는 `HoldemTable.buyInRange(obligation)` 하나가 정한다 — 도메인 `sitDown` 은 하한만 보고 상한은 `SeatRequester` 가 본다. 잔액이 바이인보다 적으면

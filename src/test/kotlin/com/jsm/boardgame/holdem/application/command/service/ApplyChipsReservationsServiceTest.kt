@@ -1,6 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
-import com.jsm.boardgame.holdem.application.command.support.ApplySeatChipsReservationService
+import com.jsm.boardgame.holdem.application.command.support.SeatChipsReservationApplier
 import com.jsm.boardgame.holdem.application.command.usecase.ApplyChipsReservationsCommand
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
@@ -42,7 +42,7 @@ private class ApplyChipsFakeWallet : WalletBalance, WalletTransfer {
 }
 
 /** [failUser] 좌석은 적용도 버리기도 던진다. */
-private class ApplyChipsFailingSeatService(
+private class ApplyChipsFailingApplier(
     private val failUser: UserId,
     tables: FakeCopyingHoldemTableRepository,
     handStore: FakeHandStore,
@@ -50,7 +50,7 @@ private class ApplyChipsFailingSeatService(
     departures: FakeRecentDepartures,
     countdown: FakeNextHandCountdown,
     events: ApplicationEventPublisher,
-) : ApplySeatChipsReservationService(tables, handStore, wallet, wallet, departures, countdown, events) {
+) : SeatChipsReservationApplier(tables, handStore, wallet, wallet, departures, countdown, events) {
     override fun apply(tableId: TableId, userId: UserId) {
         if (userId == failUser) error("적용 실패")
         super.apply(tableId, userId)
@@ -70,10 +70,10 @@ class ApplyChipsReservationsServiceTest {
     private val departures = FakeRecentDepartures()
     private val countdown = FakeNextHandCountdown()
     private val events = mutableListOf<Any>()
-    private val seatService = ApplySeatChipsReservationService(
+    private val applier = SeatChipsReservationApplier(
         tables, handStore, wallet, wallet, departures, countdown, ApplicationEventPublisher { events += it },
     )
-    private val service = ApplyChipsReservationsService(tables, handStore, seatService)
+    private val service = ApplyChipsReservationsService(tables, handStore, applier)
 
     /** 좌석 번호 → (스택, 예약). 사용자 id 는 좌석 번호 × 1000. */
     private fun table(vararg seats: Triple<Int, Long, Long?>): TableId {
@@ -202,7 +202,7 @@ class ApplyChipsReservationsServiceTest {
     fun `버리기마저 던져도 다음 좌석의 예약은 적용한다`() {
         val tableId = table(Triple(1, 10_000, 3_000L), Triple(2, 10_000, 3_000L))
         wallet.balance = 50_000
-        val failing = ApplyChipsFailingSeatService(UserId(1000), tables, handStore, wallet, departures, countdown, ApplicationEventPublisher { events += it })
+        val failing = ApplyChipsFailingApplier(UserId(1000), tables, handStore, wallet, departures, countdown, ApplicationEventPublisher { events += it })
 
         ApplyChipsReservationsService(tables, handStore, failing).apply(ApplyChipsReservationsCommand(tableId.value))
 

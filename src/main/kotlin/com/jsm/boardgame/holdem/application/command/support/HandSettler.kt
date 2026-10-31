@@ -35,9 +35,8 @@ import org.springframework.stereotype.Component
  * 폴드가 아닌데 점유가 풀려 있으면 불변식 위반이다(HoldemTable.applyStacks 의 점유 가드는
  * 그대로 둔다 — 여기서는 넘길 대상 자체를 걸러낸다).
  *
- * 스택 반영 직후, 스택이 0이 된 참가 좌석은 자동으로 기립시킨다(0칩 자동 기립) — 9자리가 칩
- * 없는 사람에게 묶이지 않게 한다. 핸드가 이미 끝난 뒤라 going south(핸드 도중 칩을 빼는 것) 제약과
- * 충돌하지 않는다. 돌려줄 칩이 없으므로 지갑 이체는 부르지 않는다(StandUpService 가 스택 0일 때
+ * 스택 반영 직후, 스택이 0이 된 참가 좌석은 자동으로 기립시킨다(0칩 자동 기립, 규칙은 [HoldemTable.standUpBusted]).
+ * 핸드가 이미 끝난 뒤라 going south(핸드 도중 칩을 빼는 것) 제약과 충돌하지 않는다. 돌려줄 칩이 없으므로 지갑 이체는 부르지 않는다(StandUpService 가 스택 0일 때
  * 이체를 건너뛰는 것과 같은 이유). 재착석 의무는 0 으로 덮어 지운다(빈손으로 떠났으니 가져간 게 없다). 남은 참가 요청의 바이인
  * 이체는 여기서 하지 않고 커밋 후 별도 트랜잭션에서 처리한다(JoinRequestsProcessor).
  *
@@ -77,16 +76,9 @@ class HandSettler(
         val lastResult = LastHandResult.of(hand, userIdBySeat)
         table.applyStacks(toApply)
 
-        for ((seatNo, stack) in toApply) {
-            if (!stack.isZero()) continue
-            val seat = table.seatAt(seatNo) ?: continue
-            // 칩 추가 예약이 있으면 0칩으로 남겨 둔다 — 커밋 후 적용(ChipsReservationsDue)이 채우거나, 못 채우면 그때 기립시킨다.
-            // 퇴장 예약이 함께 있으면 퇴장이 이긴다 — 예약은 좌석과 함께 사라진다.
-            if (seat.chipsReservation != null && !seat.leaveReserved) continue
-            val userId = seat.userId
-            table.standUp(userId)
-            recentDepartures.record(userId, Chips.ZERO)
-            log.info("auto stand-up after 0-stack settle: tableId={}, seatNo={}, userId={}", tableId.value, seatNo, userId)
+        for (seat in table.standUpBusted(toApply.keys)) {
+            recentDepartures.record(seat.userId, Chips.ZERO)
+            log.info("auto stand-up after 0-stack settle: tableId={}, seatNo={}, userId={}", tableId.value, seat.seatNo, seat.userId)
         }
 
         // 0칩 기립 다음, 후보 수 판단·대기열 트리거 앞이다 — 비운 좌석을 대기열이 채우고 빈 테이블이 닫혀야 한다.

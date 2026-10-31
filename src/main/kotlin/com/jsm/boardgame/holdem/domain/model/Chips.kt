@@ -61,6 +61,9 @@ value class Chips private constructor(val amount: Long) : Comparable<Chips> {
         /** 영속 복원 전용 — 검증하지 않는다. 사용자 입력에는 [of] 를 써라. */
         fun reconstitute(amount: Long): Chips = Chips(amount)
 
+        /** [amount] 를 [CHIP_UNIT] 으로 내림한 칩. 음수는 0 이다 — 지갑 잔액처럼 단위가 맞지 않는 바깥 금액을 들일 때 쓴다. */
+        fun floorOf(amount: Long): Chips = Chips(amount.coerceAtLeast(0) / CHIP_UNIT * CHIP_UNIT)
+
         fun min(a: Chips, b: Chips): Chips = if (a <= b) a else b
     }
 }

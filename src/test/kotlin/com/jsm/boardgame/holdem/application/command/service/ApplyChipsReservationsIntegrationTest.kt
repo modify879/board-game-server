@@ -25,7 +25,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /**
- * `ApplySeatChipsReservationService` 가 진짜 Spring 프록시를 통해 REQUIRES_NEW 로 도는지 검증한다.
+ * `SeatChipsReservationApplier` 가 진짜 Spring 프록시를 통해 REQUIRES_NEW 로 도는지 검증한다.
  *
  * 목 없이 지갑 이체만 골라 실패시킬 방법이 없다(적용액이 지갑 잔액으로 이미 잘려 이체는 실패할 수 없다).
  * 그래서 바깥 트랜잭션 안에서 적용을 부르고 바깥을 롤백시킨다 — REQUIRES_NEW 면 좌석 적용은 이미 별도로

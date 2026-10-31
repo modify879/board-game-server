@@ -134,14 +134,14 @@ class HoldemTable private constructor(
      * 예약은 항상 지운다. 더한 금액을 돌려주며(0 이면 아무것도 안 더했다) 지갑 이체는 호출자가 한다.
      * 핸드 진행 중에는 부르면 안 된다 — 호출 위치(ApplyChipsReservationsService)가 보장한다.
      */
-    fun applyChipsReservation(userId: UserId, walletBalance: Long): Chips {
+    fun applyChipsReservation(userId: UserId, walletBalance: Chips): Chips {
         val seat = seatOf(userId) ?: throw NotSeatedException("이 테이블에 앉아 있지 않은 사용자입니다: userId=$userId")
         val reserved = seat.chipsReservation ?: return Chips.ZERO
         seat.applyChipsReservation(null)
-        val room = maxStack().amount - seat.stack.amount
-        val raw = minOf(reserved.amount, room, walletBalance)
-        if (raw < CHIP_UNIT) return Chips.ZERO
-        val amount = Chips.of(raw / CHIP_UNIT * CHIP_UNIT)
+        // 플레이 중 스택은 한도를 넘을 수 있다 — 그때 남은 자리는 0 이다.
+        val room = if (seat.stack >= maxStack()) Chips.ZERO else maxStack() - seat.stack
+        val amount = Chips.floorOf(minOf(reserved, room, walletBalance).amount)
+        if (amount.isZero()) return Chips.ZERO
         seat.applyStack(seat.stack + amount)
         return amount
     }
@@ -151,24 +151,81 @@ class HoldemTable private constructor(
         seat.applyPresence(presence)
     }
 
-    /** BB 가 이 좌석에 자연스럽게 도달했을 때 HandStarter 가 부른다. 대기 중이 아니었으면 아무 일도 없다. */
-    internal fun clearAwaitingBigBlind(seatNo: Int) {
-        seats[seatNo]?.clearAwaitingBigBlind()
-    }
-
-    /** 즉시 포스팅을 빚진 좌석이 처음 핸드에 참가할 때 HandStarter 가 부른다. */
-    internal fun consumeImmediatePost(seatNo: Int) {
-        seats[seatNo]?.consumeImmediatePost()
-    }
-
     fun seatOf(userId: UserId): Seat? = seats.values.find { it.userId == userId }
 
     fun seatAt(seatNo: Int): Seat? = seats[seatNo]
 
     fun occupiedSeats(): List<Seat> = seats.values.sortedBy { it.seatNo }
 
-    /** 후보 = 점유 좌석 중 스택이 양수인 것. HandStarter 와 카운트다운 리셋 판단이 이 정의를 공유한다. */
+    /** 후보 = 점유 좌석 중 스택이 양수인 것. [seatForNextHand] 와 카운트다운 리셋 판단이 이 정의를 공유한다. */
     fun candidateSeatNos(): Set<Int> = occupiedSeats().filter { it.stack.isPositive() }.map { it.seatNo }.toSet()
+
+    /**
+     * 이번 핸드에 딜인할 좌석. [positions] 는 실제 참가자로 좁힌 포지션, [extraPostSeatNos] 는 블라인드와 별도로
+     * 진입료(BB 한 번)를 내는 좌석이다.
+     */
+    data class HandSeating(val positions: HandPositions, val participantSeatNos: Set<Int>, val extraPostSeatNos: Set<Int>)
+
+    /**
+     * [advanceBlinds] 가 정한 명목 [positions] 로 이번 핸드의 참가자를 정하고 좌석의 BB 대기·즉시 포스팅 플래그를 갱신한다.
+     *
+     * 참가자 = 후보 − (아직 대기 중인데 이번 BB 가 아닌 좌석) − (버튼~첫 블라인드 구간에 걸린 즉시 포스팅 신규 좌석).
+     * 대기 좌석이 SB·버튼 자리에 걸리면 그 자리는 비는 셈이라 dead small blind/dead button 이 그대로 적용된다.
+     * Robert's Rules of Poker, Button and Blind Use: 새 참가자는 포스팅을 자청해도 버튼~SB 구간에서는 딜인되지 않는다.
+     *
+     * 대기·차단 규칙은 판을 굶겨 죽이지 않는다: 제외 뒤 2명 미만이면 판이 못 서고, 판이 못 서면 건너뛸 블라인드 회전
+     * 자체가 없으므로 대기·차단시킬 이유가 없다 — 후보 전원의 대기 플래그를 풀고 전원을 참가시키며, 이번 핸드만큼은
+     * 진입료도 면제한다(테이블이 사실상 다시 시작하는 셈이라 BB 대기 면제와 같은 이유다). 테이블의 진짜 첫 핸드(전원 대기
+     * 기본값), 비었다가 다시 찬 테이블, 정규 참가자 파산까지 이 규칙 하나로 덮인다.
+     *
+     * 블라인드 포스팅 자체가 이번 핸드의 진입료다 — 빚진 좌석이 실제 SB/BB 로 좁혀지면 추가 포스팅을 따로 받지 않는다.
+     * 대기 좌석은 owing 이 될 수 없으므로(즉시 참가를 고른 좌석만 owing), 빚진 좌석이 실제 SB 가 되는 경로는 헤즈업
+     * 좁히기(다른 좌석은 전부 대기)뿐이다 — 그때는 SB 포스팅을 진입료 대신으로 받아들이는 의도된 단순화다.
+     * 빚은 실제로 참가한 좌석만 소비한다 — 차단된 좌석은 빚을 그대로 들고 기다린다.
+     */
+    fun seatForNextHand(positions: HandPositions): HandSeating {
+        val candidateSeatNos = candidateSeatNos()
+        seats[positions.bigBlindSeatNo]?.clearAwaitingBigBlind()
+
+        val awaitingSeatNos = occupiedSeats().filter { it.awaitingBigBlind }.map { it.seatNo }.toSet()
+        val owingSeatNos = occupiedSeats()
+            .filter { it.seatNo in candidateSeatNos && it.owesImmediatePost }
+            .map { it.seatNo }
+            .toSet()
+        val blockedNewPlayers = owingSeatNos.filter { isBetweenButtonAndFirstBlind(it, positions) }.toSet()
+
+        var participatingSeatNos = candidateSeatNos - awaitingSeatNos - blockedNewPlayers
+        val relief = participatingSeatNos.size < 2
+        if (relief) {
+            candidateSeatNos.forEach { seats[it]?.clearAwaitingBigBlind() }
+            participatingSeatNos = candidateSeatNos
+        }
+
+        val actual = positions.forParticipants(participatingSeatNos)
+        val extraPostSeatNos = if (relief) {
+            emptySet()
+        } else {
+            owingSeatNos.intersect(participatingSeatNos) - setOfNotNull(actual.smallBlindSeatNo, actual.bigBlindSeatNo)
+        }
+
+        owingSeatNos.filter { it in participatingSeatNos }.forEach { seats[it]?.consumeImmediatePost() }
+        return HandSeating(actual, participatingSeatNos, extraPostSeatNos)
+    }
+
+    /**
+     * 버튼(포함)부터 버튼 뒤 첫 블라인드까지의 원형 좌석 구간 안인가. 첫 블라인드는 SB, dead SB 면 BB 다 —
+     * SB 는 구간에 포함하고 BB 는 제외한다(SB~BB 사이 좌석은 막지 않는다). dead button 으로 BB 가 빈 좌석을
+     * 건너뛰면 버튼~SB 사이에 신규 좌석이 앉을 수 있어 정확히 버튼·SB 자리만 보면 놓친다.
+     */
+    private fun isBetweenButtonAndFirstBlind(seatNo: Int, positions: HandPositions): Boolean {
+        fun distanceFromButton(to: Int) = Math.floorMod(to - positions.buttonSeatNo, MAX_SEATS)
+        val sb = positions.smallBlindSeatNo
+        return if (sb != null) {
+            distanceFromButton(seatNo) <= distanceFromButton(sb)
+        } else {
+            distanceFromButton(seatNo) < distanceFromButton(positions.bigBlindSeatNo)
+        }
+    }
 
     /** 다음 핸드에서 실제로 쓸 포지션. [smallBlindSeatNo] 가 `null` 이면 아무도 스몰 블라인드를 내지 않는다(dead small blind). */
     data class HandPositions(val buttonSeatNo: Int, val smallBlindSeatNo: Int?, val bigBlindSeatNo: Int) {
@@ -281,6 +338,19 @@ class HoldemTable private constructor(
             val seat = seats[seatNo] ?: error("점유되지 않은 좌석에 스택을 쓸 수 없다: seatNo=$seatNo, occupied=${seats.keys.sorted()}")
             seat.applyStack(stack)
         }
+    }
+
+    /**
+     * [seatNos] 중 스택이 0 인 좌석을 일으켜 세우고(0칩 자동 기립) 기립한 좌석을 돌려준다 — 9자리가 칩 없는 사람에게
+     * 묶이지 않게 한다. [applyStacks] 다음에 불러야 한다. 칩 추가 예약이 있는 좌석은 퇴장 예약이 없으면 남겨 둔다 —
+     * 예약 적용이 채우거나, 못 채우면 그때 기립시킨다. 퇴장 예약이 함께 있으면 퇴장이 이긴다(예약은 좌석과 함께 사라진다).
+     * 돌려줄 칩이 없으므로 지갑 이체·재착석 의무 기록은 호출자 몫이다.
+     */
+    fun standUpBusted(seatNos: Collection<Int>): List<Seat> = seatNos.mapNotNull { seatNo ->
+        val seat = seats[seatNo] ?: return@mapNotNull null
+        if (!seat.stack.isZero() || (seat.chipsReservation != null && !seat.leaveReserved)) return@mapNotNull null
+        seats.remove(seatNo)
+        seat
     }
 
     companion object {
