@@ -79,7 +79,7 @@ class DepositRequest private constructor(
         processedAt = at
     }
 
-    private fun requirePending() {
+    fun requirePending() {
         if (status != DepositRequestStatus.PENDING) {
             throw DepositRequestAlreadyProcessedException("이미 처리된 요청: requestId=$id, status=$status")
         }

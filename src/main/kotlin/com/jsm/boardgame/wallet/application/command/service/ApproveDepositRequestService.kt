@@ -35,6 +35,9 @@ class ApproveDepositRequestService(
         val request = depositRequests.findById(DepositRequestId(command.requestId))
             ?: throw DepositRequestNotFoundException("승인하려는 충전 요청을 찾을 수 없음: requestId=${command.requestId}")
 
+        // 이미 처리된 요청은 금액이 잘못돼도 ALREADY_PROCESSED 가 먼저다(409). approve 안의 검사와 같은 규칙이다.
+        request.requirePending()
+
         // 음수는 Money.of 가 AMOUNT_NEGATIVE 로 던지지만 승인 금액 오류의 계약은 DEPOSIT_AMOUNT_INVALID 다.
         val creditedAmount = command.creditedAmount?.let {
             if (it < 0L) throw InvalidDepositAmountException("승인 금액이 유효하지 않음: creditedAmount=$it")

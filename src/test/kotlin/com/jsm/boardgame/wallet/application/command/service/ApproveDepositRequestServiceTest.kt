@@ -141,6 +141,20 @@ class ApproveDepositRequestServiceTest {
     }
 
     @Test
+    fun `이미 처리된 요청은 금액이 음수·0·100원 배수 아님이어도 DEPOSIT_REQUEST_ALREADY_PROCESSED 가 먼저다`() {
+        val request = pendingRequest()
+        request.approve(UserId(1), Money.of(10_000), Instant.now())
+        depositRequests.save(request)
+
+        listOf(-1_000L, 0L, 950L).forEach { invalid ->
+            val e = assertFailsWith<DepositRequestAlreadyProcessedException> {
+                service.approve(ApproveDepositRequestCommand(requestId = request.id!!.value, adminUserId = 2, creditedAmount = invalid))
+            }
+            assertEquals(WalletErrorCode.DEPOSIT_REQUEST_ALREADY_PROCESSED, e.errorCode)
+        }
+    }
+
+    @Test
     fun `없는 요청이면 DEPOSIT_REQUEST_NOT_FOUND`() {
         val e = assertFailsWith<DepositRequestNotFoundException> {
             service.approve(ApproveDepositRequestCommand(requestId = 999, adminUserId = 1, creditedAmount = null))
