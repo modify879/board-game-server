@@ -1,12 +1,10 @@
 package com.jsm.boardgame.common.web
 
-import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.IntegrationTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.core.annotation.Order
@@ -29,9 +27,8 @@ import org.springframework.web.bind.annotation.RestController
  * 실제로 어떻게 동작하는지 박제한다. 운영 코드는 이 경계에서 원시 타입을 유지한다 — 이 테스트는 그 근거다.
  * 프레임워크 동작이 바뀌어 이 테스트가 깨지면 그 결정을 다시 볼 때다.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
-@Import(TestcontainersConfiguration::class, ValueClassBindingIntegrationTest.SpikeConfig::class)
+@IntegrationTest
+@Import(ValueClassBindingIntegrationTest.SpikeConfig::class)
 class ValueClassBindingIntegrationTest {
 
     @JvmInline

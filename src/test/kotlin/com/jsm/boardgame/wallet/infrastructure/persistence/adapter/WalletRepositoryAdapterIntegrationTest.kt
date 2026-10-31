@@ -1,7 +1,7 @@
 package com.jsm.boardgame.wallet.infrastructure.persistence.adapter
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.domain.model.Nickname
 import com.jsm.boardgame.user.domain.model.PasswordHash
 import com.jsm.boardgame.user.domain.model.User
@@ -17,8 +17,6 @@ import com.jsm.boardgame.wallet.domain.model.WalletId
 import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -31,8 +29,7 @@ import kotlin.test.assertFailsWith
  * DB 제약이 실제로 잡고 어댑터가 번역하는가다. 그러려면 도메인 검사를 우회해야 하므로,
  * 검증하지 않는 `reconstitute` 로 음수 잔액 지갑을 직접 만들어 저장한다.
  */
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class WalletRepositoryAdapterIntegrationTest {
 
     @Autowired

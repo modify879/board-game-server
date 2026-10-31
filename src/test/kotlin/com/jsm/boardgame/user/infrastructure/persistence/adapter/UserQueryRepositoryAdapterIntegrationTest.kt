@@ -1,7 +1,7 @@
 package com.jsm.boardgame.user.infrastructure.persistence.adapter
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.application.query.port.UserQueryRepository
 import com.jsm.boardgame.user.domain.model.Nickname
 import com.jsm.boardgame.user.domain.model.PasswordHash
@@ -9,14 +9,12 @@ import com.jsm.boardgame.user.domain.model.User
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class UserQueryRepositoryAdapterIntegrationTest {
 
     @Autowired
@@ -47,5 +45,23 @@ class UserQueryRepositoryAdapterIntegrationTest {
     @Test
     fun `없는 사용자 id 는 existsById 가 false 를 돌려준다`() {
         assertFalse(userQuery.existsById(-1))
+    }
+
+    @Test
+    fun `탈퇴한 사용자는 조회 경로의 어디에서도 보이지 않는다`() {
+        val nickname = uniqueNickname()
+        val saved = users.save(
+            User.register(Username.of(uniqueUsername()), PasswordHash("hashed-password-value"), Nickname.of(nickname)),
+        )
+        val id = saved.id!!.value
+        assertTrue(userQuery.findProfileById(id) != null)
+
+        saved.withdraw(java.time.Instant.now())
+        users.save(saved)
+
+        assertFalse(userQuery.existsById(id))
+        assertNull(userQuery.findProfileById(id))
+        assertNull(userQuery.findSummaryById(id))
+        assertTrue(userQuery.search("withdrawn-user-$id", org.springframework.data.domain.PageRequest.of(0, 10)).isEmpty)
     }
 }

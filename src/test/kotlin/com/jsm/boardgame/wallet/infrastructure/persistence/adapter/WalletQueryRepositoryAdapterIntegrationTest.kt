@@ -1,7 +1,7 @@
 package com.jsm.boardgame.wallet.infrastructure.persistence.adapter
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.domain.model.Nickname
 import com.jsm.boardgame.user.domain.model.PasswordHash
 import com.jsm.boardgame.user.domain.model.User
@@ -26,8 +26,6 @@ import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import com.jsm.boardgame.wallet.domain.repository.WithdrawalRequestRepository
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 import org.springframework.data.domain.PageRequest
 import java.time.Instant
 import kotlin.test.Test
@@ -40,8 +38,7 @@ import kotlin.test.assertTrue
  * 프로젝션이 올바른 컬럼을 뽑는지, 페이지네이션이 id 내림차순으로 고정되는지,
  * `findByStatus` 의 선택적 조건(null=전체)이 실제로 동작하는지다.
  */
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class WalletQueryRepositoryAdapterIntegrationTest {
 
     @Autowired

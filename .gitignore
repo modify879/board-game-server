@@ -46,3 +46,7 @@ CLAUDE.local.md
 
 ### Kotlin ###
 .kotlin
+
+### 업로드 파일 ###
+/data/
+/data-qa/

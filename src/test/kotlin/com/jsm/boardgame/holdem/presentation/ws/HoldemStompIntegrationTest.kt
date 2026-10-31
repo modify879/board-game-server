@@ -1,11 +1,11 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jayway.jsonpath.JsonPath
 import com.jsm.boardgame.common.error.CommonErrorCode
 import com.jsm.boardgame.common.web.StompSessionRegistry
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.command.usecase.CloseIdleTableCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CloseIdleTableUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
@@ -28,10 +28,7 @@ import com.nimbusds.jose.jwk.source.ImmutableSecret
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.server.LocalServerPort
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
-import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.messaging.simp.stomp.StompFrameHandler
 import org.springframework.messaging.simp.stomp.StompHeaders
@@ -70,9 +67,7 @@ import jakarta.servlet.http.Cookie
  * 않는다. 핸드 시작은 startHandRest() 헬퍼가 StartScheduledHandUseCase 를 직접 불러 결정적으로
  * 일으킨다.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureMockMvc
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class HoldemStompIntegrationTest {
 
     @Autowired

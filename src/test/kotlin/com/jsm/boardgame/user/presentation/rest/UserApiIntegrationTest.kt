@@ -1,20 +1,18 @@
 package com.jsm.boardgame.user.presentation.rest
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
 import com.jayway.jsonpath.JsonPath
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.presentation.config.ProfileImageProperties
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
-import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -27,9 +25,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
  * JUnit 은 테스트 메서드 실행 순서를 보장하지 않으므로, "가입 후 조회" 처럼 순서에 의존하는
  * 시나리오는 하나의 테스트 안에서 이어서 수행한다.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class UserApiIntegrationTest {
 
     @Autowired
@@ -242,5 +238,53 @@ class UserApiIntegrationTest {
             .andExpect(jsonPath("$.errorCode").value("REQUEST_INVALID"))
             .andExpect(jsonPath("$.traceId").isNotEmpty())
             .andExpect(jsonPath("$.detail").doesNotExist())
+    }
+
+    private fun changeNickname(nickname: String, accessToken: String?): ResultActions =
+        mockMvc.perform(
+            patch("/api/users/me/nickname")
+                .apply { if (accessToken != null) header("Authorization", "Bearer $accessToken") }
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"nickname":"$nickname"}"""),
+        )
+
+    @Test
+    fun `닉네임을 바꾸면 204 이고 프로필에 반영된다`() {
+        val username = uniqueUsername()
+        val password = "password123"
+        val id = idFromLocation(locationOf(signUp(signUpBody(username = username, password = password)).andExpect(status().isCreated)))
+        val accessToken = login(username, password)
+        val newNickname = uniqueNickname()
+
+        changeNickname(newNickname, accessToken).andExpect(status().isNoContent)
+
+        mockMvc.perform(get("/api/users/$id").header("Authorization", "Bearer $accessToken"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.nickname").value(newNickname))
+    }
+
+    @Test
+    fun `다른 사용자의 닉네임으로 바꾸면 409 와 DUPLICATE_NICKNAME 이다`() {
+        val taken = uniqueNickname()
+        signUp(signUpBody(nickname = taken)).andExpect(status().isCreated)
+        val accessToken = signUpAndLogin()
+
+        changeNickname(taken, accessToken)
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("DUPLICATE_NICKNAME"))
+    }
+
+    @Test
+    fun `형식이 잘못된 닉네임이면 400 이다`() {
+        val accessToken = signUpAndLogin()
+
+        changeNickname(" ", accessToken)
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("NICKNAME_BLANK"))
+    }
+
+    @Test
+    fun `토큰 없이 닉네임을 바꾸면 401 이다`() {
+        changeNickname(uniqueNickname(), null).andExpect(status().isUnauthorized)
     }
 }

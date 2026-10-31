@@ -30,3 +30,11 @@ class DuplicateNicknameException(
 class InvalidUserRoleException(
     logMessage: String,
 ) : BusinessException(UserErrorCode.USER_ROLE_INVALID, logMessage)
+
+class UnsupportedProfileImageTypeException(
+    logMessage: String,
+) : BusinessException(UserErrorCode.PROFILE_IMAGE_UNSUPPORTED_TYPE, logMessage)
+
+class ProfileImageTooLargeException(
+    logMessage: String,
+) : BusinessException(UserErrorCode.PROFILE_IMAGE_TOO_LARGE, logMessage)

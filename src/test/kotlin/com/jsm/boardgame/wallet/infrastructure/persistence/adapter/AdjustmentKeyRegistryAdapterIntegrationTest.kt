@@ -1,13 +1,11 @@
 package com.jsm.boardgame.wallet.infrastructure.persistence.adapter
 
-import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.wallet.application.exception.AdjustmentAlreadyAppliedException
 import com.jsm.boardgame.wallet.application.port.AdjustmentKeyRegistry
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
 import com.jsm.boardgame.wallet.domain.model.UserId
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 import java.time.Instant
 import java.util.UUID
 import kotlin.test.Test
@@ -20,8 +18,7 @@ import kotlin.test.assertFailsWith
  * 이 테스트가 잡는다. 이 테이블에는 FK 가 없어(관리자·대상 사용자 존재는 서비스 단의 UserExistence
  * 체크와 fk_wallets_user 가 이미 보장한다) 실제 users 행을 만들 필요가 없다.
  */
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class AdjustmentKeyRegistryAdapterIntegrationTest {
 
     @Autowired

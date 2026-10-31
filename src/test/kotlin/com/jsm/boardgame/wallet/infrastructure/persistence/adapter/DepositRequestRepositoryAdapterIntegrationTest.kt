@@ -1,13 +1,11 @@
 package com.jsm.boardgame.wallet.infrastructure.persistence.adapter
 
-import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.wallet.domain.model.DepositRequest
 import com.jsm.boardgame.wallet.domain.model.DepositRequestStatus
 import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -15,8 +13,7 @@ import kotlin.test.assertEquals
 /**
  * `DepositRequestRepositoryAdapter` 가 저장한 필드를 그대로 왕복시키는지 검증한다.
  */
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class DepositRequestRepositoryAdapterIntegrationTest {
 
     @Autowired

@@ -1,6 +1,6 @@
 package com.jsm.boardgame.holdem.infrastructure.persistence.adapter
 
-import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.holdem.application.port.HandHistoryEntry
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
@@ -11,8 +11,6 @@ import com.jsm.boardgame.holdem.infrastructure.persistence.entity.HandHistoryPla
 import com.jsm.boardgame.holdem.infrastructure.timer.HandHistoryPurger
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 import java.time.Clock
 import java.time.Duration
 import kotlin.test.assertEquals
@@ -20,8 +18,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** 히스토리 어댑터(기록·shown 갱신)와 90일 보관 삭제(FK cascade 포함). 테이블 id 는 다른 테스트와 겹치지 않는 대역을 쓴다. */
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class HandHistoryAdapterIntegrationTest {
 
     @Autowired private lateinit var adapter: HandHistoryAdapter

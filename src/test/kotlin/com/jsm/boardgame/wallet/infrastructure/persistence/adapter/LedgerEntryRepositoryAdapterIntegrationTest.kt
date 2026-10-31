@@ -1,9 +1,9 @@
 package com.jsm.boardgame.wallet.infrastructure.persistence.adapter
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.wallet.infrastructure.persistence.entity.LedgerEntryJpaRepository
 import com.jsm.boardgame.wallet.infrastructure.persistence.entity.toDomain
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.domain.model.Nickname
 import com.jsm.boardgame.user.domain.model.PasswordHash
 import com.jsm.boardgame.user.domain.model.User
@@ -18,15 +18,12 @@ import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /** 저장한 원장 엔트리를 DB 에서 다시 읽어 enum ↔ text 매핑이 양방향으로 맞는지 검증한다. */
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class LedgerEntryRepositoryAdapterIntegrationTest {
 
     @Autowired
