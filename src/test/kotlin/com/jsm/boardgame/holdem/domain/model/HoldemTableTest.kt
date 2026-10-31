@@ -175,6 +175,41 @@ class HoldemTableTest {
     }
 
     @Test
+    fun `칩 추가 예약은 덮어쓰고 취소하며 0 은 CHIP_ADD_OUT_OF_RANGE 로 거부한다`() {
+        val table = newTable()
+        table.sitDown(userId = UserId(1L), buyIn = Chips.of(10_000))
+
+        table.reserveChips(UserId(1L), Chips.of(1_000))
+        table.reserveChips(UserId(1L), Chips.of(2_000))
+        assertEquals(Chips.of(2_000), table.seatAt(1)!!.chipsReservation)
+
+        table.cancelChipsReservation(UserId(1L))
+        assertNull(table.seatAt(1)!!.chipsReservation)
+
+        assertFailsWith<ChipAddOutOfRangeException> { table.reserveChips(UserId(1L), Chips.ZERO) }
+        assertFailsWith<NotSeatedException> { table.reserveChips(UserId(9L), Chips.of(100)) }
+        assertFailsWith<NotSeatedException> { table.cancelChipsReservation(UserId(9L)) }
+    }
+
+    @Test
+    fun `칩 추가 예약 적용은 예약 한도 잔액 중 작은 값을 100 단위로 내림해 더하고 예약을 지운다`() {
+        fun applied(stack: Long, reserved: Long, balance: Long): Pair<Chips, Chips> {
+            val table = newTable()
+            table.sitDown(userId = UserId(1L), buyIn = Chips.of(stack))
+            table.reserveChips(UserId(1L), Chips.of(reserved))
+            val added = table.applyChipsReservation(UserId(1L), balance)
+            assertNull(table.seatAt(1)!!.chipsReservation)
+            return added to table.seatAt(1)!!.stack
+        }
+
+        assertEquals(Chips.of(3_000) to Chips.of(13_000), applied(stack = 10_000, reserved = 3_000, balance = 50_000))
+        assertEquals(Chips.of(4_000) to Chips.of(20_000), applied(stack = 16_000, reserved = 5_000, balance = 50_000)) // 한도(20,000)
+        assertEquals(Chips.of(700) to Chips.of(10_700), applied(stack = 10_000, reserved = 3_000, balance = 799)) // 잔액을 100 단위로 내림
+        assertEquals(Chips.ZERO to Chips.of(10_000), applied(stack = 10_000, reserved = 3_000, balance = 99))
+        assertEquals(Chips.ZERO to Chips.of(30_000), applied(stack = 30_000, reserved = 3_000, balance = 50_000)) // 이미 한도 초과
+    }
+
+    @Test
     fun `앉은 적 없는 사용자의 standUp 은 NOT_SEATED 로 거부된다`() {
         val table = newTable()
         val e = assertFailsWith<NotSeatedException> { table.standUp(UserId(1L)) }

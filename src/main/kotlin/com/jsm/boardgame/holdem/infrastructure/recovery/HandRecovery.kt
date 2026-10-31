@@ -1,6 +1,8 @@
 package com.jsm.boardgame.holdem.infrastructure.recovery
 
 import com.jsm.boardgame.holdem.domain.model.UserId
+import com.jsm.boardgame.holdem.application.command.usecase.ApplyChipsReservationsCommand
+import com.jsm.boardgame.holdem.application.command.usecase.ApplyChipsReservationsUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.ResumeHandCommand
@@ -73,6 +75,9 @@ import java.util.concurrent.atomic.AtomicLong
  * 없다, 어차피 상대 시간이라 처음부터 다시 재도 된다. 핸드가 있으면 그 핸드가 끝날 때
  * `HandSettler` 가 걸거나, 이미 진행 중인 복구 흐름이 처리한다.
  *
+ * 핸드 없는 테이블에 칩 추가 예약이 남은 좌석이 있으면 그 적용을 테이블 실행기에 다시 올린다 — 정산 커밋 뒤 적용 전에 죽었다면
+ * `ChipsReservationsDue` 는 인메모리라 사라졌고, 0칩 좌석은 후보가 아니라 아래 카운트다운 판단에도 안 잡힌다. 적용이 칩을 채우면 카운트다운은 그쪽이 다시 건다.
+ *
  * 착석 대기열은 인메모리(JoinQueue)라 여기서 훑을 게 없다 — 좌석 배정 전이라 재시작하면
  * 그냥 비워지는 게 맞는 동작이다(돈이 걸려 있지 않다).
  */
@@ -88,6 +93,7 @@ class HandRecovery(
     private val nextHandCountdown: NextHandCountdown,
     private val tableExecutor: TableExecutor,
     private val userConnections: UserConnections,
+    private val applyChipsReservationsUseCase: ApplyChipsReservationsUseCase,
     // turn-timeout·connection-timeout 과 기본값이 같아도 설정을 공유하지 않는다 — 재는 대상이 다르다(그 둘은 개별 사용자·차례, 이건 테이블 전체의 복구 유예다).
     @Value("\${app.holdem.recovery-timeout}") private val recoveryTimeout: Duration,
 ) {
@@ -120,6 +126,10 @@ class HandRecovery(
         for (tableId in tables.findAllTableIds()) {
             if (handStore.find(tableId) != null) continue
             val table = tables.findById(tableId) ?: continue
+            if (table.occupiedSeats().any { it.chipsReservation != null }) {
+                tableExecutor.post(tableId) { applyChipsReservationsUseCase.apply(ApplyChipsReservationsCommand(tableId.value)) }
+                log.info("테이블 {} 남은 칩 추가 예약 적용을 다시 올렸습니다.", tableId.value)
+            }
             if (table.candidateSeatNos().size < 2) continue
             nextHandCountdown.restart(tableId)
             log.info("테이블 {} 다음 핸드 카운트다운을 새로 걸었습니다.", tableId.value)

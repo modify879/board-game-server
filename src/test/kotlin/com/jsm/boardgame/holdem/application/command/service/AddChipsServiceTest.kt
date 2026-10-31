@@ -4,8 +4,8 @@ import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.command.usecase.AddChipsCommand
+import com.jsm.boardgame.holdem.application.command.usecase.AddChipsResult
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
-import com.jsm.boardgame.holdem.application.exception.HandInProgressException
 import com.jsm.boardgame.holdem.application.exception.InsufficientBalanceException
 import com.jsm.boardgame.holdem.application.port.WalletBalance
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
@@ -22,6 +22,7 @@ import org.springframework.context.ApplicationEventPublisher
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -65,19 +66,66 @@ class AddChipsServiceTest {
         assertEquals(HoldemErrorCode.NOT_SEATED, e.errorCode)
     }
 
-    @Test
-    fun `핸드가 진행 중이면 HAND_IN_PROGRESS 이고 지갑을 건드리지 않는다`() {
-        val tableId = seatedTable()
+    private fun startHand(tableId: TableId, vararg seatNos: Int) {
         handStore.save(
             tableId,
-            Hand.start(mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, TestTablePolicy.smallBlind, TestTablePolicy.bigBlind, Shuffler { it }),
+            Hand.start(seatNos.associateWith { Chips.of(10_000) }, buttonSeatNo = seatNos[0], smallBlindSeatNo = seatNos[0], bigBlindSeatNo = seatNos[1], TestTablePolicy.smallBlind, TestTablePolicy.bigBlind, Shuffler { it }),
         )
+    }
+
+    @Test
+    fun `핸드 참가자는 핸드 중에 예약만 걸리고 지갑은 그대로이며 덮어쓴다`() {
+        val tableId = seatedTable()
+        startHand(tableId, 1, 2)
         wallet.balance = 50_000
 
-        val e = assertFailsWith<HandInProgressException> { service.addChips(AddChipsCommand(1, 1_000)) }
+        assertEquals(AddChipsResult.RESERVED, service.addChips(AddChipsCommand(1, 1_000)))
+        assertEquals(AddChipsResult.RESERVED, service.addChips(AddChipsCommand(1, 99_900))) // 한도·잔액은 적용 때 본다
 
-        assertEquals(HoldemErrorCode.HAND_IN_PROGRESS, e.errorCode)
+        val seat = tables.findById(tableId)!!.seatAt(1)!!
+        assertEquals(Chips.of(99_900), seat.chipsReservation)
+        assertEquals(Chips.of(10_000), seat.stack)
         assertTrue(wallet.toGameCalls.isEmpty())
+        val broadcast = events.events.filterIsInstance<HandBroadcastRequested>().first()
+        assertEquals(false, broadcast.handProgressed)
+        assertNotNull(broadcast.hand)
+    }
+
+    @Test
+    fun `핸드 도중 앉아 참가하지 않은 좌석은 핸드 중에도 바로 더한다`() {
+        val tableId = seatedTable() // 좌석 1
+        startHand(tableId, 2, 3) // 좌석 1 은 이번 핸드의 참가자가 아니다
+        wallet.balance = 50_000
+
+        assertEquals(AddChipsResult.ADDED, service.addChips(AddChipsCommand(1, 5_000)))
+
+        val seat = tables.findById(tableId)!!.seatAt(1)!!
+        assertEquals(Chips.of(15_000), seat.stack)
+        assertNull(seat.chipsReservation)
+        assertEquals(1, wallet.toGameCalls.size)
+    }
+
+    @Test
+    fun `핸드 중 칩 단위가 아니면 CHIPS_NOT_UNIT 이고 예약하지 않는다`() {
+        val tableId = seatedTable()
+        startHand(tableId, 1, 2)
+
+        val e = assertFailsWith<com.jsm.boardgame.holdem.domain.exception.InvalidChipsException> {
+            service.addChips(AddChipsCommand(1, 1_050))
+        }
+
+        assertEquals(HoldemErrorCode.CHIPS_NOT_UNIT, e.errorCode)
+        assertNull(tables.findById(tableId)!!.seatAt(1)!!.chipsReservation)
+    }
+
+    @Test
+    fun `핸드 중 0 칩 예약은 CHIP_ADD_OUT_OF_RANGE`() {
+        val tableId = seatedTable()
+        startHand(tableId, 1, 2)
+
+        val e = assertFailsWith<ChipAddOutOfRangeException> { service.addChips(AddChipsCommand(1, 0)) }
+
+        assertEquals(HoldemErrorCode.CHIP_ADD_OUT_OF_RANGE, e.errorCode)
     }
 
     @Test

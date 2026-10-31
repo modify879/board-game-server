@@ -20,6 +20,7 @@ class Seat private constructor(
     awaitingBigBlind: Boolean,
     owesImmediatePost: Boolean,
     leaveReservation: LeaveReservation?,
+    chipsReservation: Chips?,
 ) {
     var stack: Chips = stack
         private set
@@ -45,6 +46,10 @@ class Seat private constructor(
 
     val leaveReserved: Boolean get() = leaveReservation != null
 
+    /** "이 핸드가 끝나면 지갑에서 이만큼 더 가져온다" 예약(요청한 금액). 핸드가 끝난 뒤 한도·잔액으로 줄여 적용하고 지운다. */
+    var chipsReservation: Chips? = chipsReservation
+        private set
+
     /** 스택 증감은 테이블 애그리거트(HoldemTable)를 거친다. */
     internal fun applyStack(newStack: Chips) {
         stack = newStack
@@ -69,6 +74,10 @@ class Seat private constructor(
         leaveReservation = reservation
     }
 
+    internal fun applyChipsReservation(reservation: Chips?) {
+        chipsReservation = reservation
+    }
+
     companion object {
         /** seatNo·buyIn 검증은 HoldemTable 이 한다(블라인드 등 테이블 컨텍스트가 필요해서).
          * postBlindImmediately=true 면 곧바로 참가하되(awaitingBigBlind=false) 다음 핸드에 추가 BB 포스팅을 빚진다(owesImmediatePost=true).
@@ -79,6 +88,7 @@ class Seat private constructor(
                 awaitingBigBlind = !postBlindImmediately,
                 owesImmediatePost = postBlindImmediately,
                 leaveReservation = null,
+                chipsReservation = null,
             )
 
         /** 영속 복원 전용 — 검증하지 않는다. */
@@ -90,6 +100,7 @@ class Seat private constructor(
             awaitingBigBlind: Boolean = false,
             owesImmediatePost: Boolean = false,
             leaveReservation: LeaveReservation? = null,
-        ): Seat = Seat(seatNo, userId, stack, presence, awaitingBigBlind, owesImmediatePost, leaveReservation)
+            chipsReservation: Chips? = null,
+        ): Seat = Seat(seatNo, userId, stack, presence, awaitingBigBlind, owesImmediatePost, leaveReservation, chipsReservation)
     }
 }

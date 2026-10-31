@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.application.command.service
 
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
+import com.jsm.boardgame.holdem.application.event.ChipsReservationsDue
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.HandStore
@@ -35,7 +36,7 @@ import org.springframework.transaction.annotation.Transactional
  * 취소 뒤에는 `HandSettler` 와 같이 다음 핸드 카운트다운을 걸고 참가 요청 처리를 트리거한다 - 안 그러면
  * 테이블이 멈춘다.
  *
- * 퇴장 예약한 좌석은 끝난 핸드와 똑같이 기립시킨다([LeaveReservations]).
+ * 퇴장 예약한 좌석은 끝난 핸드와 똑같이 기립시킨다([LeaveReservations]). 칩 추가 예약은 커밋 후 [ChipsReservationsDue] 로 적용한다.
  *
  * 좌석은 그대로 둔다 - 취소는 핸드를 무르는 것이지 사람을 내보내는 게 아니다. 안 돌아온 사람은
  * 이 서비스가 끝난 뒤 평소의 연결 타이머가 새로 돌면서 퇴장 여부를 가른다.
@@ -79,6 +80,8 @@ class CancelHandService(
             countdown.restart(tableId)
         }
         eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, null))
+        // 칩 추가 예약 적용이 대기열 처리보다 먼저 실행기에 올라가야 한다(발행 순서 = 올리는 순서).
+        eventPublisher.publishEvent(ChipsReservationsDue(tableId))
         eventPublisher.publishEvent(JoinRequestsDue(tableId))
     }
 

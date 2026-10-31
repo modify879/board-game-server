@@ -3,7 +3,10 @@ package com.jsm.boardgame.holdem.presentation.rest
 import com.jsm.boardgame.common.error.AuthenticationRequiredException
 import com.jsm.boardgame.holdem.domain.model.LeaveReservation
 import com.jsm.boardgame.holdem.domain.model.UserId
+import com.jsm.boardgame.holdem.application.command.usecase.AddChipsResult
 import com.jsm.boardgame.holdem.application.command.usecase.AddChipsUseCase
+import com.jsm.boardgame.holdem.application.command.usecase.CancelChipsReservationCommand
+import com.jsm.boardgame.holdem.application.command.usecase.CancelChipsReservationUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.CancelLeaveReservationCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CancelLeaveReservationUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.StandUpCommand
@@ -40,6 +43,7 @@ class HoldemSeatController(
     private val standUpUseCase: StandUpUseCase,
     private val cancelLeaveReservationUseCase: CancelLeaveReservationUseCase,
     private val addChipsUseCase: AddChipsUseCase,
+    private val cancelChipsReservationUseCase: CancelChipsReservationUseCase,
     private val mySeatQueryService: MySeatQueryService,
     private val buyInQueryService: BuyInQueryService,
     private val tableExecutor: TableExecutor,
@@ -75,14 +79,28 @@ class HoldemSeatController(
     }
 
     // 칩 추가도 기립처럼 tableId 없이 유저로 테이블을 찾아 그 실행기에서 돌린다(앉아 있지 않으면 NotSeatedException).
+    // 핸드 참가자가 핸드 중에 부르면 예약이고 202 다(아직 스택에 더해지지 않았다).
     @PostMapping("/seat/chips")
+    fun addChips(@AuthenticationPrincipal jwt: Jwt, @RequestBody request: AddChipsRequest): ResponseEntity<Void> {
+        val userId = jwt.requireUserId()
+        val result = tableExecutor.callForUser(
+            tables, UserId(userId),
+            onNotSeated = { throw NotSeatedException("어느 테이블에도 앉아 있지 않은 사용자입니다: userId=$userId") },
+        ) { addChipsUseCase.addChips(request.toCommand(userId)) }
+        return when (result) {
+            AddChipsResult.ADDED -> ResponseEntity.noContent().build()
+            AddChipsResult.RESERVED -> ResponseEntity.accepted().build()
+        }
+    }
+
+    @DeleteMapping("/seat/chips-reservation")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    fun addChips(@AuthenticationPrincipal jwt: Jwt, @RequestBody request: AddChipsRequest) {
+    fun cancelChipsReservation(@AuthenticationPrincipal jwt: Jwt) {
         val userId = jwt.requireUserId()
         tableExecutor.callForUser(
             tables, UserId(userId),
             onNotSeated = { throw NotSeatedException("어느 테이블에도 앉아 있지 않은 사용자입니다: userId=$userId") },
-        ) { addChipsUseCase.addChips(request.toCommand(userId)) }
+        ) { cancelChipsReservationUseCase.cancel(CancelChipsReservationCommand(userId)) }
     }
 
     // 테이블 생성 화면용 — 테이블이 없으니 기본 블라인드 기준이다. 응답은 /tables/{id}/buy-in 과 같다.

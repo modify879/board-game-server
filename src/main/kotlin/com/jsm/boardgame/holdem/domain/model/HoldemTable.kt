@@ -114,6 +114,38 @@ class HoldemTable private constructor(
         seat.applyLeaveReservation(null)
     }
 
+    /** 핸드가 끝나면 지갑에서 [amount] 만큼 가져오겠다는 예약. 이미 있으면 덮어쓴다. 한도·잔액은 적용 때 본다. */
+    fun reserveChips(userId: UserId, amount: Chips) {
+        val seat = seatOf(userId) ?: throw NotSeatedException("이 테이블에 앉아 있지 않은 사용자입니다: userId=$userId")
+        if (!amount.isPositive()) {
+            throw ChipAddOutOfRangeException("칩 추가 예약은 0 초과여야 합니다: amount=$amount")
+        }
+        seat.applyChipsReservation(amount)
+    }
+
+    /** 칩 추가 예약을 푼다. 예약이 없었으면 아무 일도 없다. */
+    fun cancelChipsReservation(userId: UserId) {
+        val seat = seatOf(userId) ?: throw NotSeatedException("이 테이블에 앉아 있지 않은 사용자입니다: userId=$userId")
+        seat.applyChipsReservation(null)
+    }
+
+    /**
+     * 칩 추가 예약을 적용한다 — min(예약, [maxStack] − 스택, [walletBalance]) 를 [CHIP_UNIT] 으로 내림해 스택에 더하고,
+     * 예약은 항상 지운다. 더한 금액을 돌려주며(0 이면 아무것도 안 더했다) 지갑 이체는 호출자가 한다.
+     * 핸드 진행 중에는 부르면 안 된다 — 호출 위치(ApplyChipsReservationService)가 보장한다.
+     */
+    fun applyChipsReservation(userId: UserId, walletBalance: Long): Chips {
+        val seat = seatOf(userId) ?: throw NotSeatedException("이 테이블에 앉아 있지 않은 사용자입니다: userId=$userId")
+        val reserved = seat.chipsReservation ?: return Chips.ZERO
+        seat.applyChipsReservation(null)
+        val room = maxStack().amount - seat.stack.amount
+        val raw = minOf(reserved.amount, room, walletBalance)
+        if (raw < CHIP_UNIT) return Chips.ZERO
+        val amount = Chips.of(raw / CHIP_UNIT * CHIP_UNIT)
+        seat.applyStack(seat.stack + amount)
+        return amount
+    }
+
     fun markPresence(userId: UserId, presence: SeatPresence) {
         val seat = seatOf(userId) ?: throw NotSeatedException("이 테이블에 앉아 있지 않은 사용자입니다: userId=$userId")
         seat.applyPresence(presence)

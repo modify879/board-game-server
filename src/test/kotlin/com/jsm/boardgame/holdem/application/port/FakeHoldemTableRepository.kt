@@ -1,6 +1,7 @@
 package com.jsm.boardgame.holdem.application.port
 
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.Seat
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
@@ -60,6 +61,11 @@ class FakeCopyingHoldemTableRepository : HoldemTableRepository {
             name = table.name,
             policy = table.policy,
             buttonSeatNo = table.buttonSeatNo,
-            seats = table.occupiedSeats().associateBy { it.seatNo },
+            seats = table.occupiedSeats().associate {
+                it.seatNo to Seat.reconstitute(
+                    it.seatNo, it.userId, it.stack, it.presence, it.awaitingBigBlind, it.owesImmediatePost,
+                    it.leaveReservation, it.chipsReservation,
+                )
+            },
         )
 }

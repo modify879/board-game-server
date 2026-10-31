@@ -71,7 +71,7 @@ class HandBroadcaster(
             hand ?: return
             for (seatNo in hand.seatNos) {
                 val seat = table.seatAt(seatNo) ?: continue
-                sendPrivate(tableId, seat.userId, privateViewOf(tableId, seatNo, hand, seq, seat.leaveReservation))
+                sendPrivate(tableId, seat.userId, privateViewOf(tableId, seatNo, hand, seq, seat.leaveReservation, seat.chipsReservation))
             }
         } catch (e: Exception) {
             log.error("broadcast failed: tableId={}, seq={}", tableId.value, seq, e)
