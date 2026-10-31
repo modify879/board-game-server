@@ -16,6 +16,9 @@ import org.springframework.beans.factory.annotation.Autowired
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * `UserRepositoryAdapter.save()` 가 DB unique 제약 위반(DataIntegrityViolationException)을
@@ -87,11 +90,35 @@ class UserRepositoryAdapterIntegrationTest {
                 profileImageKey = null,
                 role = "USER",
                 lockedAt = null,
+                withdrawnAt = null,
             ),
         )
 
         val found = users.findByUsername(Username.of(username))
 
         assertEquals(invalidNickname, found?.nickname?.value)
+    }
+
+    @Test
+    fun `탈퇴한 사용자는 findById 와 findByUsername 에서 보이지 않고 사용자명은 계속 쓰인 것으로 센다`() {
+        val username = uniqueUsername()
+        val saved = users.save(newUser(username = username, nickname = uniqueNickname()))
+        saved.withdraw(java.time.Instant.now())
+        users.save(saved)
+
+        assertNull(users.findById(saved.id!!))
+        assertNull(users.findByUsername(Username.of(username)))
+        assertTrue(users.existsByUsername(Username.of(username)))
+    }
+
+    @Test
+    fun `탈퇴하면 닉네임이 반납돼 다른 사용자가 그 닉네임으로 가입할 수 있다`() {
+        val nickname = uniqueNickname()
+        val saved = users.save(newUser(username = uniqueUsername(), nickname = nickname))
+        saved.withdraw(java.time.Instant.now())
+        users.save(saved)
+
+        assertFalse(users.existsByNickname(Nickname.of(nickname)))
+        users.save(newUser(username = uniqueUsername(), nickname = nickname))
     }
 }

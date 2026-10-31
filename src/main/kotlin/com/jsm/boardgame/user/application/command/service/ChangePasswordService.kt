@@ -1,11 +1,8 @@
 package com.jsm.boardgame.user.application.command.service
 
-import com.jsm.boardgame.common.error.BusinessException
 import com.jsm.boardgame.user.application.command.usecase.AuthTokens
 import com.jsm.boardgame.user.application.command.usecase.ChangePasswordCommand
 import com.jsm.boardgame.user.application.command.usecase.ChangePasswordUseCase
-import com.jsm.boardgame.user.application.exception.AccountLockedException
-import com.jsm.boardgame.user.application.exception.CurrentPasswordMismatchException
 import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
@@ -24,14 +21,10 @@ import java.time.Duration
 import java.time.Instant
 
 /**
- * 현재 비밀번호를 다시 확인한 뒤 바꾸고, 세션을 새 토큰으로 갈아끼운다.
+ * 현재 비밀번호를 다시 확인([CurrentPasswordVerifier])한 뒤 바꾸고, 세션을 새 토큰으로 갈아끼운다.
  *
  * `LoginService` 처럼 트랜잭션을 열지 않는다 — DB 는 `findById`(읽기)와 `save`(saveAndFlush, 반환 시 커밋)뿐이고
  * 나머지는 Redis 라서 DB 커넥션을 쥔 채 Redis 를 기다리지 않게 한다.
- *
- * 현재 비밀번호 틀림은 로그인 실패와 같은 카운터([LoginAttemptLimiter])에 쌓는다 — 로그인 토큰만 훔친 공격자가
- * 이 엔드포인트로 비밀번호를 무제한 추측하지 못하게 한다. 임계에 닿으면 계정을 잠그고 세션을 끝낸다
- * (`LogoutService` 와 같은 순서: 블랙리스트 → 소켓 종료 → clear).
  *
  * 순서와 중간 실패 시 남는 상태(모두 fail-closed):
  * | 단계 | 실패하면 |
@@ -49,9 +42,8 @@ class ChangePasswordService(
     private val sessions: AuthSessionStore,
     private val realtimeConnections: RealtimeConnections,
     private val loginAttemptLimiter: LoginAttemptLimiter,
+    private val verifier: CurrentPasswordVerifier,
     @Value("\${app.jwt.access-token-ttl}") private val accessTokenTtl: Duration,
-    @Value("\${app.auth.login-max-failures}") private val maxFailures: Int,
-    @Value("\${app.auth.login-failure-window}") private val failureWindow: Duration,
     private val clock: Clock,
 ) : ChangePasswordUseCase {
 
@@ -60,25 +52,7 @@ class ChangePasswordService(
         val userId = UserId(command.userId)
         val user = users.findById(userId)
             ?: throw UserNotFoundException("비밀번호를 바꾸려는 사용자를 찾을 수 없음: userId=${command.userId}")
-        if (user.isLocked) {
-            throw AccountLockedException("계정이 잠겨 있습니다: userId=${command.userId}")
-        }
-
-        // 현재 비밀번호의 형식 오류도 불일치로 본다 — 형식 규칙이 응답으로 새지 않게 한다.
-        val currentMatches = try {
-            passwordHasher.matches(RawPassword.of(command.currentPassword), user.passwordHash)
-        } catch (e: BusinessException) {
-            false
-        }
-        if (!currentMatches) {
-            if (loginAttemptLimiter.recordFailure(user.username, maxFailures, failureWindow)) {
-                user.lock(Instant.now(clock))
-                users.save(user)
-                endSession(userId)
-                throw AccountLockedException("현재 비밀번호 실패 누적으로 계정이 잠겼습니다: userId=${command.userId}")
-            }
-            throw CurrentPasswordMismatchException("현재 비밀번호가 일치하지 않습니다: userId=${command.userId}")
-        }
+        verifier.verify(user, command.currentPassword)
 
         user.changePassword(passwordHasher.hash(newPassword))
         users.save(user)
@@ -100,14 +74,6 @@ class ChangePasswordService(
             accessTokenExpiresAt = tokens.accessTokenExpiresAt,
             refreshTokenExpiresAt = tokens.refreshTokenExpiresAt,
         )
-    }
-
-    private fun endSession(userId: UserId) {
-        sessions.currentAccessTokenId(userId)?.let { accessTokenId ->
-            sessions.blacklistAccessToken(accessTokenId, Instant.now(clock).plus(accessTokenTtl))
-            realtimeConnections.closeAllOf(userId)
-        }
-        sessions.clear(userId)
     }
 
     companion object {

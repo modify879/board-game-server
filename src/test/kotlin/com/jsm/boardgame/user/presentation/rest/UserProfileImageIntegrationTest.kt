@@ -1,20 +1,15 @@
 package com.jsm.boardgame.user.presentation.rest
 
 import com.jayway.jsonpath.JsonPath
-import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
-import org.springframework.context.annotation.Import
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
 import org.springframework.mock.web.MockMultipartFile
-import org.springframework.test.context.DynamicPropertyRegistry
-import org.springframework.test.context.DynamicPropertySource
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
@@ -25,23 +20,9 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.net.URI
-import java.nio.file.Files
-import java.nio.file.Path
 
-@SpringBootTest
-@AutoConfigureMockMvc
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class UserProfileImageIntegrationTest {
-
-    companion object {
-        private val storageDir: Path = Files.createTempDirectory("profile-images-test")
-
-        @JvmStatic
-        @DynamicPropertySource
-        fun properties(registry: DynamicPropertyRegistry) {
-            registry.add("app.profile-image.storage-dir") { storageDir.toString() }
-        }
-    }
 
     @Autowired
     private lateinit var mockMvc: MockMvc

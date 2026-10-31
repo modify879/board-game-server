@@ -7,5 +7,6 @@ import org.springframework.data.domain.Pageable
 
 interface WithdrawalRequestQueryRepository {
     fun findByUserId(userId: Long, pageable: Pageable): Page<WithdrawalRequestView>
+    fun existsPendingByUserId(userId: Long): Boolean
     fun findByStatus(status: WithdrawalRequestStatus?, pageable: Pageable): Page<WithdrawalRequestView>
 }

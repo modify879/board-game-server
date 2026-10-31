@@ -32,6 +32,18 @@ class WithdrawalRequestQueryRepositoryAdapter(
                 .orderBy(path(WithdrawalRequestJpaEntity::id).desc())
         }
 
+    override fun existsPendingByUserId(userId: Long): Boolean =
+        jpa.findAll {
+            select(path(WithdrawalRequestJpaEntity::id))
+                .from(entity(WithdrawalRequestJpaEntity::class))
+                .where(
+                    and(
+                        path(WithdrawalRequestJpaEntity::userId).eq(userId),
+                        path(WithdrawalRequestJpaEntity::status).eq(WithdrawalRequestStatus.PENDING.name),
+                    ),
+                )
+        }.isNotEmpty()
+
     override fun findByStatus(status: WithdrawalRequestStatus?, pageable: Pageable): Page<WithdrawalRequestView> =
         jpa.findPage(pageable) {
             selectNew<WithdrawalRequestView>(

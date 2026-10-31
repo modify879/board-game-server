@@ -93,9 +93,14 @@ class ChangePasswordServiceTest {
     private val limiter = ChangePwFakeLimiter()
     private val realtime = ChangePwFakeRealtime()
     private val sessions = ChangePwFakeSessions()
+    private val hasher = ChangePwFakeHasher()
+    private val verifier = CurrentPasswordVerifier(
+        users, hasher, limiter, LogoutService(sessions, realtime, Duration.ofMinutes(30), Clock.systemUTC()),
+        5, Duration.ofMinutes(15), Clock.systemUTC(),
+    )
     private val service = ChangePasswordService(
-        users, ChangePwFakeHasher(), ChangePwFakeIssuer(), sessions, realtime, limiter,
-        Duration.ofMinutes(30), 5, Duration.ofMinutes(15), Clock.systemUTC(),
+        users, hasher, ChangePwFakeIssuer(), sessions, realtime, limiter, verifier,
+        Duration.ofMinutes(30), Clock.systemUTC(),
     )
 
     private fun seed(locked: Boolean = false) {

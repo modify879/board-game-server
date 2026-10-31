@@ -6,15 +6,18 @@ import com.jsm.boardgame.user.application.command.usecase.ChangePasswordUseCase
 import com.jsm.boardgame.user.application.command.usecase.ChangeProfileImageCommand
 import com.jsm.boardgame.user.application.command.usecase.ChangeProfileImageUseCase
 import com.jsm.boardgame.user.application.command.usecase.RemoveProfileImageUseCase
+import com.jsm.boardgame.user.application.command.usecase.WithdrawUseCase
 import com.jsm.boardgame.user.application.command.usecase.SignUpUseCase
 import com.jsm.boardgame.user.application.query.service.UserQueryService
 import com.jsm.boardgame.user.presentation.config.ProfileImageUrlResolver
 import com.jsm.boardgame.user.presentation.rest.request.ChangeNicknameRequest
 import com.jsm.boardgame.user.presentation.rest.request.ChangePasswordRequest
 import com.jsm.boardgame.user.presentation.rest.request.SignUpRequest
+import com.jsm.boardgame.user.presentation.rest.request.WithdrawRequest
 import com.jsm.boardgame.user.presentation.rest.response.ProfileImageResponse
 import com.jsm.boardgame.user.presentation.rest.response.TokenResponse
 import com.jsm.boardgame.user.presentation.rest.response.UserProfileResponse
+import org.springframework.http.HttpHeaders
 import org.springframework.http.ResponseEntity
 import org.springframework.http.MediaType
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -32,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
 import java.net.URI
 import java.time.Clock
+import java.time.Duration
 
 @RestController
 @RequestMapping("/api/users")
@@ -41,6 +45,7 @@ class UserController(
     private val changePasswordUseCase: ChangePasswordUseCase,
     private val changeProfileImageUseCase: ChangeProfileImageUseCase,
     private val removeProfileImageUseCase: RemoveProfileImageUseCase,
+    private val withdrawUseCase: WithdrawUseCase,
     private val userQueryService: UserQueryService,
     private val profileImageUrlResolver: ProfileImageUrlResolver,
     private val clock: Clock,
@@ -87,6 +92,17 @@ class UserController(
     fun removeProfileImage(@AuthenticationPrincipal jwt: Jwt): ResponseEntity<Void> {
         removeProfileImageUseCase.remove(userIdOf(jwt))
         return ResponseEntity.noContent().build()
+    }
+
+    @PostMapping("/me/withdrawal")
+    fun withdraw(
+        @AuthenticationPrincipal jwt: Jwt,
+        @RequestBody request: WithdrawRequest,
+    ): ResponseEntity<Void> {
+        withdrawUseCase.withdraw(request.toCommand(userIdOf(jwt)))
+        return ResponseEntity.noContent()
+            .header(HttpHeaders.SET_COOKIE, refreshTokenCookie("", Duration.ZERO).toString())
+            .build()
     }
 
     private fun userIdOf(jwt: Jwt): Long =

@@ -14,6 +14,7 @@ class UserQueryRepositoryAdapter(
     private val jpa: UserJpaRepository,
 ) : UserQueryRepository {
 
+    // 탈퇴한 사용자는 조회 경로에서도 보이지 않는다(withdrawnAt IS NULL).
     // path/entity/selectNew/eq 는 findAll 에 전달되는 람다의 리시버(Jpql)가 제공하는
     // 멤버(확장) 함수라 별도 import 없이 쓸 수 있다.
     override fun findProfileById(id: Long): UserProfile? =
@@ -24,14 +25,14 @@ class UserQueryRepositoryAdapter(
                 path(UserJpaEntity::nickname),
                 path(UserJpaEntity::profileImageKey),
             ).from(entity(UserJpaEntity::class))
-                .where(path(UserJpaEntity::id).eq(id))
+                .where(and(path(UserJpaEntity::id).eq(id), path(UserJpaEntity::withdrawnAt).isNull()))
         }.firstOrNull()
 
     override fun existsById(id: Long): Boolean =
         jpa.findAll {
             select(path(UserJpaEntity::id))
                 .from(entity(UserJpaEntity::class))
-                .where(path(UserJpaEntity::id).eq(id))
+                .where(and(path(UserJpaEntity::id).eq(id), path(UserJpaEntity::withdrawnAt).isNull()))
         }.firstOrNull() != null
 
     override fun findSummaryById(id: Long): UserSummary? =
@@ -43,7 +44,7 @@ class UserQueryRepositoryAdapter(
                 path(UserJpaEntity::role),
                 path(UserJpaEntity::lockedAt),
             ).from(entity(UserJpaEntity::class))
-                .where(path(UserJpaEntity::id).eq(id))
+                .where(and(path(UserJpaEntity::id).eq(id), path(UserJpaEntity::withdrawnAt).isNull()))
         }.firstOrNull()
 
     // LIKE 의 와일드카드(% _)와 이스케이프 문자(\)는 사용자 입력이므로 리터럴로 만든다.
@@ -64,6 +65,7 @@ class UserQueryRepositoryAdapter(
                             lower(path(UserJpaEntity::nickname)).like(it, '\\'),
                         )
                     },
+                    path(UserJpaEntity::withdrawnAt).isNull(),
                 )
                 .orderBy(path(UserJpaEntity::id).desc())
         }

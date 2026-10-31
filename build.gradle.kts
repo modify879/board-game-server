@@ -74,6 +74,8 @@ tasks.withType<Test> {
     // (HikariDataSource.idleTimeout 은 long 밀리초라 "10s" 가 아니라 숫자로 준다)
     systemProperty("spring.datasource.hikari.minimum-idle", "1")
     systemProperty("spring.datasource.hikari.idle-timeout", "10000")
+    // 프로필 이미지 업로드 테스트가 ./data 를 더럽히지 않게 한다 — 테스트 전체 값이라 컨텍스트 키를 늘리지 않게 systemProperty 로 준다
+    systemProperty("app.profile-image.storage-dir", layout.buildDirectory.dir("test-profile-images").get().asFile.absolutePath)
     // HandSimulationTest 의 반복 횟수·단일 시드 재생. gradle 은 -D 를 테스트 JVM 으로 넘기지 않는다.
     listOf("holdem.sim.hands", "holdem.sim.seed").forEach { key ->
         System.getProperty(key)?.let { systemProperty(key, it) }
