@@ -32,6 +32,7 @@ private class IdleSweeperFakeQueries : HoldemTableQueryRepository {
     override fun findEmptyTableIds(): List<Long> = emptyIds
     override fun findPolicyOf(tableId: Long): TablePolicyView? = throw UnsupportedOperationException()
     override fun existsHandInProgress(tableId: Long): Boolean = throw UnsupportedOperationException()
+    override fun findTableIdsWithHandInProgress(tableIds: Collection<Long>): Set<Long> = throw UnsupportedOperationException()
 }
 
 private class IdleSweeperFakeCloseUseCase : CloseIdleTableUseCase {

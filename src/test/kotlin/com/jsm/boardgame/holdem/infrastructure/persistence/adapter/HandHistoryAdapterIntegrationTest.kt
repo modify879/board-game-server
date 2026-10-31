@@ -68,4 +68,29 @@ class HandHistoryAdapterIntegrationTest {
         assertEquals(emptyList(), players.findAll().filter { it.handId == old.id })
         assertEquals(1, players.findAll().count { it.handId == fresh.id })
     }
+
+    @Test
+    fun `markShown 은 히스토리가 없거나 그 사용자가 없는 핸드면 아무 일도 하지 않는다`() {
+        adapter.markShown(TableId(7_000_000_003L), UserId(11))
+
+        val tableId = 7_000_000_004L
+        adapter.record(entry(tableId))
+        adapter.markShown(TableId(tableId), UserId(999))
+
+        val handId = hands.findAll().single { it.tableId == tableId }.id
+        assertFalse(players.findAll().filter { it.handId == handId }.any { it.shown })
+    }
+
+    @Test
+    fun `보관 기간이 지난 핸드는 배치 크기를 넘어도 모두 지운다`() {
+        val tableId = 7_000_000_005L
+        val endedAt = clock.instant().minus(Duration.ofDays(91))
+        val saved = hands.saveAll(List(501) { HandHistoryJpaEntity(tableId = tableId, endedAt = endedAt, buttonSeatNo = 1, board = "") })
+        players.save(HandHistoryPlayerJpaEntity(handId = saved.last().id, userId = 11, seatNo = 1, startingStack = 1, endingStack = 1, payout = 0, holeCards = "As Ah", shown = false))
+
+        purger.purge()
+
+        assertEquals(0, hands.findAll().count { it.tableId == tableId })
+        assertEquals(emptyList(), players.findAll().filter { it.handId == saved.last().id })
+    }
 }

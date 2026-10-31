@@ -49,6 +49,13 @@ class HoldemTableQueryRepositoryAdapter(
                 .where(path(HandInProgressJpaEntity::tableId).eq(tableId))
         }.isNotEmpty()
 
+    override fun findTableIdsWithHandInProgress(tableIds: Collection<Long>): Set<Long> =
+        if (tableIds.isEmpty()) emptySet()
+        else handJpa.findAll {
+            select(path(HandInProgressJpaEntity::tableId)).from(entity(HandInProgressJpaEntity::class))
+                .where(path(HandInProgressJpaEntity::tableId).`in`(tableIds))
+        }.filterNotNull().toSet()
+
     // 집계 JDSL(count + groupBy + join) 선례가 이 저장소에 없어, 그 문법을 추측하는 대신
     // 페이지당 2번의 조회로 간다: 테이블 페이지 하나 + 그 페이지의 테이블 id 들로 좌석을 한 번에
     // 묶어 세는 것. N+1 은 아니다(페이지 크기와 무관하게 쿼리 2개).

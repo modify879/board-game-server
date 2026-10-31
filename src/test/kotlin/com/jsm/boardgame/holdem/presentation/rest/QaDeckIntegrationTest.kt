@@ -50,7 +50,7 @@ import org.springframework.transaction.support.TransactionTemplate
 @IntegrationTest
 @ActiveProfiles("qa")
 @TestPropertySource(
-    properties = ["app.holdem.turn-timeout=1h", "app.holdem.idle-table-ttl=1h", "spring.docker.compose.enabled=false"],
+    properties = ["app.holdem.turn-timeout=1h", "app.holdem.idle-table-ttl=1h"],
 )
 class QaDeckIntegrationTest {
 
@@ -184,5 +184,13 @@ class QaDeckIntegrationTest {
                 .andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.errorCode").value("REQUEST_INVALID"))
         }
+    }
+
+    @Test
+    fun `없는 테이블에는 덱을 고정할 수 없다 - 404 TABLE_NOT_FOUND`() {
+        val (_, adminToken) = signUpAndLogin(admin = true)
+        authPost("/api/admin/qa/holdem/tables/987654321/next-deck", adminToken, """{"board":["2c","3c","4c"]}""")
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.errorCode").value("TABLE_NOT_FOUND"))
     }
 }
