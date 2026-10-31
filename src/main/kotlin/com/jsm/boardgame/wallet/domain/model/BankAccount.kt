@@ -8,6 +8,14 @@ class BankAccount private constructor(
     val accountHolder: String,
 ) {
 
+    override fun equals(other: Any?): Boolean =
+        other is BankAccount &&
+            bankName == other.bankName &&
+            accountNumber == other.accountNumber &&
+            accountHolder == other.accountHolder
+
+    override fun hashCode(): Int = 31 * (31 * bankName.hashCode() + accountNumber.hashCode()) + accountHolder.hashCode()
+
     override fun toString(): String {
         val maskedHolder = "*".repeat(accountHolder.codePointCount(0, accountHolder.length))
         val last4 = accountNumber.takeLast(4)

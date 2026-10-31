@@ -12,15 +12,16 @@ import org.springframework.security.oauth2.jwt.Jwt
  * 더 이상 유효하지 않다. 표준 검증 파이프라인(`JwtDecoder`) 안에 넣어야 요청마다
  * 별도 필터로 같은 예외 처리를 다시 만들지 않아도 된다.
  *
- * jti(`jwt.id`)로 [AuthSessionStore.isAccessTokenBlacklisted] 를 조회한다.
+ * jti(`jwt.id`)로 [AuthSessionStore.isAccessTokenBlacklisted] 를 조회한다. jti 가 없으면 거부한다.
  */
 class JwtBlacklistValidator(
     private val sessions: AuthSessionStore,
 ) : OAuth2TokenValidator<Jwt> {
 
     override fun validate(token: Jwt): OAuth2TokenValidatorResult {
+        // jti 가 없는 토큰은 블랙리스트에 올릴 수 없으므로 fail-closed. 우리 발급기는 항상 jti 를 넣는다.
         val tokenId = token.id
-        if (tokenId != null && sessions.isAccessTokenBlacklisted(tokenId)) {
+        if (tokenId == null || sessions.isAccessTokenBlacklisted(tokenId)) {
             return OAuth2TokenValidatorResult.failure(
                 OAuth2Error(OAuth2ErrorCodes.INVALID_TOKEN, "access token is blacklisted", null),
             )

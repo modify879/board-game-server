@@ -25,3 +25,8 @@ class IdempotencyKeyReusedException(
 class IdempotencyKeyConflictException(
     logMessage: String,
 ) : BusinessException(WalletErrorCode.IDEMPOTENCY_KEY_CONFLICT, logMessage)
+
+/** 같은 userId 의 지갑을 동시에 만든 쪽 — WalletRepositoryAdapter 가 uk_wallets_user 위반을 이 예외로 번역한다. */
+class ConcurrentWalletUpdateException(
+    logMessage: String,
+) : BusinessException(WalletErrorCode.CONCURRENT_WALLET_UPDATE, logMessage)

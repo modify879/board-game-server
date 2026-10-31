@@ -23,7 +23,9 @@ import org.springframework.security.web.access.AccessDeniedHandler
  * 세션을 쓰지 않으므로 STATELESS 로 잡는다.
  *
  * CSRF 를 끄는 것은 임시방편이 아니다. Bearer 헤더는 브라우저가 자동으로 실어 보내지 않으므로
- * CSRF 가 원리적으로 성립하지 않는다.
+ * 액세스 토큰 경로에는 CSRF 가 성립하지 않는다. 쿠키가 자동으로 붙는 곳은 리프레시 토큰 쿠키를 쓰는
+ * `/api/auth/refresh` 하나뿐이고, 거기는 `SameSite=Strict`·`Path=/api/auth` 와 CORS 부재(다른 origin 은
+ * 응답을 읽지 못함)로 막는다. 근거는 `docs/decisions/auth.md`.
  *
  * 인가 규칙은 회원가입/로그인/토큰 갱신, `/ws` 이하(인증은 STOMP CONNECT 에서), `GET /api/server-info`, 프로필 이미지 GET(`/images/profiles` 이하) 만
  * permitAll 이고 그 외 전부 인증을 요구한다

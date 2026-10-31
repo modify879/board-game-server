@@ -47,6 +47,9 @@ class HoldemDbTimeoutIntegrationTest {
     @Autowired private lateinit var mockMvc: MockMvc
     @Autowired private lateinit var jdbc: JdbcTemplate
     @Autowired private lateinit var transactionTemplate: TransactionTemplate
+    @Autowired
+    private lateinit var tx: TransactionTemplate
+
     @Autowired private lateinit var walletRepository: WalletRepository
     @Autowired private lateinit var ledgerEntryRepository: LedgerEntryRepository
     @Autowired private lateinit var holdemTableRepository: HoldemTableRepository
@@ -122,7 +125,7 @@ class HoldemDbTimeoutIntegrationTest {
         mockMvc.perform(delete(url).header("Authorization", "Bearer $token"))
 
     private fun fundWallet(userId: Long, amount: Long) {
-        val wallet = walletRepository.findOrOpen(WalletUserId(userId))
+        val wallet = tx.execute { walletRepository.findOrOpen(WalletUserId(userId)) }!!
         val entry = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT,
             amount = Money.of(amount),

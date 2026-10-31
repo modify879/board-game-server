@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 지갑·입금 요청 행의 `PESSIMISTIC_WRITE` 잠금이 실제 동시 요청에서 lost update 를
@@ -45,6 +46,9 @@ class WalletPessimisticLockIntegrationTest {
     private lateinit var approveDepositRequest: ApproveDepositRequestUseCase
 
     @Autowired
+    private lateinit var tx: TransactionTemplate
+
+    @Autowired
     private lateinit var wallets: WalletRepository
 
     @Autowired
@@ -56,7 +60,7 @@ class WalletPessimisticLockIntegrationTest {
         // 지갑을 미리 열어 둔다 — 둘 다 지갑이 없는 채로 동시에 들어오면 findOrOpen 이 각자
         // Wallet.open 을 시도해 uk_wallets_user 위반으로 떨어진다(WalletRepository 문서 참조).
         // 이 테스트가 보려는 건 그 경합이 아니라 이미 있는 지갑 행의 PESSIMISTIC_WRITE 잠금이다.
-        wallets.findOrOpen(UserId(userId))
+        tx.execute { wallets.findOrOpen(UserId(userId)) }!!
         val keyBase = UUID.randomUUID().toString()
         val executor = Executors.newFixedThreadPool(2)
         val readyLatch = CountDownLatch(2)
@@ -86,13 +90,13 @@ class WalletPessimisticLockIntegrationTest {
             executor.shutdown()
         }
 
-        assertEquals(Money.of(2000L), wallets.findByUserId(UserId(userId))!!.balance)
+        assertEquals(Money.of(2000L), tx.execute { wallets.findByUserId(UserId(userId)) }!!.balance)
     }
 
     @Test
     fun `같은 입금 요청을 동시에 두 번 승인하면 하나만 성공하고 잔액은 한 번만 반영된다`() {
         val userId = uniqueUserId(users)
-        val requestId = requestDeposit.request(RequestDepositCommand(userId = userId, amount = 10_000L, idempotencyKey = "key-$userId")).value
+        val requestId = requestDeposit.request(RequestDepositCommand(userId = userId, amount = 10_000L, idempotencyKey = "key-$userId"))
         val executor = Executors.newFixedThreadPool(2)
         val readyLatch = CountDownLatch(2)
         val goLatch = CountDownLatch(1)
@@ -124,7 +128,7 @@ class WalletPessimisticLockIntegrationTest {
         val failure = assertIs<DepositRequestAlreadyProcessedException>(failures.single().exceptionOrNull())
         assertEquals(WalletErrorCode.DEPOSIT_REQUEST_ALREADY_PROCESSED, failure.errorCode)
 
-        assertEquals(Money.of(10_000L), wallets.findByUserId(UserId(userId))!!.balance)
+        assertEquals(Money.of(10_000L), tx.execute { wallets.findByUserId(UserId(userId)) }!!.balance)
     }
 }
 

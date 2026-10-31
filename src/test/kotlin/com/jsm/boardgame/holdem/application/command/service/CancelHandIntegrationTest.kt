@@ -32,6 +32,7 @@ import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 만료 폴드로 핸드 도중 기립한 좌석이 있는 핸드를 취소해도 롤백되지 않고, 그 사용자가 시작 스택 전부를
@@ -46,6 +47,9 @@ class CancelHandIntegrationTest {
     @Autowired private lateinit var cancelHand: CancelHandUseCase
     @Autowired private lateinit var walletTransfer: WalletTransfer
     @Autowired private lateinit var adjustWallet: AdjustWalletBalanceUseCase
+    @Autowired
+    private lateinit var tx: TransactionTemplate
+
     @Autowired private lateinit var wallets: WalletRepository
     @Autowired private lateinit var users: UserRepository
 
@@ -84,12 +88,12 @@ class CancelHandIntegrationTest {
         // SB 는 콜해야 해서 체크할 수 없다 -> 만료 폴드 + 즉시 기립. 잔여 스택은 이미 지갑으로 돌아갔다.
         expireTurn.expire(ExpireTurnCommand(tableId.value, sb))
         assertNull(tables.findById(tableId)!!.seatAt(sb))
-        assertEquals(Money.of(10_000L - table.smallBlind.amount), wallets.findByUserId(WalletUserId(departedUserId))!!.balance)
+        assertEquals(Money.of(10_000L - table.smallBlind.amount), tx.execute { wallets.findByUserId(WalletUserId(departedUserId)) }!!.balance)
 
         cancelHand.cancel(CancelHandCommand(tableId.value))
 
         assertNull(handStore.find(tableId))
-        assertEquals(Money.of(10_000L), wallets.findByUserId(WalletUserId(departedUserId))!!.balance)
+        assertEquals(Money.of(10_000L), tx.execute { wallets.findByUserId(WalletUserId(departedUserId)) }!!.balance)
         val saved = tables.findById(tableId)!!
         assertEquals(2, saved.occupiedSeats().size)
         assertEquals(listOf(10_000L, 10_000L), saved.occupiedSeats().map { it.stack.amount })

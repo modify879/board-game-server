@@ -10,12 +10,16 @@ import org.springframework.beans.factory.annotation.Autowired
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * `WithdrawalRequestRepositoryAdapter` 가 저장한 필드를 그대로 왕복시키는지 검증한다.
  */
 @IntegrationTest
 class WithdrawalRequestRepositoryAdapterIntegrationTest {
+
+    @Autowired
+    private lateinit var tx: TransactionTemplate
 
     @Autowired
     private lateinit var withdrawalRequests: WithdrawalRequestRepository
@@ -28,11 +32,11 @@ class WithdrawalRequestRepositoryAdapterIntegrationTest {
         val request = WithdrawalRequest.request(userId = UserId(System.nanoTime()), amount = 10_000, minAmount = 1_000, bankAccount = bankAccount, idempotencyKey = "key", at = now)
         val saved = withdrawalRequests.save(request)
 
-        val reloaded = requireNotNull(withdrawalRequests.findById(saved.id!!))
+        val reloaded = requireNotNull(tx.execute { withdrawalRequests.findById(saved.id!!) })
         reloaded.reject(adminUserId = UserId(7), reason = "증빙 불충분", at = now)
         withdrawalRequests.save(reloaded)
 
-        val final = requireNotNull(withdrawalRequests.findById(saved.id))
+        val final = requireNotNull(tx.execute { withdrawalRequests.findById(saved.id!!) })
         assertEquals(WithdrawalRequestStatus.REJECTED, final.status)
         assertEquals(10_000L, final.amount.amount)
         assertEquals("국민은행", final.bankAccount.bankName)

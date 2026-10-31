@@ -19,6 +19,7 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 
@@ -70,10 +71,10 @@ interface DepositRequestJpaRepository :
 
     /**
      * 명령 경로 전용 — 잠금 순서(요청 행 → 지갑 행)의 첫 자리다. `findById` 대신 이 메서드를 쓴다.
-     * `@Transactional` 이 필요한 이유는 `WalletJpaRepository.findByUserIdForUpdate` 와 같다.
+     * `@Transactional(MANDATORY)` 인 이유는 `WalletJpaRepository.findByUserIdForUpdate` 와 같다.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Transactional
+    @Transactional(propagation = Propagation.MANDATORY)
     @Query("select e from DepositRequestJpaEntity e where e.id = :id")
     fun findByIdForUpdate(@Param("id") id: Long): DepositRequestJpaEntity?
 

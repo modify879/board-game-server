@@ -2,7 +2,7 @@ package com.jsm.boardgame.user.application.command.service
 
 import com.jsm.boardgame.user.application.command.usecase.ChangeProfileImageCommand
 import com.jsm.boardgame.user.application.port.ProfileImageStorage
-import com.jsm.boardgame.user.domain.exception.ProfileImageTooLargeException
+import com.jsm.boardgame.user.application.exception.ProfileImageTooLargeException
 import com.jsm.boardgame.user.domain.exception.UnsupportedProfileImageTypeException
 import com.jsm.boardgame.user.domain.exception.UserErrorCode
 import com.jsm.boardgame.user.domain.exception.UserNotFoundException
@@ -47,7 +47,7 @@ private class ProfileImageFakeUserRepository : UserRepository {
     }
 }
 
-private class FakeProfileImageStorage : ProfileImageStorage {
+private class ChangeProfileImageFakeProfileImageStorage : ProfileImageStorage {
     val files = mutableSetOf<String>()
     var failOnDelete = false
     private var counter = 0
@@ -67,7 +67,7 @@ private class FakeProfileImageStorage : ProfileImageStorage {
 class ChangeProfileImageServiceTest {
 
     private val users = ProfileImageFakeUserRepository()
-    private val storage = FakeProfileImageStorage()
+    private val storage = ChangeProfileImageFakeProfileImageStorage()
     private val change = ChangeProfileImageService(users, storage)
     private val remove = RemoveProfileImageService(users, storage)
 

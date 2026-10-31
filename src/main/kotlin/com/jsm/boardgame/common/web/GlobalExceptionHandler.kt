@@ -2,7 +2,6 @@ package com.jsm.boardgame.common.web
 
 import com.jsm.boardgame.common.error.BusinessException
 import com.jsm.boardgame.common.error.CommonErrorCode
-import com.jsm.boardgame.common.error.ErrorKind
 import jakarta.servlet.http.HttpServletRequest
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
@@ -16,7 +15,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.context.request.WebRequest
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
-import java.net.URI
 
 /** 모든 오류 응답은 RFC 9457 ProblemDetail 이며 `errorCode` 와 `traceId` 를 갖는다. 계약은 규칙 8. */
 @RestControllerAdvice
@@ -55,7 +53,7 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
         request: HttpServletRequest,
     ): ResponseEntity<ProblemDetail> {
         val status = HttpStatus.INTERNAL_SERVER_ERROR
-        val problemDetail = problemDetail(status, INTERNAL_ERROR, request.requestURI)
+        val problemDetail = problemDetail(status, CommonErrorCode.INTERNAL_ERROR.code, request.requestURI)
 
         // 예외 메시지를 응답에 노출하지 않는다. 추적은 traceId 로 한다.
         log.error("unexpected error: traceId={}", MDC.get(RequestIdFilter.TRACE_ID), e)
@@ -83,7 +81,7 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
         // 이 순서를 뒤집지 말 것 — 뒤집으면 위 경로들에서 errorCode/traceId 가 응답에서 사라지는
         // 버그가 재현된다.
         val response = super.handleExceptionInternal(ex, body, headers, statusCode, request)
-        val errorCode = if (statusCode.is5xxServerError) INTERNAL_ERROR else REQUEST_INVALID
+        val errorCode = (if (statusCode.is5xxServerError) CommonErrorCode.INTERNAL_ERROR else CommonErrorCode.REQUEST_INVALID).code
 
         (response?.body as? ProblemDetail)?.let {
             // 스프링이 채운 영문 detail 을 지운다. 내용은 아래 로그에 traceId 와 함께 남는다.
@@ -97,34 +95,7 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
         return response
     }
 
-    private fun problemDetail(status: HttpStatus, errorCode: String, requestUri: String): ProblemDetail =
-        ProblemDetail.forStatus(status).apply {
-            instance = URI.create(requestUri)
-            setProperty("errorCode", errorCode)
-            setProperty("traceId", MDC.get(RequestIdFilter.TRACE_ID))
-        }
-
-    private fun logByStatus(status: HttpStatusCode, errorCode: String, message: String, e: Exception) {
-        if (status.is5xxServerError) {
-            log.error("error: code={}, status={}, message={}", errorCode, status.value(), message, e)
-        } else {
-            log.warn("error: code={}, status={}, message={}", errorCode, status.value(), message)
-        }
-    }
-
-    private fun ErrorKind.toHttpStatus(): HttpStatus = when (this) {
-        ErrorKind.INVALID -> HttpStatus.BAD_REQUEST
-        ErrorKind.UNAUTHORIZED -> HttpStatus.UNAUTHORIZED
-        ErrorKind.CONFLICT -> HttpStatus.CONFLICT
-        ErrorKind.NOT_FOUND -> HttpStatus.NOT_FOUND
-        ErrorKind.FORBIDDEN -> HttpStatus.FORBIDDEN
-        ErrorKind.UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE
-    }
-
     companion object {
         private val log = LoggerFactory.getLogger(GlobalExceptionHandler::class.java)
-
-        private const val INTERNAL_ERROR = "INTERNAL_ERROR"
-        private const val REQUEST_INVALID = "REQUEST_INVALID"
     }
 }

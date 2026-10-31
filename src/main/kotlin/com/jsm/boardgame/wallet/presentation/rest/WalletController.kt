@@ -64,7 +64,7 @@ class WalletController(
         @RequestHeader("Idempotency-Key", required = false) idempotencyKey: String?,
     ): DepositRequestCreatedResponse {
         val requestId = requestDepositUseCase.request(request.toCommand(jwt.requireUserId(), idempotencyKey))
-        return DepositRequestCreatedResponse.from(requestId.value, DepositAccountResponse.from(depositAccountProperties))
+        return DepositRequestCreatedResponse.from(requestId, DepositAccountResponse.from(depositAccountProperties))
     }
 
     @GetMapping("/deposit-requests")
@@ -85,7 +85,7 @@ class WalletController(
         @RequestHeader("Idempotency-Key", required = false) idempotencyKey: String?,
     ): WithdrawalRequestCreatedResponse {
         val requestId = requestWithdrawalUseCase.request(request.toCommand(jwt.requireUserId(), idempotencyKey))
-        return WithdrawalRequestCreatedResponse.from(requestId.value)
+        return WithdrawalRequestCreatedResponse.from(requestId)
     }
 
     @GetMapping("/withdrawal-requests")

@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test
 class BoardGameApplicationIntegrationTest {
 
     @Test
-    fun contextLoads() {
+    fun `애플리케이션 컨텍스트가 로드된다`() {
     }
 
 }

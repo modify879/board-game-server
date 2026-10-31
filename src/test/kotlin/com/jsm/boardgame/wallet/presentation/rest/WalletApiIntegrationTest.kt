@@ -24,6 +24,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.time.Instant
 import java.util.UUID
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * `wallet` 컨텍스트의 일반 사용자 REST API 통합 테스트.
@@ -34,6 +35,9 @@ class WalletApiIntegrationTest {
 
     @Autowired
     private lateinit var mockMvc: MockMvc
+
+    @Autowired
+    private lateinit var tx: TransactionTemplate
 
     @Autowired
     private lateinit var walletRepository: WalletRepository
@@ -105,7 +109,7 @@ class WalletApiIntegrationTest {
 
     /** 환전은 요청 시점에 즉시 차감되므로, 요청을 만들려면 잔액이 먼저 있어야 한다. */
     private fun fundWallet(userId: Long, amount: Long) {
-        val wallet = walletRepository.findOrOpen(UserId(userId))
+        val wallet = tx.execute { walletRepository.findOrOpen(UserId(userId)) }!!
         val entry = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT,
             amount = Money.of(amount),
@@ -132,7 +136,7 @@ class WalletApiIntegrationTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.balance").value(0))
 
-        assertThat(walletRepository.findByUserId(UserId(userId))).isNull()
+        assertThat(tx.execute { walletRepository.findByUserId(UserId(userId)) }).isNull()
     }
 
     @Test

@@ -4,7 +4,7 @@ import com.jsm.boardgame.wallet.infrastructure.persistence.entity.WalletJpaRepos
 import com.jsm.boardgame.wallet.infrastructure.persistence.entity.toDomain
 import com.jsm.boardgame.wallet.infrastructure.persistence.entity.toJpaEntity
 import com.jsm.boardgame.common.persistence.violatedConstraint
-import com.jsm.boardgame.wallet.domain.exception.ConcurrentWalletUpdateException
+import com.jsm.boardgame.wallet.application.exception.ConcurrentWalletUpdateException
 import com.jsm.boardgame.wallet.domain.exception.InsufficientBalanceException
 import com.jsm.boardgame.wallet.domain.exception.WalletOwnerNotFoundException
 import com.jsm.boardgame.wallet.domain.model.UserId
