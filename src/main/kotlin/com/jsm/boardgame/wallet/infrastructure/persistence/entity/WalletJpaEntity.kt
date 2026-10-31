@@ -49,7 +49,7 @@ interface WalletJpaRepository :
     /**
      * 명령 경로 전용 조회다. 행이 있으면 트랜잭션이 끝날 때까지 잠근다(`SELECT ... FOR UPDATE`).
      * 잠금 순서는 요청 행 → 지갑 행이다. 지갑을 잠근 뒤에 요청 행이나 홀덤 테이블을 잠그지 않는다 —
-     * 어기면 데드락이다(CLAUDE.md 참고). 조회 경로는 이 메서드를 쓰지 않는다
+     * 어기면 데드락이다(`.claude/rules/transactions.md` 참고). 조회 경로는 이 메서드를 쓰지 않는다
      * (`WalletQueryRepositoryAdapter` 가 JDSL 로 따로 읽는다).
      *
      * `@Transactional(MANDATORY)` 인 이유: Spring Data 는 새로 선언한 쿼리 메서드에 기본 `readOnly = true`

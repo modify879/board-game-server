@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * 좌석 하나의 칩 추가 예약을 자기만의 트랜잭션으로 적용한다. REQUIRES_NEW 인 이유는 [AdmitJoinRequestService] 와 같다 —
+ * 좌석 하나의 칩 추가 예약을 자기만의 트랜잭션으로 적용한다. REQUIRES_NEW 인 이유는 [com.jsm.boardgame.holdem.application.command.service.AdmitJoinRequestService] 와 같다 —
  * 지갑 이체 실패가 앞서 적용한 좌석이나 정산 트랜잭션에 번지지 않아야 하고, 호출자는 커밋 후 실행기 스레드에서 돈다.
  *
  * 스택은 핸드가 끝난 뒤 값이다 — 한도(최대 바이인 − 스택)와 잔액으로 줄이고 [CHIP_UNIT] 으로 내림한 만큼만 지갑에서 가져온다.

@@ -11,10 +11,12 @@ import com.jsm.boardgame.holdem.application.command.usecase.CloseIdleTableUseCas
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandUseCase
 import com.jsm.boardgame.holdem.application.port.TableExecutor
+import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
+import com.jsm.boardgame.holdem.infrastructure.timer.ConnectionTimer
 import com.jsm.boardgame.holdem.infrastructure.timer.NextHandTimer
 import com.jsm.boardgame.user.infrastructure.security.config.JwtProperties
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
@@ -103,6 +105,9 @@ class HoldemStompIntegrationTest {
 
     @Autowired
     private lateinit var nextHandTimer: NextHandTimer
+
+    @Autowired
+    private lateinit var connectionTimer: ConnectionTimer
 
     @LocalServerPort
     private var port: Int = 0
@@ -196,6 +201,20 @@ class HoldemStompIntegrationTest {
     // REST 생성은 만든 사람을 대기열에 넣는다(CreateTableService) — 이 헬퍼는 대기열이 비어 있는 테이블이 필요해
     // 저장소로 직접 만든다. accessToken 은 호출부 시그니처를 유지하려고 남겼다.
     @Suppress("UNUSED_PARAMETER")
+    /** 공유 DB 에 열린 테이블이 100개를 넘어도 새 테이블을 찾도록 모든 페이지를 훑는다. */
+    private fun allTableRows(accessToken: String): List<Map<String, Any>> {
+        val rows = mutableListOf<Map<String, Any>>()
+        var page = 0
+        do {
+            val body = mockMvc.perform(
+                get("/api/holdem/tables?page=$page&size=100").header("Authorization", "Bearer $accessToken"),
+            ).andExpect(status().isOk).andReturn().response.contentAsString
+            rows += JsonPath.read<List<Map<String, Any>>>(body, "$.content")
+            val totalPages = JsonPath.read<Int>(body, "$.page.totalPages")
+        } while (++page < totalPages)
+        return rows
+    }
+
     private fun createTable(accessToken: String, name: String = "t-${UUID.randomUUID().toString().take(8)}"): Long =
         holdemTableRepository.save(HoldemTable.create(name, TestTablePolicy)).id!!.value
 
@@ -650,6 +669,76 @@ class HoldemStompIntegrationTest {
     }
 
     @Test
+    fun `핸드 도중 앉아 참가하지 않은 좌석은 개인 큐 스냅샷의 hand 가 null 이고 예약 필드도 비어 있다`() {
+        val pair = seatTwoUsersAtSameTable()
+        startHandRest(pair.tableId)
+        val (userIdC, tokenC) = signUpAndLogin()
+        // 핸드 도중에는 참가 요청이 처리되지 않아, 핸드 도중 앉은 좌석(BB 대기)을 저장소로 직접 만든다.
+        holdemTableRepository.findById(TableId(pair.tableId))!!.also {
+            it.sitDown(UserId(userIdC), Chips.of(10_000))
+            holdemTableRepository.save(it)
+        }
+
+        val (session, _) = tryConnect(tokenC)
+        checkNotNull(session)
+        val (publicHandler, publicQueue) = capturingFrameHandler()
+        val (privateHandler, privateQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.publicTopicOf(pair.tableId), publicHandler)
+        session.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandler)
+
+        val snapshot = checkNotNull(privateQueue.poll(5, TimeUnit.SECONDS))
+        assertThat(JsonPath.read<Any?>(snapshot, "$.hand")).isNull()
+        assertThat(JsonPath.read<Any?>(snapshot, "$.chipsReservation")).isNull()
+        assertThat(JsonPath.read<Any?>(snapshot, "$.leaveReservation")).isNull()
+        val publicJson = checkNotNull(publicQueue.poll(5, TimeUnit.SECONDS))
+        assertThat(JsonPath.read<Boolean>(publicJson, "$.handInProgress")).isTrue()
+        val seatC = JsonPath.read<List<Map<String, Any>>>(publicJson, "$.seats").single { (it["userId"] as Number).toLong() == userIdC }
+        assertThat(seatC["status"]).isEqualTo("NOT_IN_HAND")
+        assertThat(seatC["awaitingBigBlind"]).isEqualTo(true)
+
+        session.disconnect()
+    }
+
+    @Test
+    fun `좌석의 접속 상태가 바뀌면 공개 뷰 presence 와 착석자 개인 뷰가 즉시 브로드캐스트된다`() {
+        val pair = seatTwoUsersAtSameTable()
+
+        val (sessionA, _) = tryConnect(pair.a.accessToken)
+        checkNotNull(sessionA)
+        val (publicHandler, publicQueue) = capturingFrameHandler()
+        val (privateHandlerA, privateQueueA) = capturingFrameHandler()
+        sessionA.subscribe(HoldemDestinations.publicTopicOf(pair.tableId), publicHandler)
+        sessionA.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandlerA)
+        val (sessionB, _) = tryConnect(pair.b.accessToken)
+        checkNotNull(sessionB)
+        val (privateHandlerB, privateQueueB) = capturingFrameHandler()
+        sessionB.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandlerB)
+
+        val publicSeq = seqOf(checkNotNull(publicQueue.poll(5, TimeUnit.SECONDS)))
+        val privateSeqA = seqOf(checkNotNull(privateQueueA.poll(5, TimeUnit.SECONDS)))
+        val privateSeqB = seqOf(checkNotNull(privateQueueB.poll(5, TimeUnit.SECONDS)))
+
+        fun presenceOfB(publicJson: String): String =
+            JsonPath.read<List<Map<String, Any>>>(publicJson, "$.seats")
+                .single { (it["userId"] as Number).toLong() == pair.b.userId }["presence"] as String
+
+        connectionTimer.beginWatch(UserId(pair.b.userId))
+        val disconnected = nextAfter(publicQueue, publicSeq)
+        assertThat(presenceOfB(disconnected)).isEqualTo("DISCONNECTED")
+        assertThat(nextAfter(privateQueueA, privateSeqA)).contains("\"seatNo\"")
+        assertThat(nextAfter(privateQueueB, privateSeqB)).contains("\"seatNo\"")
+
+        // 새 STOMP 연결이 붙으면 SEATED 로 돌아온다(ConnectionTimer.onSessionConnected).
+        val (sessionB2, _) = tryConnect(pair.b.accessToken)
+        checkNotNull(sessionB2)
+        assertThat(presenceOfB(nextAfter(publicQueue, seqOf(disconnected)))).isEqualTo("SEATED")
+
+        sessionA.disconnect()
+        sessionB.disconnect()
+        sessionB2.disconnect()
+    }
+
+    @Test
     fun `핸드 중 건 칩 추가 예약은 정산 뒤 개인 큐에서 사라진다`() {
         val pair = seatTwoUsersAtSameTable()
         startHandRest(pair.tableId)
@@ -1008,10 +1097,8 @@ class HoldemStompIntegrationTest {
         val (userId, accessToken) = signUpAndLogin()
         fundWallet(userId, 10_000)
         val tableId = createTable(accessToken)
-        fun listed() = mockMvc.perform(
-            get("/api/holdem/tables?size=1000").header("Authorization", "Bearer $accessToken"),
-        ).andExpect(status().isOk)
-        listed().andExpect(jsonPath("$.content[?(@.tableId == $tableId)]").isNotEmpty)
+        fun listed() = allTableRows(accessToken).map { (it["tableId"] as Number).toLong() }
+        assertThat(listed()).contains(tableId)
         val (session, _) = tryConnect(accessToken)
         checkNotNull(session)
         val (publicHandler, publicQueue) = capturingFrameHandler()
@@ -1028,7 +1115,7 @@ class HoldemStompIntegrationTest {
         val notice = publicQueue.poll(5, TimeUnit.SECONDS) ?: error("닫힘 알림을 받지 못했다")
         assertThat(JsonPath.read<String>(notice, "$.type")).isEqualTo("TABLE_CLOSED")
         assertThat(JsonPath.read<Int>(notice, "$.tableId").toLong()).isEqualTo(tableId)
-        listed().andExpect(jsonPath("$.content[?(@.tableId == $tableId)]").isEmpty)
+        assertThat(listed()).doesNotContain(tableId)
         authPost("/api/holdem/tables/$tableId/seats", accessToken, """{"buyIn":10000}""")
             .andExpect(status().isNotFound)
             .andExpect(jsonPath("$.errorCode").value("TABLE_NOT_FOUND"))

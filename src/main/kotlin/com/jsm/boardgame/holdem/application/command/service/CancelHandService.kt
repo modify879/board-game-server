@@ -33,7 +33,7 @@ import org.springframework.transaction.annotation.Transactional
  *
  * 핸드 도중 폴드한 채 기립한 좌석([Hand.departedUserIds])은 테이블에 좌석이 없으므로 시작 스택이 아니라
  * 그 핸드에 넣은 투입액을 지갑으로 돌려준다 - 기립할 때 이미 받은 남은 스택과 합해 시작 스택이 된다
- * (사용자 결정: 무르기는 모두에게 되돌리는 것이다). 테이블 행을 먼저 잠근 채 지갑을 부르므로 잠금 순서가 맞다.
+ * (사용자 결정: 무르기는 모두에게 되돌리는 것이다). 테이블 실행기 직렬화 안에서 지갑을 부르므로 잠금 순서가 맞다(`.claude/rules/transactions.md`).
  *
  * 취소 뒤에는 `HandSettler` 와 같이 다음 핸드 카운트다운을 걸고 참가 요청 처리를 트리거한다 - 안 그러면
  * 테이블이 멈춘다.

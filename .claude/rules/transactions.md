@@ -15,5 +15,5 @@ paths:
 - **user 의 서비스(`LoginService`·`RefreshTokenService`·`ChangeUserRoleService`·`UnlockUserService`·`WithdrawService`·`ChangePasswordService`·`LogoutService`·`ChangeProfileImageService`·`RemoveProfileImageService`)는 바깥 `@Transactional` 이 없다.** DB 쓰기는 `save` 가 자체로 짧게 커밋하고 Redis 는 트랜잭션 밖에서 부른다 — DB 커넥션을 쥔 채 외부 I/O 를 하지 않기 위해서다. 실패 시 fail-closed 순서는 각 서비스 KDoc 에 있다
 - **커밋 후 콜백은 예외를 던지지 않는다.** `registerSynchronization` 으로 등록한 `afterCommit` 은 던지면 뒤 콜백이
   건너뛰어지고 커밋된 요청이 실패로 보인다. `@TransactionalEventListener(AFTER_COMMIT)` 리스너는 afterCompletion 에서
-  돌아 Spring 이 예외를 로그만 남기고 삼키지만(`docs/decisions/concurrency.md`), 실패가 조용히 묻히므로 어느 쪽이든
-  직접 잡아서 로그를 남긴다. 다른 실행기를 기다리지도 않는다(`TableExecutor.call` 금지, `post`) — 그 스레드는 아직 JDBC 커넥션을 쥐고 있다. `SerialTableExecutor.call` 은 트랜잭션이 활성인 스레드(커밋 후 콜백 포함)에서 부르면 `IllegalStateException` 을 던진다 — 같은 테이블이면 인라인으로 돌아 이미 커밋된 트랜잭션에 합류해 쓰기가 사라지기 때문이다
+  돌아 Spring 이 예외를 로그만 남기고 삼키지만(`docs/decisions/concurrency.md`), 실패가 조용히 묻히므로 실패할 수 있는 일(전송·실행기에 올리기·DB/IO)을 하는
+  리스너·콜백은 직접 잡아서 로그를 남긴다. 맵에서 지우거나 future 를 취소하는 순수 인메모리 정리 리스너(`TableClosed` 정리 리스너들)는 잡지 않아도 된다. 다른 실행기를 기다리지도 않는다(`TableExecutor.call` 금지, `post`) — 그 스레드는 아직 JDBC 커넥션을 쥐고 있다. `SerialTableExecutor.call` 은 트랜잭션이 활성인 스레드(커밋 후 콜백 포함)에서 부르면 `IllegalStateException` 을 던진다 — 같은 테이블이면 인라인으로 돌아 이미 커밋된 트랜잭션에 합류해 쓰기가 사라지기 때문이다
