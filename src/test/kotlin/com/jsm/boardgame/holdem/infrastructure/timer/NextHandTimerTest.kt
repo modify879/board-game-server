@@ -7,6 +7,8 @@ import com.jsm.boardgame.holdem.application.port.TableExecutor
 import com.jsm.boardgame.holdem.domain.model.TableId
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.scheduling.Trigger
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -116,6 +118,56 @@ class NextHandTimerTest {
 
         assertTrue(scheduler.scheduledCalls[0].future.cancelled)
         assertNull(timer.remaining(tableId))
+    }
+
+    @Test
+    fun `트랜잭션이 롤백되면 그 안의 cancel 은 카운트다운을 지우지 않는다`() {
+        timer.restart(tableId)
+
+        withSynchronization { timer.cancel(tableId) }.complete(commit = false)
+
+        assertTrue(!scheduler.scheduledCalls[0].future.cancelled)
+        assertEquals(Duration.ZERO, timer.remaining(tableId))
+    }
+
+    @Test
+    fun `트랜잭션이 커밋되면 cancel 이 그때 반영된다`() {
+        timer.restart(tableId)
+
+        val tx = withSynchronization { timer.cancel(tableId) }
+        assertTrue(!scheduler.scheduledCalls[0].future.cancelled)
+        tx.complete(commit = true)
+
+        assertTrue(scheduler.scheduledCalls[0].future.cancelled)
+        assertNull(timer.remaining(tableId))
+    }
+
+    @Test
+    fun `같은 트랜잭션에서 cancel 뒤에 restart 하면 커밋 뒤에도 새 예약은 남는다`() {
+        timer.restart(tableId)
+
+        withSynchronization { timer.cancel(tableId); timer.restart(tableId) }.complete(commit = true)
+
+        assertTrue(scheduler.scheduledCalls[0].future.cancelled)
+        assertTrue(!scheduler.scheduledCalls[1].future.cancelled)
+        assertEquals(Duration.ZERO, timer.remaining(tableId))
+    }
+
+    private class Tx(private val syncs: List<TransactionSynchronization>) {
+        fun complete(commit: Boolean) {
+            if (commit) syncs.forEach { it.afterCommit() }
+        }
+    }
+
+    /** 동기화를 켜고 [block] 을 돌린 뒤 등록된 콜백을 떼어 낸다. 커밋·롤백은 [Tx.complete] 로 흉내 낸다. */
+    private fun withSynchronization(block: () -> Unit): Tx {
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            block()
+            return Tx(TransactionSynchronizationManager.getSynchronizations().toList())
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization()
+        }
     }
 
     @Test

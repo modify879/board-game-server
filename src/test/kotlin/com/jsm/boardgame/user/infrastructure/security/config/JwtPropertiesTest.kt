@@ -7,11 +7,11 @@ import kotlin.test.assertTrue
 
 class JwtPropertiesTest {
 
-    private fun properties(secret: String) = JwtProperties(
+    private fun properties(secret: String, grace: Duration = Duration.ofSeconds(5)) = JwtProperties(
         secret = secret,
         accessTokenTtl = Duration.ofMinutes(30),
         refreshTokenTtl = Duration.ofDays(14),
-        refreshReuseGrace = Duration.ofSeconds(5),
+        refreshReuseGrace = grace,
     )
 
     @Test
@@ -32,5 +32,18 @@ class JwtPropertiesTest {
             exception.message?.contains("APP_JWT_SECRET") == true,
             "예외 메시지가 APP_JWT_SECRET 를 언급해야 한다: ${exception.message}",
         )
+    }
+
+    @Test
+    fun `리프레시 재사용 유예가 1ms 미만이면 거부된다`() {
+        listOf(Duration.ZERO, Duration.ofNanos(999_999), Duration.ofSeconds(-1)).forEach { grace ->
+            val exception = assertFailsWith<IllegalStateException> { properties("x".repeat(32), grace) }
+
+            assertTrue(
+                exception.message?.contains("refresh-reuse-grace") == true,
+                "예외 메시지가 설정 키를 언급해야 한다: ${exception.message}",
+            )
+        }
+        properties("x".repeat(32), Duration.ofMillis(1))
     }
 }

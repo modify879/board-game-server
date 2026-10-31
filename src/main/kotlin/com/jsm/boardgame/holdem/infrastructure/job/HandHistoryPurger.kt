@@ -42,7 +42,7 @@ class HandHistoryPurger(
                     val batch = hands.findAllByEndedAtBefore(cutoff, PageRequest.of(0, BATCH_SIZE))
                     hands.deleteAllInBatch(batch)
                     batch.size
-                } ?: 0
+                }
                 if (n == 0) break
                 deleted += n
             }
