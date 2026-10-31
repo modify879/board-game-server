@@ -588,4 +588,76 @@ class BettingRoundTest {
 
         assertEquals(2, round.lastAggressorSeatNo)
     }
+
+    @Test
+    fun `헤즈업에서 BB 가 짧은 스택으로 올인하면 SB 가 이미 맞췄으므로 라운드가 즉시 끝나고 차례인 좌석이 없다`() {
+        val round = BettingRound.preflop(
+            seats = listOf(seat(1, 10_000), seat(2, 100)),
+            smallBlind = chips(100),
+            bigBlind = chips(200),
+            sbSeatNo = 1,
+            bbSeatNo = 2,
+            firstToActSeatNo = 1,
+        )
+
+        assertEquals(chips(200), round.currentBet)
+        assertTrue(round.isComplete)
+        assertNull(round.toActSeatNo)
+        assertNull(round.availableActionsFor(1))
+    }
+
+    @Test
+    fun `3인에서 버튼이 폴드하고 BB 가 짧은 올인이면 SB 는 이미 맞췄으므로 행동 없이 라운드가 끝난다`() {
+        val round = BettingRound.preflop(
+            seats = listOf(seat(1, 10_000), seat(2, 10_000), seat(3, 100)),
+            smallBlind = chips(100),
+            bigBlind = chips(200),
+            sbSeatNo = 2,
+            bbSeatNo = 3,
+            firstToActSeatNo = 1,
+        )
+        assertEquals(1, round.toActSeatNo)
+
+        round.act(1, BettingAction.Fold)
+
+        assertTrue(round.isComplete)
+        assertNull(round.toActSeatNo)
+    }
+
+    @Test
+    fun `3인에서 버튼이 아직 행동하지 않았으면 BB 가 짧은 올인이어도 버튼은 풀 BB 200 을 콜해야 한다`() {
+        val round = BettingRound.preflop(
+            seats = listOf(seat(1, 10_000), seat(2, 10_000), seat(3, 100)),
+            smallBlind = chips(100),
+            bigBlind = chips(200),
+            sbSeatNo = 2,
+            bbSeatNo = 3,
+            firstToActSeatNo = 1,
+        )
+
+        assertFalse(round.isComplete)
+        assertEquals(chips(200), round.availableActionsFor(1)!!.callAmount)
+
+        round.act(1, BettingAction.Call)
+
+        assertEquals(2, round.toActSeatNo) // SB 는 아직 100 을 더 내야 한다
+        assertEquals(chips(100), round.availableActionsFor(2)!!.callAmount)
+    }
+
+    @Test
+    fun `헤즈업에서 BB 가 풀 BB 를 냈으면 SB 의 콜 후 BB 옵션이 남는다`() {
+        val round = BettingRound.preflop(
+            seats = listOf(seat(1, 10_000), seat(2, 10_000)),
+            smallBlind = chips(100),
+            bigBlind = chips(200),
+            sbSeatNo = 1,
+            bbSeatNo = 2,
+            firstToActSeatNo = 1,
+        )
+
+        round.act(1, BettingAction.Call)
+
+        assertFalse(round.isComplete)
+        assertEquals(2, round.toActSeatNo)
+    }
 }

@@ -654,4 +654,18 @@ class HandTest {
 
         assertFailsWith<IllegalStateException> { restored.act(1, BettingAction.Call) }
     }
+
+    @Test
+    fun `헤즈업에서 BB 가 짧은 스택으로 올인하면 SB 는 행동 없이 곧바로 런아웃되고 BB 가 포스트한 100 만 걸린 팟이 된다`() {
+        val hand = Hand.start(stacksOf(1 to 10_000, 2 to 100), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, chips(100), chips(200), identityShuffler)
+
+        assertTrue(hand.isRunningOut)
+        assertEquals(null, hand.toActSeatNo)
+
+        while (hand.isRunningOut) hand.advanceRunout()
+
+        val result = hand.result!!
+        assertEquals(chips(200), result.pots.fold(Chips.ZERO) { acc, p -> acc + p.amount })
+        assertEquals(chips(10_100), hand.stackOf(1) + hand.stackOf(2))
+    }
 }
