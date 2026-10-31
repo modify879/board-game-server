@@ -1,6 +1,7 @@
-package com.jsm.boardgame.common.web
+package com.jsm.boardgame.common.web.error
 
 import com.jsm.boardgame.common.error.ErrorCode
+import com.jsm.boardgame.common.web.filter.RequestIdFilter
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.MDC

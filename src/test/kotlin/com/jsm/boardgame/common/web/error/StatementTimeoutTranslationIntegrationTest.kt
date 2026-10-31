@@ -1,4 +1,4 @@
-package com.jsm.boardgame.common.web
+package com.jsm.boardgame.common.web.error
 
 import com.jsm.boardgame.IntegrationTest
 import jakarta.persistence.EntityManager

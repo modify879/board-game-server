@@ -1,9 +1,9 @@
 package com.jsm.boardgame.common.config
 
-import com.jsm.boardgame.common.web.CapturingWebSocketHandlerDecoratorFactory
-import com.jsm.boardgame.common.web.StompAuthenticationInterceptor
-import com.jsm.boardgame.common.web.StompDestinationGuard
-import com.jsm.boardgame.common.web.StompErrorHandler
+import com.jsm.boardgame.common.web.stomp.CapturingWebSocketHandlerDecoratorFactory
+import com.jsm.boardgame.common.web.stomp.StompAuthenticationInterceptor
+import com.jsm.boardgame.common.web.stomp.StompDestinationGuard
+import com.jsm.boardgame.common.web.stomp.StompErrorHandler
 import jakarta.annotation.PreDestroy
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Configuration

@@ -1,4 +1,4 @@
-package com.jsm.boardgame.common.web
+package com.jsm.boardgame.common.web.stomp
 
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.WebSocketHandler

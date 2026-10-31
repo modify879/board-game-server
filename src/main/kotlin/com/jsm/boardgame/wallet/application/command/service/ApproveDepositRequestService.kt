@@ -3,10 +3,12 @@ package com.jsm.boardgame.wallet.application.command.service
 import com.jsm.boardgame.wallet.application.command.usecase.ApproveDepositRequestUseCase
 import com.jsm.boardgame.wallet.application.command.usecase.ApproveDepositRequestCommand
 import com.jsm.boardgame.wallet.domain.exception.DepositRequestNotFoundException
+import com.jsm.boardgame.wallet.domain.exception.InvalidDepositAmountException
 import com.jsm.boardgame.wallet.domain.model.DepositRequestId
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
+import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.DepositRequestRepository
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
@@ -33,7 +35,11 @@ class ApproveDepositRequestService(
         val request = depositRequests.findById(DepositRequestId(command.requestId))
             ?: throw DepositRequestNotFoundException("승인하려는 충전 요청을 찾을 수 없음: requestId=${command.requestId}")
 
-        val creditedAmount = command.creditedAmount ?: request.requestedAmount.amount
+        // 음수는 Money.of 가 AMOUNT_NEGATIVE 로 던지지만 승인 금액 오류의 계약은 DEPOSIT_AMOUNT_INVALID 다.
+        val creditedAmount = command.creditedAmount?.let {
+            if (it < 0L) throw InvalidDepositAmountException("승인 금액이 유효하지 않음: creditedAmount=$it")
+            Money.of(it)
+        } ?: request.requestedAmount
 
         // 1) 요청 상태를 먼저 확정하고 저장한다. findById 가 요청 행을 잠그므로 동시에 들어온
         //    두 번째 승인은 여기서 블록되다가, 잠금이 풀리면 requirePending() 이 이미 처리된

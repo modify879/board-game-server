@@ -115,7 +115,7 @@ class WalletQueryRepositoryAdapterIntegrationTest {
         val userId = uniqueUserId()
         val pending = depositRequests.save(DepositRequest.request(UserId(userId), 10_000, 1_000, "key-${System.nanoTime()}", now))
         val approved = depositRequests.save(DepositRequest.request(UserId(userId), 20_000, 1_000, "key-${System.nanoTime()}", now))
-        approved.approve(adminUserId = UserId(1), creditedAmount = 20_000, at = now)
+        approved.approve(adminUserId = UserId(1), creditedAmount = Money.of(20_000), at = now)
         depositRequests.save(approved)
 
         val all = depositRequestQueryRepository.findByStatus(null, PageRequest.of(0, 10))

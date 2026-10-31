@@ -1,4 +1,4 @@
-package com.jsm.boardgame.common.web
+package com.jsm.boardgame.common.web.stomp
 
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener

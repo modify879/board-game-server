@@ -1,7 +1,7 @@
 ---
 paths:
   - "**/presentation/ws/**"
-  - "**/common/web/Stomp*"
+  - "**/common/web/stomp/**"
   - "**/common/config/WebSocket*"
 ---
 

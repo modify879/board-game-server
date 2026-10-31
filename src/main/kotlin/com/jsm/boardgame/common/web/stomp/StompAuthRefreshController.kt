@@ -1,4 +1,4 @@
-package com.jsm.boardgame.common.web
+package com.jsm.boardgame.common.web.stomp
 
 import com.jsm.boardgame.common.error.CommonErrorCode
 import org.slf4j.LoggerFactory
