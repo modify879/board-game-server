@@ -28,3 +28,10 @@ Vernon 의 "한 트랜잭션에 애그리거트 하나" 를 지키지 않는다.
 ### 지갑을 lazy 로 만드는 이유
 회원가입이 `wallet` 을 부르면 컨텍스트가 결합된다. 회원가입은 `wallet` 을 부르지 않는다(`user` 는 탈퇴 선행 조건 확인용 `WalletHoldings` 포트와 `infrastructure/acl` 어댑터로만 안다).
 조회 경로에서 만들지 않는 것은 조회가 상태를 바꾸면 규칙 3이 깨지기 때문이다.
+
+### `HoldemTable` 의 일부 불변식을 호출자가 지키는 이유
+`addChips`·`applyChipsReservation`·`close` 는 "핸드가 진행 중이 아닐 때만" 불러야 하는데 `HoldemTable` 은 이를 검사하지 않는다.
+핸드 상태는 다른 애그리거트(`Hand`, `HandStore`)에 있어서 테이블이 볼 수 없다.
+그래서 이 애그리거트 간 규칙은 둘을 함께 읽는 응용 서비스가 테이블 실행기 안에서 확인한다(`AddChipsService`·`ApplyChipsReservationsService`·`CloseIdleTableService`).
+반대로 테이블 안에서 닫히는 규칙(누가 다음 핸드에 참가하고 진입료를 내는가 — `seatForNextHand`, 0칩 좌석을 세우는가 — `standUpBusted`)은
+`HoldemTable` 이 갖는다. 응용 계층은 결과를 받아 포트(`RecentDepartures`, 지갑)를 부르는 일만 한다.

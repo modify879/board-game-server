@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.presentation.ws
 
+import com.jsm.boardgame.holdem.allHoldemTableRows
 import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
@@ -196,20 +197,6 @@ class HoldemStompIntegrationTest {
         )
         walletRepository.save(wallet)
         ledgerEntryRepository.save(entry)
-    }
-
-    /** 공유 DB 에 열린 테이블이 100개를 넘어도 새 테이블을 찾도록 모든 페이지를 훑는다. */
-    private fun allTableRows(accessToken: String): List<Map<String, Any>> {
-        val rows = mutableListOf<Map<String, Any>>()
-        var page = 0
-        do {
-            val body = mockMvc.perform(
-                get("/api/holdem/tables?page=$page&size=100").header("Authorization", "Bearer $accessToken"),
-            ).andExpect(status().isOk).andReturn().response.contentAsString
-            rows += JsonPath.read<List<Map<String, Any>>>(body, "$.content")
-            val totalPages = JsonPath.read<Int>(body, "$.page.totalPages")
-        } while (++page < totalPages)
-        return rows
     }
 
     // REST 생성은 만든 사람을 대기열에 넣는다(CreateTableService) — 이 헬퍼는 대기열이 비어 있는 테이블이 필요해
@@ -1097,7 +1084,7 @@ class HoldemStompIntegrationTest {
         val (userId, accessToken) = signUpAndLogin()
         fundWallet(userId, 10_000)
         val tableId = createTable(accessToken)
-        fun listed() = allTableRows(accessToken).map { (it["tableId"] as Number).toLong() }
+        fun listed() = mockMvc.allHoldemTableRows(accessToken).map { (it["tableId"] as Number).toLong() }
         assertThat(listed()).contains(tableId)
         val (session, _) = tryConnect(accessToken)
         checkNotNull(session)

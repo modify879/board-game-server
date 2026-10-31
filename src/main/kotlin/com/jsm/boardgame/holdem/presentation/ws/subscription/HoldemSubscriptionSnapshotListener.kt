@@ -12,8 +12,8 @@ import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.holdem.presentation.ws.payload.JoinQueueView
 import com.jsm.boardgame.holdem.presentation.ws.payload.TableClosedView
-import com.jsm.boardgame.holdem.presentation.ws.payload.privateViewOf
-import com.jsm.boardgame.holdem.presentation.ws.payload.publicViewOf
+import com.jsm.boardgame.holdem.presentation.ws.assembler.privateViewOf
+import com.jsm.boardgame.holdem.presentation.ws.assembler.publicViewOf
 import org.slf4j.LoggerFactory
 import org.springframework.context.annotation.Lazy
 import org.springframework.messaging.Message

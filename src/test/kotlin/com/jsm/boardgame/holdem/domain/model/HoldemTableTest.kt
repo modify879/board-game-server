@@ -198,7 +198,7 @@ class HoldemTableTest {
             val table = newTable()
             table.sitDown(userId = UserId(1L), buyIn = Chips.of(stack))
             table.reserveChips(UserId(1L), Chips.of(reserved))
-            val added = table.applyChipsReservation(UserId(1L), balance)
+            val added = table.applyChipsReservation(UserId(1L), Chips.floorOf(balance))
             assertNull(table.seatAt(1)!!.chipsReservation)
             return added to table.seatAt(1)!!.stack
         }
@@ -208,6 +208,7 @@ class HoldemTableTest {
         assertEquals(Chips.of(700) to Chips.of(10_700), applied(stack = 10_000, reserved = 3_000, balance = 799)) // 잔액을 100 단위로 내림
         assertEquals(Chips.ZERO to Chips.of(10_000), applied(stack = 10_000, reserved = 3_000, balance = 99))
         assertEquals(Chips.ZERO to Chips.of(30_000), applied(stack = 30_000, reserved = 3_000, balance = 50_000)) // 이미 한도 초과
+        assertEquals(Chips.ZERO to Chips.of(10_000), applied(stack = 10_000, reserved = 3_000, balance = -500))
     }
 
     @Test
@@ -538,5 +539,98 @@ class HoldemTableTest {
         val e = assertFailsWith<BuyInOutOfRangeException> { big.sitDown(UserId(1L), Chips.of(4_000)) }
         assertEquals(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, e.errorCode)
         assertEquals(Chips.of(50_000), big.maxStack())
+    }
+
+    private fun seat(
+        seatNo: Int,
+        stack: Long = 10_000,
+        awaiting: Boolean = false,
+        owes: Boolean = false,
+        leave: LeaveReservation? = null,
+        chipsReservation: Chips? = null,
+    ) = Seat.reconstitute(seatNo, UserId(seatNo.toLong()), Chips.of(stack), SeatPresence.SEATED, awaiting, owes, leave, chipsReservation)
+
+    private fun tableOf(vararg seats: Seat) =
+        HoldemTable.reconstitute(TableId(1L), "테이블", TestTablePolicy, buttonSeatNo = null, seats = seats.associateBy { it.seatNo })
+
+    private fun HoldemTable.owing() = occupiedSeats().filter { it.owesImmediatePost }.map { it.seatNo }.toSet()
+
+    private fun HoldemTable.awaiting() = occupiedSeats().filter { it.awaitingBigBlind }.map { it.seatNo }.toSet()
+
+    @Test
+    fun `seatForNextHand 는 버튼부터 SB 까지의 구간에 걸린 즉시 포스팅 좌석을 막고 빚은 참가한 좌석만 소비한다`() {
+        // dead button 으로 BB 가 빈 좌석을 건너뛰어 버튼(2)과 SB(5) 사이에 3·4 가 앉았다. 7 은 BB 뒤라 막히지 않는다.
+        val table = tableOf(seat(1), seat(2), seat(3, owes = true), seat(4, owes = true), seat(5), seat(6), seat(7, owes = true))
+
+        val seating = table.seatForNextHand(HoldemTable.HandPositions(2, 5, 6))
+
+        assertEquals(setOf(1, 2, 5, 6, 7), seating.participantSeatNos)
+        assertEquals(HoldemTable.HandPositions(2, 5, 6), seating.positions)
+        assertEquals(setOf(7), seating.extraPostSeatNos)
+        assertEquals(setOf(3, 4), table.owing())
+    }
+
+    @Test
+    fun `seatForNextHand 는 dead SB 면 버튼부터 BB 앞까지를 막는다`() {
+        val table = tableOf(seat(1), seat(2), seat(3, owes = true), seat(4, owes = true), seat(6))
+
+        val seating = table.seatForNextHand(HoldemTable.HandPositions(2, null, 6))
+
+        assertEquals(setOf(1, 2, 6), seating.participantSeatNos)
+        assertEquals(HoldemTable.HandPositions(2, null, 6), seating.positions)
+        assertEquals(emptySet(), seating.extraPostSeatNos)
+        assertEquals(setOf(3, 4), table.owing())
+    }
+
+    @Test
+    fun `seatForNextHand 는 대기 좌석을 빼고 헤즈업으로 좁히며 BB 가 된 빚진 좌석에 추가 포스팅을 받지 않는다`() {
+        val table = tableOf(seat(1), seat(2, awaiting = true), seat(3, owes = true), seat(4, stack = 0))
+
+        val seating = table.seatForNextHand(HoldemTable.HandPositions(1, 2, 3))
+
+        assertEquals(setOf(1, 3), seating.participantSeatNos)
+        assertEquals(HoldemTable.HandPositions(1, 1, 3), seating.positions)
+        assertEquals(emptySet(), seating.extraPostSeatNos)
+        assertEquals(emptySet(), table.owing())
+        assertEquals(setOf(2), table.awaiting())
+    }
+
+    @Test
+    fun `seatForNextHand 는 BB 에 도달한 대기 좌석을 풀어 참가시킨다`() {
+        val table = tableOf(seat(1), seat(2), seat(3, awaiting = true))
+
+        val seating = table.seatForNextHand(HoldemTable.HandPositions(1, 2, 3))
+
+        assertEquals(setOf(1, 2, 3), seating.participantSeatNos)
+        assertEquals(emptySet(), table.awaiting())
+    }
+
+    @Test
+    fun `seatForNextHand 는 제외 뒤 2명 미만이면 후보 전원을 참가시키고 대기를 풀며 진입료를 면제한다`() {
+        // BB(2)만 남고 1 은 대기, 3 은 버튼 자리에 걸린 즉시 포스팅 좌석이다.
+        val table = tableOf(seat(1, awaiting = true), seat(2, awaiting = true), seat(3, owes = true))
+
+        val seating = table.seatForNextHand(HoldemTable.HandPositions(3, 1, 2))
+
+        assertEquals(setOf(1, 2, 3), seating.participantSeatNos)
+        assertEquals(emptySet(), seating.extraPostSeatNos)
+        assertEquals(emptySet(), table.awaiting())
+        assertEquals(emptySet(), table.owing())
+    }
+
+    @Test
+    fun `standUpBusted 는 주어진 좌석 중 0칩 좌석을 세우되 칩 추가 예약만 있는 좌석은 남긴다`() {
+        val table = tableOf(
+            seat(1, stack = 0),
+            seat(2, stack = 0, chipsReservation = Chips.of(1_000)),
+            seat(3, stack = 0, chipsReservation = Chips.of(1_000), leave = LeaveReservation.SPECTATE),
+            seat(4),
+            seat(5, stack = 0), // 넘기지 않은 좌석은 건드리지 않는다
+        )
+
+        val stoodUp = table.standUpBusted(listOf(1, 2, 3, 4, 9))
+
+        assertEquals(listOf(UserId(1L), UserId(3L)), stoodUp.map { it.userId })
+        assertEquals(listOf(2, 4, 5), table.occupiedSeats().map { it.seatNo })
     }
 }

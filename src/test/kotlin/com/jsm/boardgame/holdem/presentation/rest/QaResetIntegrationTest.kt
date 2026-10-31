@@ -38,7 +38,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 @IntegrationTest
 @ActiveProfiles("qa")
 @TestPropertySource(
-    properties = ["app.holdem.turn-timeout=1h", "app.holdem.idle-table-ttl=1h", "spring.docker.compose.enabled=false"],
+    properties = ["app.holdem.turn-timeout=1h", "app.holdem.idle-table-ttl=1h"],
 )
 class QaResetIntegrationTest {
 
