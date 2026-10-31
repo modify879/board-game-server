@@ -17,7 +17,10 @@ import java.time.Instant
  * FK(ON DELETE CASCADE)는 data.sql 이 건다. board 는 카드를 공백으로 이은 문자열("Ah Kd 7c"), 없으면 빈 문자열.
  */
 @Entity
-@Table(name = "holdem_hand_history", indexes = [Index(name = "idx_hand_history_ended_at", columnList = "ended_at")])
+@Table(name = "holdem_hand_history", indexes = [
+        Index(name = "idx_hand_history_ended_at", columnList = "ended_at"),
+        Index(name = "idx_hand_history_table", columnList = "table_id"),
+    ])
 class HandHistoryJpaEntity(
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long = 0,
@@ -32,7 +35,10 @@ class HandHistoryJpaEntity(
 )
 
 @Entity
-@Table(name = "holdem_hand_history_player", indexes = [Index(name = "idx_hand_history_player_user", columnList = "user_id")])
+@Table(name = "holdem_hand_history_player", indexes = [
+        Index(name = "idx_hand_history_player_user", columnList = "user_id"),
+        Index(name = "idx_hand_history_player_hand", columnList = "hand_id"),
+    ])
 class HandHistoryPlayerJpaEntity(
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long = 0,
