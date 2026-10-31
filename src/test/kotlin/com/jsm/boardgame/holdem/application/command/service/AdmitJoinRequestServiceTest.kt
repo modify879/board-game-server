@@ -163,9 +163,10 @@ class AdmitJoinRequestServiceTest {
         val failingWallet = AdmitJoinRequestFakeWalletTransfer(failingUserIds = setOf(UserId(9003L)))
         val failingService = AdmitJoinRequestService(tables, handStore, failingWallet, handStarter)
 
-        assertFailsWith<BuyInOutOfRangeException> {
+        val e = assertFailsWith<BuyInOutOfRangeException> {
             failingService.admit(AdmitJoinRequestCommand(tableId.value, 9003L, postBlindImmediately = false, buyIn = 8_000))
         }
+        assertEquals(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, e.errorCode)
 
         assertNull(tables.findById(tableId)!!.seatOf(UserId(9003L)))
     }
@@ -179,9 +180,10 @@ class AdmitJoinRequestServiceTest {
         otherTable.sitDown(UserId(9004L), Chips.of(8_000))
         tables.save(otherTable)
 
-        assertFailsWith<AlreadySeatedException> {
+        val e = assertFailsWith<AlreadySeatedException> {
             service.admit(AdmitJoinRequestCommand(tableId.value, 9004L, postBlindImmediately = false, buyIn = 8_000))
         }
+        assertEquals(HoldemErrorCode.ALREADY_SEATED, e.errorCode)
     }
 
     @Test

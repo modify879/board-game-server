@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.command.usecase.CancelLeaveReservationCommand
@@ -52,6 +53,7 @@ class CancelLeaveReservationServiceTest {
 
     @Test
     fun `앉아 있지 않으면 예약 취소는 NOT_SEATED`() {
-        assertFailsWith<NotSeatedException> { service.cancel(CancelLeaveReservationCommand(userId = 999)) }
+        val e = assertFailsWith<NotSeatedException> { service.cancel(CancelLeaveReservationCommand(userId = 999)) }
+        assertEquals(HoldemErrorCode.NOT_SEATED, e.errorCode)
     }
 }

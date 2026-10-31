@@ -2,6 +2,7 @@ package com.jsm.boardgame.holdem.application.event
 
 import com.jsm.boardgame.holdem.domain.model.TableId
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider
+import org.springframework.core.env.StandardEnvironment
 import org.springframework.core.type.filter.AnnotationTypeFilter
 import org.springframework.stereotype.Component
 import org.springframework.transaction.event.TransactionPhase
@@ -17,7 +18,8 @@ class TableClosedListenersTest {
     // Long 키로 둔 테이블별 상태는 이 검사에 보이지 않는다 — 그래서 TableId 키가 규칙이다.
     @Test
     fun `TableId 를 키로 가진 상태를 쥔 컴포넌트는 모두 TableClosed 를 커밋 후 리스너로 받는다`() {
-        val scanner = ClassPathScanningCandidateComponentProvider(false)
+        // @Profile("qa") 컴포넌트(QaNewHandShuffler)도 스캔에 보이도록 qa 프로필을 켠 환경을 준다.
+        val scanner = ClassPathScanningCandidateComponentProvider(false, StandardEnvironment().apply { setActiveProfiles("qa") })
         scanner.addIncludeFilter(AnnotationTypeFilter(Component::class.java))
         val components = scanner.findCandidateComponents("com.jsm.boardgame.holdem")
             .map { Class.forName(it.beanClassName) }
@@ -27,7 +29,10 @@ class TableClosedListenersTest {
         // 스캔이 조용히 아무것도 못 찾으면 검사가 무의미해진다.
         val names = holders.map { it.simpleName }.toSet()
         assertTrue(
-            names.containsAll(setOf("TurnTimer", "SerialTableExecutor", "InMemoryJoinQueue", "InMemoryFoldWinnerCards", "TableViewSequence")),
+            names.containsAll(setOf(
+                "TurnTimer", "NextHandTimer", "RunoutTimer", "SerialTableExecutor", "InMemoryJoinQueue",
+                "InMemoryFoldWinnerCards", "TableViewSequence", "HandRecovery", "IdleTableSweeper", "QaNewHandShuffler",
+            )),
             "TableId 키 상태를 못 찾았다: $names",
         )
 

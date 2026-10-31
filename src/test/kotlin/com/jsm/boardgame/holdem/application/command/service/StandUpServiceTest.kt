@@ -95,7 +95,7 @@ class StandUpServiceTest {
             saved.id!!,
             Hand.start(mapOf(1 to Chips.of(8_000), 2 to Chips.of(8_000)), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, TestTablePolicy.smallBlind, TestTablePolicy.bigBlind, Shuffler { it }),
         )
-        return saved.id!!
+        return saved.id
     }
 
     @Test

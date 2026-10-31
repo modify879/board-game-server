@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.command.support.ApplySeatChipsReservationService
 import com.jsm.boardgame.holdem.application.command.usecase.ApplyChipsReservationsCommand
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
@@ -38,6 +39,27 @@ private class ApplyChipsFakeWallet : WalletBalance, WalletTransfer {
         balance -= amount
     }
     override fun fromGame(userId: UserId, amount: Long, tableId: TableId, memo: String?) = error("fromGame 은 부르지 않는다")
+}
+
+/** [failUser] 좌석은 적용도 버리기도 던진다. */
+private class ApplyChipsFailingSeatService(
+    private val failUser: UserId,
+    tables: FakeCopyingHoldemTableRepository,
+    handStore: FakeHandStore,
+    wallet: ApplyChipsFakeWallet,
+    departures: FakeRecentDepartures,
+    countdown: FakeNextHandCountdown,
+    events: ApplicationEventPublisher,
+) : ApplySeatChipsReservationService(tables, handStore, wallet, wallet, departures, countdown, events) {
+    override fun apply(tableId: TableId, userId: UserId) {
+        if (userId == failUser) error("적용 실패")
+        super.apply(tableId, userId)
+    }
+
+    override fun drop(tableId: TableId, userId: UserId) {
+        if (userId == failUser) error("버리기 실패")
+        super.drop(tableId, userId)
+    }
 }
 
 class ApplyChipsReservationsServiceTest {
@@ -174,5 +196,17 @@ class ApplyChipsReservationsServiceTest {
 
         assertTrue(wallet.toGameCalls.isEmpty())
         assertEquals(Chips.of(3_000), seat(tableId, 1)!!.chipsReservation)
+    }
+
+    @Test
+    fun `버리기마저 던져도 다음 좌석의 예약은 적용한다`() {
+        val tableId = table(Triple(1, 10_000, 3_000L), Triple(2, 10_000, 3_000L))
+        wallet.balance = 50_000
+        val failing = ApplyChipsFailingSeatService(UserId(1000), tables, handStore, wallet, departures, countdown, ApplicationEventPublisher { events += it })
+
+        ApplyChipsReservationsService(tables, handStore, failing).apply(ApplyChipsReservationsCommand(tableId.value))
+
+        assertEquals(Chips.of(13_000), seat(tableId, 2)!!.stack)
+        assertEquals(listOf(ApplyChipsFakeWallet.ToGameCall(UserId(2000), 3_000, tableId)), wallet.toGameCalls)
     }
 }

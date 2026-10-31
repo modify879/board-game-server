@@ -5,9 +5,10 @@ package com.jsm.boardgame.holdem.presentation.ws.payload
  * 여기에 카드 필드를 추가하지 마라. 추가하는 순간 규칙 6의 컴파일러 보장이 사라진다.
  * 예외는 정확히 둘이다. 하나는 [revealedHands] — 올인으로 더 베팅할 수 없어 런아웃 중일 때만(TDA),
  * [com.jsm.boardgame.holdem.domain.model.Hand.revealedSeatNos] 로만 채워진다. 다른 하나는
- * [result] 의 [HandResultPublicView.shownHands] 다 — 핸드가 끝났고 쇼다운이 벌어졌을 때만,
- * [com.jsm.boardgame.holdem.domain.model.HandResult.shownSeatNos] 로만 채워진다(재구독 스냅샷에서는 저장된
- * 직전 결과에서 오는데, 그것도 같은 `shownSeatNos` 로만 만든 것이다) — 쇼다운까지 간 좌석은
+ * [result] 의 [HandResultPublicView.shownHands] 다 — 핸드가 끝났을 때만, 쇼다운까지 간 좌석은
+ * [com.jsm.boardgame.holdem.domain.model.HandResult.shownSeatNos] 로, 폴드 승자는 본인이 보여 주기를 눌렀을 때만
+ * (하우스 룰 10, `ShowHandService` 가 직전 결과의 `shownHands` 에 더한다) 채워진다(재구독 스냅샷에서는 저장된
+ * 직전 결과에서 오는데, 그것도 같은 경로로 만든 것이다) — 쇼다운까지 간 좌석은
  * 전원 공개한다(사용자 결정, 머크 없음). 나열 순서만 TDA 17(마지막 라운드의 마지막 공격자부터, 없으면
  * 버튼 다음 좌석부터)을 따른다. 그 둘 외에 어떤 카드 성격의 필드도 이 파일에 추가하지 마라 — 추가하는
  * 순간 관전이 정보 유출이 된다.
@@ -81,7 +82,7 @@ data class PayoutPublicView(val seatNo: Int, val userId: Long, val amount: Long)
  * 쇼다운까지 간 좌석 전원의 패 — 이겼는지 여부와 무관하다(사용자 결정, 머크 없음). 나열 순서는
  * TDA 17(마지막 라운드의 마지막 공격자부터, 없으면 버튼 다음 좌석부터)을 따른다. 공개 뷰에서 카드를
  * 담을 수 있는 유일한 타입이다 — [com.jsm.boardgame.holdem.domain.model.HandResult.shownSeatNos] 로만
- * 만든다. 폴드한 좌석·폴드 승리·진행 중 핸드의 카드는 여기 오지 않는다.
+ * 만들고, 폴드 승자가 자발적으로 보여 준 카드만 예외로 더해진다(하우스 룰 10). 폴드한 좌석·진행 중 핸드의 카드는 여기 오지 않는다.
  */
 data class ShownHandView(val seatNo: Int, val userId: Long, val holeCards: List<String>, val category: String?)
 

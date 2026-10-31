@@ -125,7 +125,7 @@ class HoldemDbTimeoutIntegrationTest {
         mockMvc.perform(delete(url).header("Authorization", "Bearer $token"))
 
     private fun fundWallet(userId: Long, amount: Long) {
-        val wallet = tx.execute { walletRepository.findOrOpen(WalletUserId(userId)) }!!
+        val wallet = tx.execute { walletRepository.findOrOpen(WalletUserId(userId)) }
         val entry = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT,
             amount = Money.of(amount),

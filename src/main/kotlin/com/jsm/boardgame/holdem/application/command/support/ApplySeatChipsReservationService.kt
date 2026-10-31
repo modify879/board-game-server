@@ -1,8 +1,5 @@
-package com.jsm.boardgame.holdem.application.command.service
+package com.jsm.boardgame.holdem.application.command.support
 
-import com.jsm.boardgame.holdem.application.command.support.HandSettler
-import com.jsm.boardgame.holdem.application.command.usecase.ApplySeatChipsReservationCommand
-import com.jsm.boardgame.holdem.application.command.usecase.ApplySeatChipsReservationUseCase
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.domain.repository.HandStore
 import com.jsm.boardgame.holdem.application.port.NextHandCountdown
@@ -38,10 +35,10 @@ class ApplySeatChipsReservationService(
     private val recentDepartures: RecentDepartures,
     private val countdown: NextHandCountdown,
     private val eventPublisher: ApplicationEventPublisher,
-) : ApplySeatChipsReservationUseCase {
+) {
 
-    override fun apply(command: ApplySeatChipsReservationCommand) {
-        val (tableId, table, userId) = load(command) ?: return
+    fun apply(tableId: TableId, userId: UserId) {
+        val table = load(tableId) ?: return
         val seat = table.seatOf(userId) ?: return
         if (seat.chipsReservation == null) return
 
@@ -59,8 +56,9 @@ class ApplySeatChipsReservationService(
         log.info("칩 추가 예약을 적용했습니다: tableId={}, userId={}, added={}", tableId.value, userId.value, amount.amount)
     }
 
-    override fun drop(command: ApplySeatChipsReservationCommand) {
-        val (tableId, table, userId) = load(command) ?: return
+    /** 적용이 실패했을 때 예약만 지우고, 스택이 0 이면 일으켜 세운다 — 0칩 좌석이 영영 남지 않게 한다. */
+    fun drop(tableId: TableId, userId: UserId) {
+        val table = load(tableId) ?: return
         if (table.seatOf(userId)?.chipsReservation == null) return
 
         table.cancelChipsReservation(userId)
@@ -69,11 +67,10 @@ class ApplySeatChipsReservationService(
         eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, null))
     }
 
-    private fun load(command: ApplySeatChipsReservationCommand): Triple<TableId, HoldemTable, UserId>? {
-        val tableId = TableId(command.tableId)
+    private fun load(tableId: TableId): HoldemTable? {
         val table = tables.findById(tableId) ?: return null
         if (handStore.findInProgress(tableId) != null) return null
-        return Triple(tableId, table, UserId(command.userId))
+        return table
     }
 
     /** 스택이 0 이면 지갑 없이 기립시키고 재착석 의무를 0 으로 덮는다(HandSettler 의 0칩 자동 기립과 같다). */
