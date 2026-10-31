@@ -25,6 +25,8 @@ import org.springframework.transaction.support.TransactionOperations
 private class ProfileImageFakeUserRepository : UserRepository {
     val stored = mutableMapOf<Long, User>()
     var failOnSave = false
+    var saveThenFail = false // 커밋은 됐는데 호출자는 예외를 받는 모호한 실패
+    var findsBeforeFailing = Int.MAX_VALUE
 
     fun put(userId: Long, imageKey: String?) {
         stored[userId] = User.reconstitute(
@@ -38,13 +40,20 @@ private class ProfileImageFakeUserRepository : UserRepository {
     }
 
     override fun findByUsername(username: Username): User? = stored.values.find { it.username == username }
-    override fun findById(id: UserId): User? = stored[id.value]
-    override fun findByIdForUpdate(id: UserId): User? = findById(id)
+    override fun findById(id: UserId): User? {
+        if (findsBeforeFailing-- <= 0) throw IllegalStateException("db down: find")
+        return stored[id.value]
+    }
+    // 실제 어댑터처럼 새 인스턴스 — save 전의 메모리 변경이 저장소에 새지 않는다.
+    override fun findByIdForUpdate(id: UserId): User? = stored[id.value]?.let {
+        User.reconstitute(it.id!!, it.username, it.passwordHash, it.nickname, it.profileImageKey, it.role)
+    }
     override fun existsByUsername(username: Username): Boolean = false
     override fun existsByNickname(nickname: Nickname): Boolean = false
     override fun save(user: User): User {
         if (failOnSave) throw IllegalStateException("db down")
         stored[user.id!!.value] = user
+        if (saveThenFail) throw IllegalStateException("connection dropped after commit")
         return user
     }
 }
@@ -96,6 +105,28 @@ class ChangeProfileImageServiceTest {
         assertFailsWith<IllegalStateException> { change.change(ChangeProfileImageCommand(1L, png)) }
 
         assertEquals(setOf("1/old.png"), storage.files)
+    }
+
+    @Test
+    fun `커밋 뒤 연결이 끊긴 모호한 실패면 DB 가 가리키는 새 파일을 지우지 않는다`() {
+        users.put(1L, "1/old.png")
+        users.saveThenFail = true
+
+        assertFailsWith<IllegalStateException> { change.change(ChangeProfileImageCommand(1L, png)) }
+
+        val newKey = users.stored[1L]!!.profileImageKey!!.value
+        assertTrue(newKey in storage.files)
+    }
+
+    @Test
+    fun `실패 뒤 사용자 재조회마저 실패하면 고아 파일이 낫다 - 새 파일을 지우지 않는다`() {
+        users.put(1L, "1/old.png")
+        users.failOnSave = true
+        users.findsBeforeFailing = 1 // 사전 확인 한 번만 통과, 정리 단계의 재조회부터 실패
+
+        assertFailsWith<IllegalStateException> { change.change(ChangeProfileImageCommand(1L, png)) }
+
+        assertEquals(setOf("1/1.png"), storage.files)
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.jsm.boardgame.user.application.command.service
 import com.jsm.boardgame.user.application.command.support.CurrentPasswordVerifier
 import com.jsm.boardgame.user.application.command.usecase.WithdrawCommand
 import com.jsm.boardgame.common.error.CommonErrorCode
+import com.jsm.boardgame.user.application.exception.AccountLockedException
 import com.jsm.boardgame.user.application.exception.CurrentPasswordMismatchException
 import com.jsm.boardgame.user.application.exception.WalletLockContendedException
 import com.jsm.boardgame.user.application.exception.WithdrawalSeatedAtTableException
@@ -206,6 +207,24 @@ class WithdrawServiceTest {
         assertEquals(UserErrorCode.CURRENT_PASSWORD_MISMATCH, e.errorCode)
         assertNull(users.stored[1]!!.withdrawnAt)
         assertEquals(PasswordHash("hashed:otherpassword1"), users.stored[1]!!.passwordHash)
+        assertEquals("jti-1", sessions.currentAccessTokenId(UserId(1)))
+        assertEquals(0, limiter.resets)
+    }
+
+    @Test
+    fun `확인한 뒤 행 락 전에 계정이 잠겼으면 ACCOUNT_LOCKED 이고 탈퇴되지 않으며 세션은 그대로다`() {
+        seed()
+        concurrentChange = {
+            users.stored[1] = User.reconstitute(
+                id = UserId(1), username = Username.of("user_01"), passwordHash = PasswordHash("hashed:password1"),
+                nickname = Nickname.of("길동이"), profileImageKey = null, role = UserRole.USER, lockedAt = Instant.now(),
+            )
+        }
+
+        val e = assertFailsWith<AccountLockedException> { service.withdraw(WithdrawCommand(1L, "password1")) }
+
+        assertEquals(UserErrorCode.ACCOUNT_LOCKED, e.errorCode)
+        assertNull(users.stored[1]!!.withdrawnAt)
         assertEquals("jti-1", sessions.currentAccessTokenId(UserId(1)))
         assertEquals(0, limiter.resets)
     }

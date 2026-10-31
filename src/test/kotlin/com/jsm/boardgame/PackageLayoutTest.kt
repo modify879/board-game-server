@@ -34,10 +34,42 @@ class PackageLayoutTest {
         assertNull(declaredPackage(listOf("import x")))
     }
 
+    @Test
+    fun `여러 줄 블록 주석 안의 package 줄은 무시한다`() {
+        val lines = listOf("/*", " * 예전엔", "package old.name", " */", "package real.name")
+        assertEquals("real.name", declaredPackage(lines))
+        assertEquals("real.name", declaredPackage(listOf("/* 시작", "package old", "끝 */ package real.name")))
+    }
+
     private fun declaredPackage(lines: List<String>): String? =
-        lines.map(String::trim).firstOrNull { it.startsWith("package ") }
+        stripBlockComments(lines).map(String::trim).firstOrNull { it.startsWith("package ") }
             ?.removePrefix("package ")
             ?.replace(Regex("/\\*.*?\\*/"), "")
             ?.substringBefore("//")
             ?.trim()?.removeSuffix(";")?.trim()
+
+    // 줄 단위로 `/* ... */`(여러 줄 포함)를 걷어낸다. 같은 줄의 한 줄짜리 블록 주석은 declaredPackage 가 처리한다.
+    private fun stripBlockComments(lines: List<String>): List<String> {
+        var inBlock = false
+        return lines.map { line ->
+            val out = StringBuilder()
+            var i = 0
+            while (i < line.length) {
+                if (inBlock) {
+                    val end = line.indexOf("*/", i)
+                    if (end < 0) break
+                    inBlock = false
+                    i = end + 2
+                } else {
+                    val start = line.indexOf("/*", i)
+                    if (start < 0) { out.append(line, i, line.length); break }
+                    out.append(line, i, start)
+                    val end = line.indexOf("*/", start + 2)
+                    if (end < 0) { inBlock = true; break }
+                    i = end + 2
+                }
+            }
+            out.toString()
+        }
+    }
 }

@@ -4,6 +4,7 @@ import com.jsm.boardgame.user.application.command.support.CurrentPasswordVerifie
 import com.jsm.boardgame.user.application.command.usecase.LogoutUseCase
 import com.jsm.boardgame.user.application.command.usecase.WithdrawCommand
 import com.jsm.boardgame.user.application.command.usecase.WithdrawUseCase
+import com.jsm.boardgame.user.application.exception.AccountLockedException
 import com.jsm.boardgame.user.application.exception.CurrentPasswordMismatchException
 import com.jsm.boardgame.user.application.exception.WithdrawalSeatedAtTableException
 import com.jsm.boardgame.user.application.exception.WalletLockContendedException
@@ -38,7 +39,7 @@ import java.time.Instant
  * | 단계 | 실패하면 |
  * |---|---|
  * | 1. 조회·비밀번호 확인 | 아무것도 안 바뀐다 |
- * | 2. 트랜잭션: 지갑 락·확인 → 사용자 행 락 재조회·해시 재확인 → 좌석·대기열 확인 → withdraw + save | 롤백. 아무것도 안 바뀐다 |
+ * | 2. 트랜잭션: 지갑 락·확인 → 사용자 행 락 재조회·잠금·해시 재확인 → 좌석·대기열 확인 → withdraw + save | 롤백. 아무것도 안 바뀐다 |
  * | 3. 프로필 이미지 삭제 | 로그만 남는다. 고아 파일(ChangeProfileImageService 참고) |
  * | 4. 세션 종료 → 실패 카운터 초기화 | 오류 응답이지만 탈퇴는 끝났다. 탈퇴한 사용자는 조회되지 않아 남은 토큰은 갱신도 안 되고 API 도 못 쓴다 |
  */
@@ -88,6 +89,9 @@ class WithdrawService(
         // 바깥에서 읽은 인스턴스는 낡았을 수 있다 — 저장할 것은 락 뒤에 다시 읽은 것이다. 사용자 행 락은 지갑 락 뒤다.
         val current = users.findByIdForUpdate(userId)
             ?: throw UserNotFoundException("탈퇴하려는 사용자를 찾을 수 없음: userId=${userId.value}")
+        if (current.isLocked) {
+            throw AccountLockedException("계정이 잠겨 있습니다: userId=${userId.value}")
+        }
         if (current.passwordHash != verifiedHash) {
             throw CurrentPasswordMismatchException("확인한 뒤 비밀번호가 바뀌었습니다: userId=${userId.value}")
         }

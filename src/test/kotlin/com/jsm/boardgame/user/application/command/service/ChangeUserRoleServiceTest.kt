@@ -170,6 +170,17 @@ class ChangeUserRoleServiceTest {
     }
 
     @Test
+    fun `없는 사용자는 Redis 폐기 전에 거절되어 Redis 가 죽어 있어도 USER_NOT_FOUND 다`() {
+        failAt += "blacklist"
+        sessions.start(UserId(999L), AuthSession("jti-x", "refresh-x", Instant.now().plusSeconds(1_000)))
+
+        val e = assertFailsWith<UserNotFoundException> { service.changeRole(ChangeUserRoleCommand(999L, "ADMIN")) }
+
+        assertEquals(UserErrorCode.USER_NOT_FOUND, e.errorCode)
+        assertTrue(txLog.isEmpty(), "Redis 호출이 있었다: $txLog")
+    }
+
+    @Test
     fun `리프레시 토큰 세션은 폐기되지 않는다`() {
         users.put(1L, UserRole.ADMIN)
         sessions.start(UserId(1L), AuthSession("jti-1", "refresh-1", Instant.now().plusSeconds(1_000)))
