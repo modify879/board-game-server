@@ -9,8 +9,10 @@ paths:
 
 - 개인 채널은 `/user/queue/...` 로만 구독한다. 원시 `/queue` 구독은 `StompDestinationGuard` 가 막는다 —
   열어두면 세션 id 만 알아도 남의 개인 큐를 엿본다
-- 구독 인가 인터셉터는 목적지를 해석하지 못하면 거부한다(fail-closed). 통과시키면 형식만 비튼 목적지로
-  인가를 건너뛴다
+- 구독 인가는 두 겹이다. `StompDestinationGuard` 는 모든 SUBSCRIBE 에서 패턴 문자(`*?{}`)와 원시 `/queue` 를
+  거부한다. `HoldemSubscriptionInterceptor` 는 홀덤 테이블 목적지로 보이는 것(`/topic/tables/`,
+  `/user/queue/tables/`)만 대상으로, 그중 id 를 해석하지 못하면 거부한다(fail-closed) — 그 밖의 목적지는
+  통과시킨다. 형식만 비튼 테이블 목적지로 인가를 건너뛰지 못하게 하려는 것이다
 - 인가 실패 중 경합으로 생길 수 있는 것(개인 큐 착석 검사)은 ERROR 대신 SUBSCRIBE 를 버린다(null) — ERROR 는
   연결을 끊는다. 형식 오류는 그대로 ERROR
 - **CONNECT 프레임에서 `StompHeaderAccessor.wrap(message)` 로 `setUser` 하지 않는다.** `wrap` 은 새 인스턴스를

@@ -1,5 +1,6 @@
 package com.jsm.boardgame.user.application.command.service
 
+import com.jsm.boardgame.user.application.command.support.CurrentPasswordVerifier
 import com.jsm.boardgame.user.application.command.usecase.WithdrawCommand
 import com.jsm.boardgame.user.application.exception.CurrentPasswordMismatchException
 import com.jsm.boardgame.user.application.exception.WithdrawalSeatedAtTableException

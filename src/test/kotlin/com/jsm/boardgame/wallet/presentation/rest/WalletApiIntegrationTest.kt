@@ -109,7 +109,7 @@ class WalletApiIntegrationTest {
 
     /** 환전은 요청 시점에 즉시 차감되므로, 요청을 만들려면 잔액이 먼저 있어야 한다. */
     private fun fundWallet(userId: Long, amount: Long) {
-        val wallet = tx.execute { walletRepository.findOrOpen(UserId(userId)) }!!
+        val wallet = tx.execute { walletRepository.findOrOpen(UserId(userId)) }
         val entry = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT,
             amount = Money.of(amount),
