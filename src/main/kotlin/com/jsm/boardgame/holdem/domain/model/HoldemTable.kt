@@ -132,7 +132,7 @@ class HoldemTable private constructor(
     /**
      * 칩 추가 예약을 적용한다 — min(예약, [maxStack] − 스택, [walletBalance]) 를 [CHIP_UNIT] 으로 내림해 스택에 더하고,
      * 예약은 항상 지운다. 더한 금액을 돌려주며(0 이면 아무것도 안 더했다) 지갑 이체는 호출자가 한다.
-     * 핸드 진행 중에는 부르면 안 된다 — 호출 위치(ApplyChipsReservationService)가 보장한다.
+     * 핸드 진행 중에는 부르면 안 된다 — 호출 위치(ApplyChipsReservationsService)가 보장한다.
      */
     fun applyChipsReservation(userId: UserId, walletBalance: Long): Chips {
         val seat = seatOf(userId) ?: throw NotSeatedException("이 테이블에 앉아 있지 않은 사용자입니다: userId=$userId")

@@ -171,7 +171,8 @@ class HoldemTableTest {
         val table = newTable()
         table.sitDown(userId = UserId(1L), buyIn = Chips.of(10_000))
 
-        assertFailsWith<ChipAddOutOfRangeException> { table.addChips(1, Chips.ZERO) }
+        val e = assertFailsWith<ChipAddOutOfRangeException> { table.addChips(1, Chips.ZERO) }
+        assertEquals(HoldemErrorCode.CHIP_ADD_OUT_OF_RANGE, e.errorCode)
     }
 
     @Test
@@ -186,9 +187,9 @@ class HoldemTableTest {
         table.cancelChipsReservation(UserId(1L))
         assertNull(table.seatAt(1)!!.chipsReservation)
 
-        assertFailsWith<ChipAddOutOfRangeException> { table.reserveChips(UserId(1L), Chips.ZERO) }
-        assertFailsWith<NotSeatedException> { table.reserveChips(UserId(9L), Chips.of(100)) }
-        assertFailsWith<NotSeatedException> { table.cancelChipsReservation(UserId(9L)) }
+        assertEquals(HoldemErrorCode.CHIP_ADD_OUT_OF_RANGE, assertFailsWith<ChipAddOutOfRangeException> { table.reserveChips(UserId(1L), Chips.ZERO) }.errorCode)
+        assertEquals(HoldemErrorCode.NOT_SEATED, assertFailsWith<NotSeatedException> { table.reserveChips(UserId(9L), Chips.of(100)) }.errorCode)
+        assertEquals(HoldemErrorCode.NOT_SEATED, assertFailsWith<NotSeatedException> { table.cancelChipsReservation(UserId(9L)) }.errorCode)
     }
 
     @Test
@@ -534,7 +535,8 @@ class HoldemTableTest {
         assertEquals(Chips.of(10_000)..Chips.of(50_000), big.buyInRange(Chips.ZERO))
         // 한쪽 하한(4,000)은 다른 쪽에서는 미달이다.
         small.sitDown(UserId(1L), Chips.of(4_000))
-        assertFailsWith<BuyInOutOfRangeException> { big.sitDown(UserId(1L), Chips.of(4_000)) }
+        val e = assertFailsWith<BuyInOutOfRangeException> { big.sitDown(UserId(1L), Chips.of(4_000)) }
+        assertEquals(HoldemErrorCode.BUY_IN_OUT_OF_RANGE, e.errorCode)
         assertEquals(Chips.of(50_000), big.maxStack())
     }
 }

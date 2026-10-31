@@ -94,7 +94,7 @@ class QaDeckIntegrationTest {
         mockMvc.perform(post(url).header("Authorization", "Bearer $token").contentType(MediaType.APPLICATION_JSON).content(body))
 
     private fun fundWallet(userId: Long, amount: Long) {
-        val wallet = tx.execute { walletRepository.findOrOpen(WalletUserId(userId)) }!!
+        val wallet = tx.execute { walletRepository.findOrOpen(WalletUserId(userId)) }
         val entry = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT,
             amount = Money.of(amount),

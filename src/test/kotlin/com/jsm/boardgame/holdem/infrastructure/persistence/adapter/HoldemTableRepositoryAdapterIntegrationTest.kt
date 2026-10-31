@@ -151,11 +151,11 @@ class HoldemTableRepositoryAdapterIntegrationTest {
 
         saved.reserveLeave(userId, LeaveReservation.SPECTATE)
         tables.save(saved)
-        assertEquals(LeaveReservation.SPECTATE, tables.findById(saved.id!!)!!.seatOf(userId)!!.leaveReservation)
+        assertEquals(LeaveReservation.SPECTATE, tables.findById(saved.id)!!.seatOf(userId)!!.leaveReservation)
 
         saved.cancelLeaveReservation(userId)
         tables.save(saved)
-        assertFalse(tables.findById(saved.id!!)!!.seatOf(userId)!!.leaveReserved)
+        assertFalse(tables.findById(saved.id)!!.seatOf(userId)!!.leaveReserved)
     }
 
     @Test
@@ -172,11 +172,11 @@ class HoldemTableRepositoryAdapterIntegrationTest {
 
         saved.reserveChips(userId, Chips.of(5_000))
         tables.save(saved)
-        assertEquals(Chips.of(5_000), tables.findById(saved.id!!)!!.seatOf(userId)!!.chipsReservation)
+        assertEquals(Chips.of(5_000), tables.findById(saved.id)!!.seatOf(userId)!!.chipsReservation)
 
         saved.cancelChipsReservation(userId)
         tables.save(saved)
-        assertNull(tables.findById(saved.id!!)!!.seatOf(userId)!!.chipsReservation)
+        assertNull(tables.findById(saved.id)!!.seatOf(userId)!!.chipsReservation)
     }
 
     @Test

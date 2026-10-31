@@ -143,7 +143,7 @@ class HoldemApiIntegrationTest {
         mockMvc.perform(delete(url).header("Authorization", "Bearer $accessToken"))
 
     private fun fundWallet(userId: Long, amount: Long) {
-        val wallet = tx.execute { walletRepository.findOrOpen(WalletUserId(userId)) }!!
+        val wallet = tx.execute { walletRepository.findOrOpen(WalletUserId(userId)) }
         val entry = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT,
             amount = Money.of(amount),
@@ -156,7 +156,7 @@ class HoldemApiIntegrationTest {
 
     /** 지갑 잔액을 전부 빼 대기 중에 잔액이 사라진 경우를 만든다. */
     private fun drainWallet(userId: Long) {
-        val wallet = tx.execute { walletRepository.findOrOpen(WalletUserId(userId)) }!!
+        val wallet = tx.execute { walletRepository.findOrOpen(WalletUserId(userId)) }
         val entry = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_DEBIT,
             amount = wallet.balance,

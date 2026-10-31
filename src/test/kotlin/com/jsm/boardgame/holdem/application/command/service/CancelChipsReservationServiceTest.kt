@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.application.command.usecase.CancelChipsReservationCommand
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
@@ -37,6 +38,7 @@ class CancelChipsReservationServiceTest {
 
     @Test
     fun `앉아 있지 않으면 예약 취소는 NOT_SEATED`() {
-        assertFailsWith<NotSeatedException> { service.cancel(CancelChipsReservationCommand(userId = 999)) }
+        val e = assertFailsWith<NotSeatedException> { service.cancel(CancelChipsReservationCommand(userId = 999)) }
+        assertEquals(HoldemErrorCode.NOT_SEATED, e.errorCode)
     }
 }

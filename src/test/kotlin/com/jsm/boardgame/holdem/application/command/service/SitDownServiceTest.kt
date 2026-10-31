@@ -185,7 +185,8 @@ class SitDownServiceTest {
     fun `재착석 의무가 지갑 잔액보다 크면 INSUFFICIENT_BALANCE`() {
         walletBalance.balances[1L] = 9_000
         departures.put(UserId(1), Departure(Chips.of(15_000), Instant.MAX))
-        assertFailsWith<InsufficientBalanceException> { sitDownAs(15_000) }
+        val e = assertFailsWith<InsufficientBalanceException> { sitDownAs(15_000) }
+        assertEquals(HoldemErrorCode.INSUFFICIENT_BALANCE, e.errorCode)
     }
 
     @Test
