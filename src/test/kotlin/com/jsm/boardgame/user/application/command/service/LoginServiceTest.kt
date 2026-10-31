@@ -141,7 +141,7 @@ private class LoginInMemoryAuthSessionStore : AuthSessionStore {
 
     // 이 픽스처는 그레이스 개념 없이 정확히 일치할 때만 통과한다 — LoginService 는 rotate() 를
     // 쓰지 않고 항상 start() 로 세션을 여므로, 여기서는 인터페이스 구현을 위한 최소 구현이다.
-    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession): RotationResult {
+    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession, nextAccessToken: String, nextAccessTokenExpiresAt: Instant, nextRole: UserRole): RotationResult {
         val session = sessions[userId] ?: return RotationResult.Mismatch
         if (session.refreshToken != presentedRefreshToken) return RotationResult.Mismatch
 

@@ -59,7 +59,7 @@ private class RaceSessions : AuthSessionStore {
     override fun blacklistAccessToken(accessTokenId: String, expiresAt: Instant) { blacklist += accessTokenId }
     override fun isAccessTokenBlacklisted(accessTokenId: String): Boolean = accessTokenId in blacklist
     override fun userIdForRefreshToken(refreshToken: String): UserId? = index[refreshToken]
-    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession): RotationResult {
+    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession, nextAccessToken: String, nextAccessTokenExpiresAt: Instant, nextRole: UserRole): RotationResult {
         beforeRotate?.let { hook -> beforeRotate = null; hook() }
         val current = sessions[userId] ?: return RotationResult.Mismatch
         if (current.refreshToken != presentedRefreshToken) return RotationResult.Mismatch

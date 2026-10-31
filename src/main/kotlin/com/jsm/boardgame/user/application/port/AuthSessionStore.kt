@@ -1,6 +1,7 @@
 package com.jsm.boardgame.user.application.port
 
 import com.jsm.boardgame.user.domain.model.UserId
+import com.jsm.boardgame.user.domain.model.UserRole
 import java.time.Instant
 
 /**
@@ -26,22 +27,24 @@ interface AuthSessionStore {
     fun isAccessTokenBlacklisted(accessTokenId: String): Boolean
 
     /**
-     * 제시된 리프레시 토큰이 현재 토큰(또는 유예 중인 직전 토큰)과 일치하면
-     * 세션을 [next] 로 원자적으로 교체한다.
+     * 제시된 리프레시 토큰이 현재 토큰이면 세션을 [next] 로 원자적으로 교체한다([RotationResult.Rotated]).
+     * [nextAccessToken]·[nextAccessTokenExpiresAt]·[nextRole] 은 이 회전의 후속 액세스 토큰과 박힌 역할이다 — 구현이 재생용으로 보관한다.
      *
-     * 검사와 교체를 한 연산으로 처리해 동시 갱신 경합을 막는다. 나누면 두 요청이 모두
-     * 검사를 통과해 각자 토큰을 발급하고, 나중 쓰기가 이겨 진 쪽 클라이언트는
-     * 저장되지 않은 토큰을 받는다.
+     * 직전(밀려난) 토큰이 유예 안에 다시 제시되면 **다시 회전하지 않고** 처음 회전이 발급한 후속 토큰을
+     * 그대로 돌려준다([RotationResult.Replayed], 멱등 재생). 같은 쿠키로 동시에 온 갱신 요청이 서로를
+     * 로그아웃시키지 않게 하려는 것이다. 유예가 지났거나 더 오래된 토큰, 세션이 없으면 [RotationResult.Mismatch].
      *
-     * 회전 후의 직전 토큰 유예 칸은 **호출자가 정하지 않는다.** 구현이 이번 회전으로
-     * 밀려난(교체되기 직전의) 현재 토큰을 스스로 다음 직전 칸에 채운다 — 제시된 토큰이
-     * 현재 칸과 일치해 통과했든 유예 중인 직전 칸과 일치해 통과했든 상관없다. [AuthSession] 에
-     * previousRefreshToken 필드가 없는 이유이기도 하다: 호출자가 제시된 토큰을 그대로
-     * 직전 칸에 넣는 식으로 잘못 구현할 방법이 애초에 없어야 한다(그러면 유예 중인 직전
-     * 토큰을 반복 제시할 때마다 유예가 무한정 갱신되고, 정작 밀려난 현재 토큰은 두 칸
-     * 어디에도 남지 않아 그 토큰을 들고 있던 정상 클라이언트가 재사용 탐지로 쫓겨난다).
+     * 검사와 교체를 한 연산으로 처리해 동시 갱신 경합을 막는다. 회전 후의 직전 칸은 **호출자가 정하지 않는다** —
+     * 구현이 이번에 밀려난 현재 토큰을 채운다.
      */
-    fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession): RotationResult
+    fun rotate(
+        userId: UserId,
+        presentedRefreshToken: String,
+        next: AuthSession,
+        nextAccessToken: String,
+        nextAccessTokenExpiresAt: Instant,
+        nextRole: UserRole,
+    ): RotationResult
 
     /** 적중해도 유효하다는 뜻이 아니다 — 재사용 판정은 [rotate] 가 한다. */
     fun userIdForRefreshToken(refreshToken: String): UserId?
@@ -57,6 +60,17 @@ sealed interface RotationResult {
     /** 교체 성공. [previousAccessTokenId] 는 교체 전 세션의 jti. */
     data class Rotated(val previousAccessTokenId: String?) : RotationResult
 
-    /** 현재·직전 어디와도 일치하지 않는다. 재사용 또는 탈취. */
+    /** 유예 안의 직전 토큰 재제시. 처음 회전이 발급한 후속 토큰을 그대로 돌려준다 — 새로 발급·폐기된 것은 없다. */
+    data class Replayed(
+        val accessTokenId: String,
+        val accessToken: String,
+        val refreshToken: String,
+        val accessTokenExpiresAt: Instant,
+        val refreshTokenExpiresAt: Instant,
+        /** 후속 액세스 토큰에 박힌 역할 — 재생 시 역할 변경 재확인에 쓴다. */
+        val role: UserRole,
+    ) : RotationResult
+
+    /** 현재·직전(유예 안) 어디와도 일치하지 않는다. 재사용 또는 탈취. */
     data object Mismatch : RotationResult
 }

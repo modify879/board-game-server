@@ -63,7 +63,7 @@ private class LogoutFakeAuthSessionStore : AuthSessionStore {
 
     // 이 픽스처는 그레이스 개념 없이 정확히 일치할 때만 통과한다 — 여기서 필요한 건 로그아웃 후
     // rotate() 가 Mismatch 를 돌려주는 것뿐이다(세션이 clear() 로 이미 지워졌으므로).
-    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession): RotationResult {
+    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession, nextAccessToken: String, nextAccessTokenExpiresAt: Instant, nextRole: UserRole): RotationResult {
         val session = sessions[userId] ?: return RotationResult.Mismatch
         if (session.refreshToken != presentedRefreshToken) return RotationResult.Mismatch
 

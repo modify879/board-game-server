@@ -10,6 +10,8 @@ import com.jsm.boardgame.user.application.port.RealtimeConnections
 import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.application.exception.AccountLockedException
 import com.jsm.boardgame.user.application.exception.InvalidRefreshTokenException
+import com.jsm.boardgame.user.domain.model.UserId
+import com.jsm.boardgame.user.domain.model.UserRole
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
@@ -23,9 +25,10 @@ import java.time.Instant
 // 순서와 중간 실패 시 남는 상태(모두 fail-closed). DB 쓰기가 없으므로 되돌릴 것이 없다:
 //  1. 리프레시 토큰 → userId (Redis) / 사용자 조회·잠금 확인 (DB) / 발급 — 실패하면 아무것도 안 바뀐다.
 //  2. rotate (Redis, 원자) — 실패하면 옛 세션 그대로. 클라이언트는 옛 토큰으로 다시 시도한다.
-//  3. Rotated: 직전 액세스 토큰 블랙리스트 → closeAfterGrace. 블랙리스트가 실패하면 오류 응답을 받지만
+//  3. Replayed: 이긴 회전의 토큰을 그대로 돌려준다. 블랙리스트·소켓 종료 없이 역할 재확인만 한다.
+//  4. Rotated: 직전 액세스 토큰 블랙리스트 → closeAfterGrace. 블랙리스트가 실패하면 오류 응답을 받지만
 //     세션은 이미 회전돼 있어 클라이언트가 가진 옛 리프레시 토큰은 유예 뒤 재사용 탐지로 세션 전체가 폐기된다.
-//  4. Mismatch: 블랙리스트 → closeAllOf → clear 순서 고정. 중간에 실패하면 세션이 남지만 이미 블랙리스트에 오른
+//  5. Mismatch: 블랙리스트 → closeAllOf → clear 순서 고정. 중간에 실패하면 세션이 남지만 이미 블랙리스트에 오른
 //     토큰은 무효이고, 다음 시도가 다시 Mismatch 로 같은 폐기를 이어간다.
 //
 // 역할 재확인: rotate 뒤 DB 를 한 번 더 읽는다(정상 경로의 추가 비용은 PK 조회 1회, 짧은 읽기 트랜잭션).
@@ -70,6 +73,9 @@ class RefreshTokenService(
                 refreshToken = tokens.refreshToken,
                 refreshTokenExpiresAt = tokens.refreshTokenExpiresAt,
             ),
+            tokens.accessToken,
+            tokens.accessTokenExpiresAt,
+            user.role,
         )
 
         return when (result) {
@@ -83,16 +89,24 @@ class RefreshTokenService(
                 // 회전으로 새 토큰이 세션에 **저장된 뒤** 역할을 다시 읽는다. 발급에 쓴 역할과 다르면 그 사이에
                 // 역할이 바뀐 것이다 — 새 토큰을 폐기하고 세션을 정리해 재로그인시킨다. 이 재확인이 저장 뒤여야
                 // ChangeUserRoleService 의 "save 뒤 재폐기"와 합쳐 모든 끼어들기 순서가 닫힌다(그쪽 KDoc 참고).
-                if (users.findById(userId)?.role != user.role) {
-                    sessions.blacklistAccessToken(tokens.accessTokenId, Instant.now(clock).plus(accessTokenTtl))
-                    sessions.clear(userId)
-                    throw InvalidRefreshTokenException("리프레시 중 역할 변경 감지: userId=${userId.value} — 새 토큰 폐기")
-                }
+                rejectIfRoleChanged(userId, user.role, tokens.accessTokenId)
                 AuthTokens(
                     accessToken = tokens.accessToken,
                     refreshToken = tokens.refreshToken,
                     accessTokenExpiresAt = tokens.accessTokenExpiresAt,
                     refreshTokenExpiresAt = tokens.refreshTokenExpiresAt,
+                )
+            }
+
+            is RotationResult.Replayed -> {
+                // 멱등 재생 — 이긴 회전이 발급한 토큰을 그대로 돌려준다. 블랙리스트·소켓 종료 없음(이긴 쪽의 토큰이다).
+                // 재생이 역할 변경을 우회하지 못하게 같은 재확인을 거친다.
+                rejectIfRoleChanged(userId, result.role, result.accessTokenId)
+                AuthTokens(
+                    accessToken = result.accessToken,
+                    refreshToken = result.refreshToken,
+                    accessTokenExpiresAt = result.accessTokenExpiresAt,
+                    refreshTokenExpiresAt = result.refreshTokenExpiresAt,
                 )
             }
 
@@ -116,6 +130,14 @@ class RefreshTokenService(
                     throw InvalidRefreshTokenException("리프레시 토큰에 해당하는 세션 없음: userId=${userId.value}")
                 }
             }
+        }
+    }
+
+    private fun rejectIfRoleChanged(userId: UserId, issuedRole: UserRole, accessTokenId: String) {
+        if (users.findById(userId)?.role != issuedRole) {
+            sessions.blacklistAccessToken(accessTokenId, Instant.now(clock).plus(accessTokenTtl))
+            sessions.clear(userId)
+            throw InvalidRefreshTokenException("리프레시 중 역할 변경 감지: userId=${userId.value} — 새 토큰 폐기")
         }
     }
 }

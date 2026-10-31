@@ -2,6 +2,7 @@ package com.jsm.boardgame.user.infrastructure.security.adapter
 
 import com.jsm.boardgame.user.infrastructure.security.config.JwtProperties
 import com.jsm.boardgame.user.domain.model.UserId
+import com.jsm.boardgame.user.domain.model.UserRole
 import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.RotationResult
@@ -40,64 +41,30 @@ import java.time.Instant
  * TTL 은 만료 시각과 현재 시각의 차이로 계산한다. 이미 지난 시각이면 저장하지 않는다
  * (Redis 의 EXPIRE 는 음수 TTL 을 즉시 삭제로 처리하지만, 애초에 쓰지 않는 편이 의도가 분명하다).
  *
- * ### 리프레시 토큰 회전 유예
+ * ### 리프레시 토큰 회전과 멱등 재생
  *
- * 회전 응답이 네트워크에서 유실되면 클라이언트는 이미 무효화된 옛 토큰으로 재시도한다.
- * 이를 탈취로 오판해 세션을 폐기하면 정상 사용자가 강제 로그아웃된다. 그래서 직전 토큰
- * 한 세대에 한해 [JwtProperties.refreshReuseGrace] 동안만 재사용을 허용한다.
+ * 쿠키 하나를 여러 요청이 공유하므로 같은 리프레시 토큰이 동시에(또는 응답 유실 뒤 재시도로) 다시 온다.
+ * 이를 탈취로 보고 세션을 폐기하면 정상 사용자가 로그아웃된다. 그래서 직전 토큰 한 세대에 한해
+ * [JwtProperties.refreshReuseGrace] 동안은 **다시 회전하지 않고, 처음 회전이 발급한 후속 토큰을 그대로 돌려준다**
+ * ([RotationResult.Replayed]). 아무것도 블랙리스트에 오르거나 닫히지 않는다.
  *
- * 유예는 오직 "바로 직전" 세대에만 적용된다 — 세션에는 직전 토큰 해시가 하나만 저장되고
- * 회전할 때마다 덮어써지므로, 두 세대 이상 전 토큰은 애초에 저장소에 남아 있지 않다.
- * 그런 토큰이 오면 유예 시각과 무관하게 [rotate] 가 [RotationResult.Mismatch] 를 돌려주고,
- * 호출자([RefreshTokenService])가 재사용 탐지로 세션 전체를 폐기한다.
+ * 정상 회전([ROTATE_SCRIPT] 에서 제시 해시 == 현재 해시) 때 스크립트가 세션을 교체하면서, 같은 실행 안에서
+ * `auth:refresh:replay:{밀려난 해시}` 에 암호화된 후속 토큰을 유예 길이만큼만 둔다. 유예 안에 직전 해시가 오면
+ * 그 값을 돌려주고, 레코드가 없으면 nil([RotationResult.Mismatch])이다. 확인·교체·기록이 한 Lua 실행이라
+ * 동시에 N 개가 와도 하나만 Rotated 이고 나머지는 같은 값의 Replayed 다. 해시·시각·TTL 계산과 암호화는
+ * 스크립트가 아니라 여기(Kotlin)에서 하고 결과만 인자로 넘긴다 — 원문 토큰이 Redis 로 가지 않고 시계를
+ * 테스트가 조작할 수 있다. 다음 직전 칸에 들어갈 값(밀려난 현재 해시)만은 스크립트가 방금 읽은 값에서 직접 조립한다.
  *
- * **직전 칸에 무엇이 들어가는가는 이 저장소가 정한다 — 호출자가 정하지 않는다.** [rotate] 가
- * 성공적으로 교체할 때, 새 직전 칸에는 언제나 "이번 회전으로 밀려난 현재 토큰"이 들어간다.
- * 제시된 토큰이 현재 칸과 일치해 통과했든 유예 중인 직전 칸과 일치해 통과했든 상관없다.
- * 만약 호출자가 "이번에 제시된 토큰"을 직전 칸에 넣는 식으로 구현했다면, 유예 중인 직전
- * 토큰을 반복 제시할 때마다 그 토큰이 계속 직전 칸에 재기록되어 유예가 사실상 무한정
- * 갱신되고, 동시에 실제로 밀려난 현재 토큰은 두 칸 어디에도 남지 않아 그 토큰을 들고 있던
- * 정상 클라이언트가 재사용 탐지로 세션째 폐기당한다. [AuthSession] 에 previousRefreshToken
- * 필드가 없는 이유가 이것이다 — 호출자가 애초에 그 값을 정할 수 없어야 이 실수가 불가능하다.
- * 그래서 [ROTATE_SCRIPT] 가 현재 해시(교체되기 직전 값)를 직접 읽어 다음 직전 칸에 넣는다.
+ * **후속 토큰은 암호화해 둔다.** 평문으로 두면 Redis 를 읽을 수 있는 쪽(덤프·백업·운영자)이 유예 5초 동안
+ * 살아 있는 리프레시 토큰을 얻는다. 키는 제시된 옛 리프레시 토큰에서 HKDF 로 유도한다([RefreshReplayCipher]) —
+ * 그 토큰을 가진 쪽만 풀 수 있고, Redis 에는 그 해시만 있어 풀 수 없다. 복호화 실패는 Mismatch 다.
  *
- * ### 동시 갱신 경합과 원자적 회전
+ * 유예가 지난 뒤의 직전 토큰, 두 세대 이상 전 토큰(세션엔 직전 해시 하나뿐이고 회전마다 덮어써진다)은
+ * 모두 Mismatch 이고 호출자([RefreshTokenService])가 재사용 탐지로 세션 전체를 폐기한다. 유예 안에서
+ * 옛 토큰을 가진 공격자가 얻는 것은 정상 클라이언트가 받은 것과 같은 후속 토큰이라, 재생이 이전 동작(다시 회전)보다
+ * 공격 면을 넓히지 않는다. 인덱스(`auth:refresh:{sha256}`)는 회전해도 지우지 않는다 — 재사용 탐지용이다.
  *
- * 리프레시 토큰이 일치하는지 확인한 뒤 별도로 [start] 를 호출하는 "확인 후 실행"은 원자적이지
- * 않다. 같은 리프레시 토큰으로 두 요청이 동시에 오면 둘 다 확인을 통과하고, 각자 새 토큰을
- * 발급한 뒤 나중에 SET 하는 쪽이 이겨 먼저 응답받은 클라이언트는 저장소에 없는 토큰을 들고
- * 남는다. [rotate] 는 확인과 교체를 Lua 스크립트로 묶어 Redis 서버에서 한 번에 원자적으로
- * 처리해 이 경합을 없앤다. 해시 계산과 현재 시각·TTL 계산은 스크립트가 아니라 여기(Kotlin)에서
- * 하고 결과만 인자로 넘긴다 — 원문 토큰이 Redis 로 전달되지 않게 하고, 스크립트가 직접 시계를
- * 읽어 테스트 재현성이 떨어지는 것을 막기 위해서다. 다음 직전 칸에 들어갈 값(밀려난 현재
- * 해시)만은 예외로, 스크립트가 방금 읽은 현재 값에서 직접 뽑아 조립한다 — 그래야 호출자가
- * 끼어들 여지가 없다.
- *
- * ### 즉시 경합 가드 (MIN_GRACE_ELAPSED_MILLIS)
- *
- * 원자성만으로는 충분하지 않다. 두 요청이 정말 동시에 같은(아직 회전되지 않은) 토큰을 제시하면,
- * Redis 가 두 Lua 실행을 직렬화하므로 그중 하나만 "현재 토큰과 일치"로 통과한다 — 그런데
- * 나머지 하나는, 방금 그 하나가 연 유예 창 안에서 "직전 토큰과 일치"로 **똑같이 통과해버린다**.
- * 유예는 원래 "응답 유실 후 나중에 재시도"를 위한 것이지만, 저장된 값만 보면 "몇 초 뒤의 재시도"와
- * "몇 마이크로초 뒤의 동시 경합"을 구별할 수 없다. 방치하면 진 쪽도 200 과 함께 유효해 보이는
- * 토큰을 받고, 그 액세스 토큰마저 이긴 쪽의 다음 회전에 딸려 블랙리스트에 오르며, 이후 그 고아
- * 토큰이 제시되면 재사용 탐지로 오인돼 이긴 쪽의 정상 세션까지 강제 로그아웃된다 — 없앤 줄 알았던
- * 경합이 유예 경로로 되살아나는 셈이다.
- *
- * 그래서 유예 통과 조건에 "이 유예 창이 열린 뒤 [MIN_GRACE_ELAPSED_MILLIS] 이상 지났는가"를
- * 추가한다. 실제 클라이언트의 응답 유실 재시도는 최소 한 번의 요청 타임아웃(보통 수백 ms~수 초)
- * 이후에나 일어나므로 전혀 영향받지 않는다. 반면 같은 Redis 인스턴스에서 두 Lua 스크립트가
- * 등에 업혀 실행되는 간격은 마이크로초~저수 ms 수준이라 이 가드에 안정적으로 걸린다. 이 값은
- * 인스턴스마다 달라지는 [refreshReuseGrace] 와 달리 순수한 구현 상수라 스크립트 텍스트에
- * 직접 새겨 넣는다(요청마다 인자로 넘길 이유가 없다).
- *
- * ### 두 장치는 중복이 아니다
- *
- * 이 가드와 "직전 칸 = 밀려난 현재 토큰" 규칙은 **서로 다른 실패를 막는다.**
- * 가드는 동시 중복(마이크로초 간격)을 막고, 직전 칸 규칙은 유예 토큰이 매번 새 유예 창을
- * 얻어 무한히 되살아나는 것을 막는다. 하나만 보고 다른 하나를 중복이라 판단해 지우지 마라 —
- * 실제로 이 저장소에서 "둘 중 하나를 고르는 문제"로 잘못 보고 후자를 빠뜨렸다가,
- * 유예 토큰이 영구히 유효해지고 정상 클라이언트만 쫓겨나는 버그를 만들었다.
+ * 경과 시간으로 재생을 막는 가드를 다시 넣지 마라 — 동시 요청을 Mismatch 로 만들어 정상 사용자를 쫓아낸다.
  */
 @Component
 class RedisAuthSessionStore(
@@ -133,7 +100,14 @@ class RedisAuthSessionStore(
     override fun isAccessTokenBlacklisted(accessTokenId: String): Boolean =
         redisTemplate.hasKey(blacklistKey(accessTokenId))
 
-    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession): RotationResult {
+    override fun rotate(
+        userId: UserId,
+        presentedRefreshToken: String,
+        next: AuthSession,
+        nextAccessToken: String,
+        nextAccessTokenExpiresAt: Instant,
+        nextRole: UserRole,
+    ): RotationResult {
         val now = Instant.now(clock)
         val ttl = Duration.between(now, next.refreshTokenExpiresAt)
         // tokenIssuer 는 항상 미래 만료 시각의 토큰을 발급하므로 실제로는 항상 양수다 — SET 의 EX 에
@@ -141,28 +115,45 @@ class RedisAuthSessionStore(
         val ttlSeconds = ttl.seconds.coerceAtLeast(1)
         val graceExpiresAtEpochMilli = now.plus(refreshReuseGrace).toEpochMilli()
         val nextRefreshTokenHash = hash(next.refreshToken)
+        val presentedHash = hash(presentedRefreshToken)
+        val replayPayload = RefreshReplayCipher.encrypt(
+            presentedRefreshToken,
+            RotationResult.Replayed(
+                accessTokenId = next.accessTokenId,
+                accessToken = nextAccessToken,
+                refreshToken = next.refreshToken,
+                accessTokenExpiresAt = nextAccessTokenExpiresAt,
+                refreshTokenExpiresAt = next.refreshTokenExpiresAt,
+                role = nextRole,
+            ),
+        )
 
-        val previousAccessTokenId = redisTemplate.execute(
+        val result = redisTemplate.execute(
             ROTATE_SCRIPT,
-            listOf(sessionKey(userId)),
-            hash(presentedRefreshToken),
+            listOf(sessionKey(userId), replayKey(presentedHash)),
+            presentedHash,
             now.toEpochMilli().toString(),
             next.accessTokenId,
             nextRefreshTokenHash,
             ttlSeconds.toString(),
-            refreshReuseGrace.toMillis().toString(),
             graceExpiresAtEpochMilli.toString(),
+            replayPayload,
+            (refreshReuseGrace.toMillis() + REPLAY_TTL_MARGIN_MILLIS).toString(),
         )
+        val kind = result?.getOrNull(0) as String?
+        val value = result?.getOrNull(1) as String?
 
-        return if (previousAccessTokenId != null) {
-            redisTemplate.opsForValue().set(
-                refreshIndexKey(nextRefreshTokenHash),
-                userId.value.toString(),
-                Duration.ofSeconds(ttlSeconds),
-            )
-            RotationResult.Rotated(previousAccessTokenId)
-        } else {
-            RotationResult.Mismatch
+        return when (kind) {
+            "R" -> {
+                redisTemplate.opsForValue().set(
+                    refreshIndexKey(nextRefreshTokenHash),
+                    userId.value.toString(),
+                    Duration.ofSeconds(ttlSeconds),
+                )
+                RotationResult.Rotated(value)
+            }
+            "P" -> RefreshReplayCipher.decrypt(presentedRefreshToken, value ?: "") ?: RotationResult.Mismatch
+            else -> RotationResult.Mismatch
         }
     }
 
@@ -212,6 +203,8 @@ class RedisAuthSessionStore(
 
     private fun refreshIndexKey(tokenHash: String): String = "$REFRESH_INDEX_KEY_PREFIX$tokenHash"
 
+    private fun replayKey(tokenHash: String): String = "$REPLAY_KEY_PREFIX$tokenHash"
+
     private fun hash(value: String): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
         return digest.joinToString(separator = "") { "%02x".format(it) }
@@ -224,35 +217,29 @@ class RedisAuthSessionStore(
         private const val FIELD_DELIMITER = ":"
         private const val BLACKLISTED_MARKER = "1"
 
-        /** [rotate] 의 즉시 경합 가드. 클래스 docs "즉시 경합 가드" 절 참고. */
-        private const val MIN_GRACE_ELAPSED_MILLIS = 100L
+        private const val REPLAY_KEY_PREFIX = "auth:refresh:replay:"
+
+        /** 재생 레코드 TTL 여유 — 유예 판정은 세션 값의 시각이 하고, 이건 레코드가 먼저 사라지지 않게 하는 안전 마진이다. */
+        private const val REPLAY_TTL_MARGIN_MILLIS = 1_000L
 
         /**
-         * KEYS[1] = 세션 키
+         * KEYS[1] = 세션 키, KEYS[2] = 제시된 해시의 재생 키
          * ARGV[1] = 제시된 리프레시 토큰의 SHA-256 해시
-         * ARGV[2] = 현재 시각(epoch millis, 문자열) — Kotlin 이 계산해 넘긴다
+         * ARGV[2] = 현재 시각(epoch millis) — Kotlin 이 계산해 넘긴다
          * ARGV[3] = 다음 세션의 accessTokenId
          * ARGV[4] = 다음 세션의 리프레시 토큰 SHA-256 해시
-         * ARGV[5] = 다음 세션의 TTL(초, 문자열)
-         * ARGV[6] = 이 저장소 인스턴스의 [refreshReuseGrace](밀리초, 문자열) — 즉시 경합 가드 계산용
-         * ARGV[7] = 다음 세션의 유예 만료 시각(epoch millis, 문자열) — Kotlin 이 now + refreshReuseGrace 로 계산해 넘긴다
+         * ARGV[5] = 다음 세션의 TTL(초)
+         * ARGV[6] = 다음 세션의 유예 만료 시각(epoch millis)
+         * ARGV[7] = 암호화된 재생 페이로드
+         * ARGV[8] = 재생 키 TTL(밀리초)
          *
-         * 저장된 값이 없으면 nil(불일치). 있으면 `accessTokenId:hash:prevHash:graceMillis` 로 나눠
-         * 제시된 해시가 현재 해시와 같으면 곧바로 통과. 아니면 직전 해시와 같고 아직 유예 시각
-         * 이전이면서, 그 유예 창이 열린 지 [MIN_GRACE_ELAPSED_MILLIS] 이상 지났을 때만 통과시킨다
-         * (즉시 경합 가드 — 클래스 docs 참고).
+         * 반환: nil(불일치) / {"R", 교체 전 accessTokenId}(회전) / {"P", 재생 페이로드}(유예 안의 직전 토큰).
          *
-         * 통과하면 다음 값을 **스크립트가 직접 조립해서** SET 한다:
-         * `ARGV[3]:ARGV[4]:hash:ARGV[7]` — 여기서 `hash` 는 방금 이 스크립트가 GET 으로 읽은,
-         * 교체되기 직전의 "현재" 해시다. 즉 다음 직전 칸에는 제시된 해시(ARGV[1])가 아니라
-         * 이번 회전으로 밀려난 현재 해시가 들어간다 — 제시된 토큰이 현재 칸과 일치해서
-         * 통과했든 유예 중인 직전 칸과 일치해서 통과했든 동일하다. 교체 전 accessTokenId 를
-         * 돌려준다. 그 외에는 nil.
-         *
-         * GET 부터 SET 까지가 단일 Lua 스크립트 실행 안에서 끝나므로(Redis 는 스크립트 실행 중
-         * 다른 명령을 끼워 넣지 않는다) 동시에 들어온 두 rotate 호출 중 하나만 통과한다.
+         * 제시 해시 == 현재 해시면 세션을 `ARGV[3]:ARGV[4]:hash:ARGV[6]` 로 교체하고(다음 직전 칸 = 밀려난 현재 해시)
+         * 재생 키에 ARGV[7] 을 PX 로 둔다. 제시 해시 == 직전 해시이고 유예 시각 전이면 재생 키 값을 돌려준다
+         * (없으면 nil). GET 부터 SET 까지가 단일 Lua 실행이라 동시에 온 호출 중 하나만 회전한다.
          */
-        private val ROTATE_SCRIPT: RedisScript<String> = DefaultRedisScript(
+        private val ROTATE_SCRIPT: RedisScript<List<*>> = DefaultRedisScript(
             """
             local current = redis.call('GET', KEYS[1])
             if not current then
@@ -273,33 +260,23 @@ class RedisAuthSessionStore(
 
             local presentedHash = ARGV[1]
             local nowMillis = tonumber(ARGV[2])
-            local refreshReuseGraceMillis = tonumber(ARGV[6])
 
-            local matched = false
             if presentedHash == hash then
-              matched = true
-            elseif prevHash ~= '' and prevHash == presentedHash and graceMillis and graceMillis > nowMillis then
-              local elapsedSinceRotationMillis = refreshReuseGraceMillis - (graceMillis - nowMillis)
-              if elapsedSinceRotationMillis >= $MIN_GRACE_ELAPSED_MILLIS then
-                matched = true
+              local nextValue = ARGV[3] .. ':' .. ARGV[4] .. ':' .. hash .. ':' .. ARGV[6]
+              redis.call('SET', KEYS[1], nextValue, 'EX', ARGV[5])
+              redis.call('SET', KEYS[2], ARGV[7], 'PX', ARGV[8])
+              return {'R', accessTokenId}
+            end
+
+            if prevHash ~= '' and prevHash == presentedHash and graceMillis and graceMillis > nowMillis then
+              local replay = redis.call('GET', KEYS[2])
+              if replay then
+                return {'P', replay}
               end
             end
-
-            if not matched then
-              return nil
-            end
-
-            local newAccessTokenId = ARGV[3]
-            local newHash = ARGV[4]
-            local ttlSeconds = ARGV[5]
-            local newGraceExpiresAt = ARGV[7]
-
-            -- 다음 직전 칸은 언제나 "이번에 밀려난 현재 해시"(hash)다 — 제시된 해시가 아니다.
-            local nextValue = newAccessTokenId .. ':' .. newHash .. ':' .. hash .. ':' .. newGraceExpiresAt
-            redis.call('SET', KEYS[1], nextValue, 'EX', ttlSeconds)
-            return accessTokenId
+            return nil
             """.trimIndent(),
-            String::class.java,
+            List::class.java,
         )
     }
 }
