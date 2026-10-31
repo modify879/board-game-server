@@ -253,13 +253,15 @@ class HandStarterTest {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
         start(tableId) // 1핸드: BB=1
         handStore.remove(tableId)
+        start(tableId) // 2핸드: BB=2 (버튼=3 — 4 는 버튼~SB 구간이라 이때 앉으면 대기한다)
+        handStore.remove(tableId)
 
         sitDownChoosing(tableId, seatNo = 4, buyIn = 10_000L, postBlindImmediately = true)
 
-        start(tableId) // 2핸드: BB=2, 4는 즉시 참가
+        start(tableId) // 3핸드: 버튼=1 SB=2 BB=3, 4는 구간 밖이라 즉시 참가
 
         val savedTable = tables.findById(tableId)!!
-        assertEquals(2, savedTable.bigBlindSeatNo)
+        assertEquals(3, savedTable.bigBlindSeatNo)
         val hand = handStore.find(tableId)!!
         assertEquals(Chips.of(10_000) - TestTablePolicy.bigBlind, hand.stackOf(4))
         assertFalse(tables.findById(tableId)!!.seatAt(4)!!.owesImmediatePost)
@@ -270,17 +272,19 @@ class HandStarterTest {
         val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
         start(tableId) // 1핸드: BB=1
         handStore.remove(tableId)
+        start(tableId) // 2핸드: BB=2 (버튼=3 — 4 는 버튼~SB 구간이라 이때 앉으면 대기한다)
+        handStore.remove(tableId)
 
         sitDownChoosing(tableId, seatNo = 4, buyIn = 10_000L, postBlindImmediately = true)
 
-        start(tableId) // 2핸드: BB=2, 4는 진입료 납부
+        start(tableId) // 3핸드: BB=3, 4는 진입료 납부
         handStore.remove(tableId)
 
-        start(tableId) // 3핸드: BB=3, 4는 이번엔 SB/BB 아님
+        start(tableId) // 4핸드: BB=4, 진입료 없이 BB 만 낸다
 
         val hand = handStore.find(tableId)!!
-        assertEquals(3, tables.findById(tableId)!!.bigBlindSeatNo)
-        assertEquals(Chips.of(10_000), hand.stackOf(4))
+        assertEquals(4, tables.findById(tableId)!!.bigBlindSeatNo)
+        assertEquals(Chips.of(10_000) - TestTablePolicy.bigBlind, hand.stackOf(4))
     }
 
     @Test
@@ -395,6 +399,8 @@ class HandStarterTest {
     fun `스택 총합은 보존된다`() {
         val buyIn = 10_000L
         val tableId = tableWithSeats(1 to buyIn, 2 to buyIn, 3 to buyIn)
+        start(tableId)
+        handStore.remove(tableId)
         start(tableId)
         handStore.remove(tableId)
         sitDownChoosing(tableId, seatNo = 4, buyIn = buyIn, postBlindImmediately = true)
@@ -537,5 +543,55 @@ class HandStarterTest {
         assertEquals(Chips.of(10_000) - TestTablePolicy.bigBlind, hand.stackOf(2))
         assertFalse(tables.findById(tableId)!!.seatAt(2)!!.owesImmediatePost)
     }
-}
 
+    /** 좌석 1·2·5·6 만 남기고 3핸드를 돌려 마지막 핸드가 버튼=1 SB=2 BB=5(BB 가 빈 3·4 를 건너뜀)가 되게 한다. */
+    private fun tableAfterBigBlindJumpedOverGap(): TableId {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L, 3 to 10_000L, 4 to 10_000L, 5 to 10_000L, 6 to 10_000L)
+        val table = tables.findById(tableId)!!
+        table.standUp(UserId(3L))
+        table.standUp(UserId(4L))
+        tables.save(table)
+        repeat(3) {
+            start(tableId)
+            handStore.remove(tableId)
+        }
+        val t = tables.findById(tableId)!!
+        assertEquals(listOf(1, 2, 5), listOf(t.buttonSeatNo, t.smallBlindSeatNo, t.bigBlindSeatNo))
+        return tableId
+    }
+
+    @Test
+    fun `버튼과 SB 사이의 빈 좌석에 앉은 즉시 포스팅 신규 좌석은 딜인되지 않는다`() {
+        val tableId = tableAfterBigBlindJumpedOverGap()
+        sitDownChoosing(tableId, seatNo = 3, buyIn = 10_000L, postBlindImmediately = true)
+        sitDownChoosing(tableId, seatNo = 4, buyIn = 10_000L, postBlindImmediately = true)
+
+        start(tableId) // 명목 버튼=2, SB=5, BB=6 — 3·4 는 버튼과 SB 사이
+
+        val hand = handStore.find(tableId)!!
+        assertFailsWith<NoSuchElementException> { hand.stackOf(3) }
+        assertFailsWith<NoSuchElementException> { hand.stackOf(4) }
+        val table = tables.findById(tableId)!!
+        assertTrue(table.seatAt(3)!!.owesImmediatePost)
+        assertTrue(table.seatAt(4)!!.owesImmediatePost)
+    }
+
+    @Test
+    fun `dead SB 일 때 버튼과 BB 사이의 즉시 포스팅 신규 좌석은 딜인되지 않는다`() {
+        val tableId = tableAfterBigBlindJumpedOverGap()
+        val table = tables.findById(tableId)!!
+        table.standUp(UserId(5L)) // 직전 BB 가 나가 다음 SB 자리가 빈다
+        tables.save(table)
+        sitDownChoosing(tableId, seatNo = 3, buyIn = 10_000L, postBlindImmediately = true)
+        sitDownChoosing(tableId, seatNo = 4, buyIn = 10_000L, postBlindImmediately = true)
+
+        start(tableId) // 명목 버튼=2, SB=5(dead), BB=6 — 3·4 는 버튼과 BB 사이
+
+        val hand = handStore.find(tableId)!!
+        assertFailsWith<NoSuchElementException> { hand.stackOf(3) }
+        assertFailsWith<NoSuchElementException> { hand.stackOf(4) }
+        assertEquals(6, tables.findById(tableId)!!.bigBlindSeatNo)
+        assertTrue(tables.findById(tableId)!!.seatAt(3)!!.owesImmediatePost)
+        assertTrue(tables.findById(tableId)!!.seatAt(4)!!.owesImmediatePost)
+    }
+}

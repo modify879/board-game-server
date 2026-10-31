@@ -62,9 +62,13 @@ paths: ["**/holdem/**"]
   버튼은 "직전 SB" 가 아니라 새 SB 바로 앞 좌석이다
   실제 포지션은 진행 중 핸드 스냅샷(`Hand.buttonSeatNo`·`smallBlindSeatNo`·`bigBlindSeatNo`)에만 있다. 공개 뷰의 `buttonSeatNo` 는
   핸드가 있으면 그 핸드의 실제 버튼, 없으면 테이블의 명목 버튼이다. `smallBlindSeatNo`·`bigBlindSeatNo` 는 핸드가 없으면 null 이고 dead small blind 면 SB 만 null 이다
-- **새 참가자는 SB·버튼 자리에서는 포스팅을 자청해도 딜인되지 않는다.** Robert's Rules: "You must wait until
+- **새 참가자는 버튼에서 첫 블라인드까지의 구간에서는 포스팅을 자청해도 딜인되지 않는다.** 구간 = 명목 버튼(포함)부터
+  원형(`MAX_SEATS`)으로 버튼 뒤 첫 블라인드까지 — 첫 블라인드는 SB 이고 dead SB 면 BB 다. SB 는 구간에 포함하고 BB 는
+  제외한다(SB~BB 사이 좌석은 막지 않는다). dead button 으로 BB 가 빈 좌석을 건너뛰면 버튼~SB 사이에 신규 좌석이 앉을 수 있어
+  버튼·SB 좌석 한 점만 막으면 놓친다. Robert's Rules: "You must wait until
   the button passes." 어기면 SB 와 진입료를 이중으로 내 `committed > currentBet` 이 되고, 콜이
-  `CHIPS_NEGATIVE` 로 터진다. 차단된 좌석은 `owesImmediatePost` 를 그대로 들고 기다린다
+  `CHIPS_NEGATIVE` 로 터진다. 차단된 좌석은 `owesImmediatePost` 를 그대로 들고 기다린다.
+  BB 대기 완화(참가자가 2명 미만이 되면 후보 전원 참가)는 차단된 좌석도 딜인시킨다 — 이때는 진입료를 면제한다
 - **쇼다운까지 간 좌석은 전원 공개한다(사용자 결정, 머크 없음).** `showdownOrder` 는 공개 패를 나열하는 순서로만 쓴다. 모두 폴드한 판은 공개하지 않는다
 - **다음 핸드 카운트다운은 상대 시간(단조 시계)만 쓴다 — `NextHandCountdown`, 메모리 전용이다.**
   `next_hand_at` 같은 DB 컬럼을 두지 않고, 발화 이후 벽시계로 다시 비교하지 않는다(`docs/decisions/concurrency.md`).
