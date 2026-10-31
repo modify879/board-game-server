@@ -162,6 +162,27 @@ class HoldemTableRepositoryAdapterIntegrationTest {
     }
 
     @Test
+    fun `칩 추가 예약이 저장되고 복원되며 취소도 UPDATE 로 반영된다`() {
+        val userId = uniqueUserId()
+        val table = HoldemTable.create("t-chips-reservation", TestTablePolicy)
+        table.sitDown(userId, buyIn)
+        val saved = tables.save(table)
+        assertNull(saved.seatOf(userId)!!.chipsReservation)
+
+        saved.reserveChips(userId, Chips.of(3_000))
+        tables.save(saved)
+        assertEquals(Chips.of(3_000), tables.findById(saved.id!!)!!.seatOf(userId)!!.chipsReservation)
+
+        saved.reserveChips(userId, Chips.of(5_000))
+        tables.save(saved)
+        assertEquals(Chips.of(5_000), tables.findById(saved.id!!)!!.seatOf(userId)!!.chipsReservation)
+
+        saved.cancelChipsReservation(userId)
+        tables.save(saved)
+        assertNull(tables.findById(saved.id!!)!!.seatOf(userId)!!.chipsReservation)
+    }
+
+    @Test
     fun `uk_holdem_seats_user 위반은 AlreadySeatedException 으로 번역된다`() {
         val userX = uniqueUserId()
         val table1 = HoldemTable.create("t6", TestTablePolicy)

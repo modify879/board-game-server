@@ -1,5 +1,6 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.holdem.application.event.ChipsReservationsDue
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.FoldWinnerCards
@@ -40,7 +41,8 @@ import org.springframework.stereotype.Component
  * 이체를 건너뛰는 것과 같은 이유). 재착석 의무는 0 으로 덮어 지운다(빈손으로 떠났으니 가져간 게 없다). 남은 참가 요청의 바이인
  * 이체는 여기서 하지 않고 커밋 후 별도 트랜잭션에서 처리한다(JoinRequestsProcessor).
  *
- * 그다음 퇴장 예약([LeaveReservations])한 좌석을 기립시킨다.
+ * 단 칩 추가 예약이 있는 0칩 좌석은 퇴장 예약이 없으면 남겨 둔다(커밋 후 [ChipsReservationsDue] 가 채우거나 기립시킨다).
+ * 그다음 퇴장 예약([LeaveReservations])한 좌석을 기립시킨다 — 칩 추가 예약은 좌석과 함께 사라진다.
  *
  * 정산 뒤 후보(스택이 있는 점유 좌석)가 2명 이상이면 다음 핸드 카운트다운을 새로 건다 — 핸드가
  * 도는 동안은 카운트다운이 없었으므로 항상 처음부터 시작하는 셈이다. `NextHandCountdown` 이 상대
@@ -77,7 +79,11 @@ class HandSettler(
 
         for ((seatNo, stack) in toApply) {
             if (!stack.isZero()) continue
-            val userId = table.seatAt(seatNo)?.userId ?: continue
+            val seat = table.seatAt(seatNo) ?: continue
+            // 칩 추가 예약이 있으면 0칩으로 남겨 둔다 — 커밋 후 적용(ChipsReservationsDue)이 채우거나, 못 채우면 그때 기립시킨다.
+            // 퇴장 예약이 함께 있으면 퇴장이 이긴다 — 예약은 좌석과 함께 사라진다.
+            if (seat.chipsReservation != null && !seat.leaveReserved) continue
+            val userId = seat.userId
             table.standUp(userId)
             recentDepartures.record(userId, Chips.ZERO)
             log.info("auto stand-up after 0-stack settle: tableId={}, seatNo={}, userId={}", tableId.value, seatNo, userId)
@@ -108,6 +114,8 @@ class HandSettler(
         // 정산 후에도 hand 를 null 로 넘기지 않는다 — 클라이언트가 쇼다운 결과(showdownRanks/payouts)를
         // 봐야 한다. HandStore 에서는 이미 지웠을 뿐이다.
         eventPublisher.publishEvent(HandBroadcastRequested(tableId, table, hand, lastResult))
+        // 칩 추가 예약 적용도 같은 이유로 커밋 후로 미룬다. JoinRequestsDue 보다 먼저 발행해야 대기열·빈 테이블 닫기 전에 적용된다.
+        eventPublisher.publishEvent(ChipsReservationsDue(tableId))
         // 대기열 처리는 여기서 하지 않는다 — 지갑 이체가 이 트랜잭션(정산)과 같은 트랜잭션에서 실패하면
         // 예외를 잡아도 트랜잭션이 rollback-only 가 되어 정산 전체가 롤백된다. 커밋 후 별도 트랜잭션으로
         // 넘긴다(JoinRequestsProcessor → ProcessJoinRequestsService → AdmitJoinRequestService, 항목마다 하나씩).

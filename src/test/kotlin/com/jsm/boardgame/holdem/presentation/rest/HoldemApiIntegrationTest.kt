@@ -779,12 +779,53 @@ class HoldemApiIntegrationTest {
     }
 
     @Test
-    fun `핸드 진행 중 칩 추가는 409와 HAND_IN_PROGRESS 를 응답한다`() {
+    fun `핸드 진행 중 칩 추가는 202 로 예약하고 핸드가 끝나면 스택과 지갑에 반영된다`() {
         val ctx = seatedWithHandInProgress()
+        fundWallet(ctx.userId, 5_000)
 
-        authPost("/api/holdem/seat/chips", ctx.accessToken, """{"amount":1000}""")
-            .andExpect(status().isConflict)
-            .andExpect(jsonPath("$.errorCode").value("HAND_IN_PROGRESS"))
+        authPost("/api/holdem/seat/chips", ctx.accessToken, """{"amount":3000}""").andExpect(status().isAccepted)
+
+        val reserved = holdemTableRepository.findByUserId(UserId(ctx.userId))!!.seatOf(UserId(ctx.userId))!!
+        assertThat(reserved.chipsReservation).isEqualTo(Chips.of(3_000))
+        assertThat(reserved.stack.amount).isEqualTo(10_000L)
+        assertThat(balanceOf(ctx.userId)).isEqualTo(5_000L)
+
+        authPost("/api/holdem/tables/${ctx.tableId}/hands/actions", ctx.accessToken, """{"action":"FOLD"}""")
+            .andExpect(status().isNoContent)
+
+        // 적용은 커밋 후 테이블 실행기에서 비동기로 돈다.
+        val deadline = System.currentTimeMillis() + 5_000
+        while (System.currentTimeMillis() < deadline &&
+            holdemTableRepository.findByUserId(UserId(ctx.userId))!!.seatOf(UserId(ctx.userId))!!.chipsReservation != null
+        ) Thread.sleep(20)
+        val seat = holdemTableRepository.findByUserId(UserId(ctx.userId))!!.seatOf(UserId(ctx.userId))!!
+        assertThat(seat.chipsReservation).isNull()
+        // 접은 쪽은 블라인드(100 또는 200)를 잃은 스택에 3,000 이 더해진다.
+        assertThat(seat.stack.amount).isIn(12_800L, 12_900L)
+        assertThat(balanceOf(ctx.userId)).isEqualTo(2_000L)
+    }
+
+    @Test
+    fun `칩 추가 예약을 취소하면 204 이고 멱등이며 핸드가 끝나도 지갑은 그대로다`() {
+        val ctx = seatedWithHandInProgress()
+        fundWallet(ctx.userId, 5_000)
+        authPost("/api/holdem/seat/chips", ctx.accessToken, """{"amount":3000}""").andExpect(status().isAccepted)
+
+        authDelete("/api/holdem/seat/chips-reservation", ctx.accessToken).andExpect(status().isNoContent)
+        authDelete("/api/holdem/seat/chips-reservation", ctx.accessToken).andExpect(status().isNoContent)
+
+        val seat = holdemTableRepository.findByUserId(UserId(ctx.userId))!!.seatOf(UserId(ctx.userId))!!
+        assertThat(seat.chipsReservation).isNull()
+        assertThat(balanceOf(ctx.userId)).isEqualTo(5_000L)
+    }
+
+    @Test
+    fun `앉아 있지 않은 사용자의 칩 추가 예약 취소는 404와 NOT_SEATED 를 응답한다`() {
+        val (_, accessToken) = signUpAndLogin()
+
+        authDelete("/api/holdem/seat/chips-reservation", accessToken)
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.errorCode").value("NOT_SEATED"))
     }
 
     @Test

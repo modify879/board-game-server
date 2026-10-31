@@ -8,6 +8,7 @@ import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
 import com.jsm.boardgame.holdem.domain.model.LeaveReservation
 import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
+import com.jsm.boardgame.holdem.application.event.ChipsReservationsDue
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.domain.model.BettingAction
@@ -190,6 +191,7 @@ class CancelHandServiceTest {
 
         assertEquals(listOf(tableId), countdown.restarted)
         assertTrue(events.any { it is JoinRequestsDue && it.tableId == tableId })
+        assertTrue(events.indexOfFirst { it is ChipsReservationsDue } in 0 until events.indexOfFirst { it is JoinRequestsDue })
     }
 
     @Test

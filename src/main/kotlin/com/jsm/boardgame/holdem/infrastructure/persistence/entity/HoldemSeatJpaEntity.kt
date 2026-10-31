@@ -53,6 +53,9 @@ class HoldemSeatJpaEntity(
     @Enumerated(EnumType.STRING)
     @Column(name = "leave_reservation")
     var leaveReservation: LeaveReservation? = null,
+    // 핸드 중 칩 추가 예약(요청 금액). 없으면 null.
+    @Column(name = "chips_reservation")
+    var chipsReservation: Long? = null,
 )
 
 interface HoldemSeatJpaRepository : JpaRepository<HoldemSeatJpaEntity, Long>, KotlinJdslJpqlExecutor {
@@ -70,6 +73,7 @@ fun HoldemSeatJpaEntity.toDomain(): Seat =
         awaitingBigBlind = awaitingBigBlind,
         owesImmediatePost = owesImmediatePost,
         leaveReservation = leaveReservation ?: if (leaveAfterHand) LeaveReservation.SPECTATE else null,
+        chipsReservation = chipsReservation?.let { Chips.reconstitute(it) },
     )
 
 // Seat -> HoldemSeatJpaEntity 매핑은 여기 두지 않는다: 부모 테이블의 DB id 와, 기존 행이 있다면

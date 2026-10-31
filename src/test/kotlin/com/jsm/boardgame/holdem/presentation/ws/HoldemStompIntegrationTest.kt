@@ -813,6 +813,48 @@ class HoldemStompIntegrationTest {
     }
 
     @Test
+    fun `핸드 참가자의 칩 추가 예약과 취소가 개인 큐에 chipsReservation 으로 실린다`() {
+        val pair = seatTwoUsersAtSameTable()
+        startHandRest(pair.tableId)
+
+        val (session, _) = tryConnect(pair.a.accessToken)
+        checkNotNull(session)
+        val (privateHandler, privateQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandler)
+        val initialPrivate = checkNotNull(privateQueue.poll(5, TimeUnit.SECONDS))
+        assertThat(JsonPath.read<Any?>(initialPrivate, "$.chipsReservation")).isNull()
+        var privateSeq = seqOf(initialPrivate)
+
+        authPost("/api/holdem/seat/chips", pair.a.accessToken, """{"amount":3000}""").andExpect(status().isAccepted)
+        var privateJson = nextAfter(privateQueue, privateSeq)
+        privateSeq = seqOf(privateJson)
+        assertThat(JsonPath.read<Number>(privateJson, "$.chipsReservation").toLong()).isEqualTo(3_000L)
+
+        authDelete("/api/holdem/seat/chips-reservation", pair.a.accessToken).andExpect(status().isNoContent)
+        privateJson = nextAfter(privateQueue, privateSeq)
+        assertThat(JsonPath.read<Any?>(privateJson, "$.chipsReservation")).isNull()
+
+        session.disconnect()
+    }
+
+    @Test
+    fun `칩 추가 예약 상태에서 개인 큐를 새로 구독하면 스냅샷에 chipsReservation 이 실려 있다`() {
+        val pair = seatTwoUsersAtSameTable()
+        startHandRest(pair.tableId)
+        authPost("/api/holdem/seat/chips", pair.a.accessToken, """{"amount":3000}""").andExpect(status().isAccepted)
+
+        val (session, _) = tryConnect(pair.a.accessToken)
+        checkNotNull(session)
+        val (privateHandler, privateQueue) = capturingFrameHandler()
+        session.subscribe(HoldemDestinations.privateQueueOf(pair.tableId), privateHandler)
+
+        val snapshot = checkNotNull(privateQueue.poll(5, TimeUnit.SECONDS))
+        assertThat(JsonPath.read<Number>(snapshot, "$.chipsReservation").toLong()).isEqualTo(3_000L)
+
+        session.disconnect()
+    }
+
+    @Test
     fun `관전자는 공개 뷰에서 퇴장 예약 여부만 보고 예약 종류는 어디에도 없다`() {
         val pair = seatTwoUsersAtSameTable()
         startHandRest(pair.tableId)

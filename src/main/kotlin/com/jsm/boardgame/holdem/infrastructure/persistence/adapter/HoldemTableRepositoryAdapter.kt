@@ -81,6 +81,7 @@ class HoldemTableRepositoryAdapter(
             owesImmediatePost = owesImmediatePost,
             leaveAfterHand = leaveReserved,
             leaveReservation = leaveReservation,
+            chipsReservation = chipsReservation?.amount,
         )
 
     private fun translateSeat(e: DataIntegrityViolationException): RuntimeException {

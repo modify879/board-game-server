@@ -3,6 +3,7 @@ package com.jsm.boardgame.holdem.presentation.ws.payload
 import com.jsm.boardgame.holdem.application.port.LastHandResult
 import com.jsm.boardgame.holdem.domain.model.Hand
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
+import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.LeaveReservation
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.isInProgress
@@ -92,7 +93,7 @@ private fun handResultPublicViewOf(result: LastHandResult): HandResultPublicView
     )
 
 /** [seatNo] 자신의 홀카드와 지금 할 수 있는 행동만 담는다. 다른 좌석의 카드는 이 함수의 인자로도 들어오지 않는다. */
-fun privateViewOf(tableId: TableId, seatNo: Int, hand: Hand, seq: Long, leaveReservation: LeaveReservation?): SeatPrivateView =
+fun privateViewOf(tableId: TableId, seatNo: Int, hand: Hand, seq: Long, leaveReservation: LeaveReservation?, chipsReservation: Chips? = null): SeatPrivateView =
     SeatPrivateView(
         tableId = tableId.value,
         seatNo = seatNo,
@@ -107,5 +108,6 @@ fun privateViewOf(tableId: TableId, seatNo: Int, hand: Hand, seq: Long, leaveRes
             )
         },
         leaveReservation = leaveReservation?.name,
+        chipsReservation = chipsReservation?.amount,
         seq = seq,
     )

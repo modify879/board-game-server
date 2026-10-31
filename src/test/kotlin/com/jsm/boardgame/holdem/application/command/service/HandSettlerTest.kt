@@ -5,6 +5,7 @@ import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.application.port.FakeHoldemTableRepository
 import com.jsm.boardgame.holdem.application.port.FakeHandStore
 import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
+import com.jsm.boardgame.holdem.application.event.ChipsReservationsDue
 import com.jsm.boardgame.holdem.application.event.HandBroadcastRequested
 import com.jsm.boardgame.holdem.application.event.JoinRequestsDue
 import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
@@ -394,5 +395,51 @@ class HandSettlerTest {
 
         assertTrue(eventPublisher.events.any { it is JoinRequestsDue && it.tableId == tableId })
     }
-}
 
+    private fun bustedTable(): Triple<HoldemTable, TableId, Hand> {
+        val table = seatedTable(1 to 200L, 2 to 200L)
+        val tableId = table.id!!
+        val stacks = mapOf(1 to Chips.of(200), 2 to Chips.of(200))
+        val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), bustingShuffler)
+        handStore.save(tableId, hand)
+        hand.act(1, BettingAction.Call)
+        while (hand.isRunningOut) hand.advanceRunout()
+        return Triple(table, tableId, hand)
+    }
+
+    @Test
+    fun `칩 추가 예약이 있는 0칩 좌석은 기립시키지 않고 예약도 남는다`() {
+        val (table, tableId, hand) = bustedTable()
+        table.reserveChips(UserId(2000L), Chips.of(5_000))
+
+        settler.settle(tableId, table, hand)
+
+        val seat = tables.findById(tableId)!!.seatAt(2)!!
+        assertEquals(Chips.ZERO, seat.stack)
+        assertEquals(Chips.of(5_000), seat.chipsReservation)
+        assertTrue(departures.recorded.isEmpty())
+    }
+
+    @Test
+    fun `칩 추가 예약과 퇴장 예약이 함께 있는 0칩 좌석은 기립한다`() {
+        val (table, tableId, hand) = bustedTable()
+        table.reserveChips(UserId(2000L), Chips.of(5_000))
+        table.reserveLeave(UserId(2000L), LeaveReservation.SPECTATE)
+
+        settler.settle(tableId, table, hand)
+
+        assertNull(tables.findById(tableId)!!.seatAt(2))
+    }
+
+    @Test
+    fun `정산은 ChipsReservationsDue 를 JoinRequestsDue 보다 먼저 발행한다`() {
+        val (table, tableId, hand) = bustedTable()
+
+        settler.settle(tableId, table, hand)
+
+        val events = eventPublisher.events
+        val due = events.indexOfFirst { it is ChipsReservationsDue && it.tableId == tableId }
+        val join = events.indexOfFirst { it is JoinRequestsDue }
+        assertTrue(due >= 0 && due < join)
+    }
+}
