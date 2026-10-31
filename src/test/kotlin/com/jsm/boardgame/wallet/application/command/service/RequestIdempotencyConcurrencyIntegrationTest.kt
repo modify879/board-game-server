@@ -132,7 +132,7 @@ class RequestIdempotencyConcurrencyIntegrationTest {
     @Test
     fun `같은 키의 동시 환전 요청은 한 번만 차감되고 나중 요청은 409 IDEMPOTENCY_KEY_CONFLICT 를 받는다`() {
         val userId = newUserId()
-        val wallet = tx.execute { wallets.findOrOpen(UserId(userId)) }!!
+        val wallet = tx.execute { wallets.findOrOpen(UserId(userId)) }
         val credit = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT,
             amount = Money.of(10_000L),

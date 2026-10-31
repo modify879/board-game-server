@@ -69,7 +69,12 @@ sealed interface RotationResult {
         val refreshTokenExpiresAt: Instant,
         /** 후속 액세스 토큰에 박힌 역할 — 재생 시 역할 변경 재확인에 쓴다. */
         val role: UserRole,
-    ) : RotationResult
+    ) : RotationResult {
+        /** 생성된 data class toString 은 토큰 원문을 찍는다 — 로그에 새지 않게 값을 뺀다. */
+        override fun toString(): String =
+            "Replayed(accessTokenId=$accessTokenId, accessTokenExpiresAt=$accessTokenExpiresAt, " +
+                "refreshTokenExpiresAt=$refreshTokenExpiresAt, role=$role)"
+    }
 
     /** 현재·직전(유예 안) 어디와도 일치하지 않는다. 재사용 또는 탈취. */
     data object Mismatch : RotationResult

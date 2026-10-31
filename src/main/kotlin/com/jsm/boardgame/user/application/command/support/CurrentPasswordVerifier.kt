@@ -1,4 +1,4 @@
-package com.jsm.boardgame.user.application.command.service
+package com.jsm.boardgame.user.application.command.support
 
 import com.jsm.boardgame.common.error.BusinessException
 import com.jsm.boardgame.user.application.command.usecase.LogoutUseCase

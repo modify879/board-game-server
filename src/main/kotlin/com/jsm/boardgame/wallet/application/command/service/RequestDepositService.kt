@@ -1,5 +1,6 @@
 package com.jsm.boardgame.wallet.application.command.service
 
+import com.jsm.boardgame.wallet.application.command.support.requireValidIdempotencyKey
 import com.jsm.boardgame.wallet.application.command.usecase.RequestDepositUseCase
 import com.jsm.boardgame.wallet.application.command.usecase.RequestDepositCommand
 import com.jsm.boardgame.wallet.application.config.WalletProperties

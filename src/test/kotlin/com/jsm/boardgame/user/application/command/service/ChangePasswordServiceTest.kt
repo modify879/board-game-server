@@ -1,5 +1,6 @@
 package com.jsm.boardgame.user.application.command.service
 
+import com.jsm.boardgame.user.application.command.support.CurrentPasswordVerifier
 import com.jsm.boardgame.user.application.command.usecase.ChangePasswordCommand
 import com.jsm.boardgame.user.application.exception.AccountLockedException
 import com.jsm.boardgame.user.application.exception.CurrentPasswordMismatchException
@@ -182,7 +183,9 @@ class ChangePasswordServiceTest {
     fun `잠긴 계정은 올바른 비밀번호여도 ACCOUNT_LOCKED 이고 아무것도 바뀌지 않는다`() {
         seed(locked = true)
 
-        assertFailsWith<AccountLockedException> { change() }
+        val e = assertFailsWith<AccountLockedException> { change() }
+
+        assertEquals(UserErrorCode.ACCOUNT_LOCKED, e.errorCode)
 
         assertEquals(PasswordHash("hashed:oldpassword1"), users.stored[1]!!.passwordHash)
         assertFalse(sessions.isAccessTokenBlacklisted("old-jti"))
