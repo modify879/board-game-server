@@ -28,6 +28,11 @@ class User private constructor(
         this.role = role
     }
 
+    /** `null` 이면 기본 이미지로 돌아간다. */
+    fun changeProfileImage(key: ProfileImageKey?) {
+        this.profileImageKey = key
+    }
+
     fun changePassword(passwordHash: PasswordHash) {
         this.passwordHash = passwordHash
     }

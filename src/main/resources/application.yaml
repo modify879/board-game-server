@@ -2,6 +2,12 @@ spring:
   application:
     name: board-game
 
+  servlet:
+    multipart:
+      # 프로필 이미지 2MB 상한. request 는 멀티파트 경계 오버헤드만큼 여유를 둔다.
+      max-file-size: 2MB
+      max-request-size: 2100KB
+
   # 접속 정보를 적지 않는다 — Docker Compose 지원이 자동으로 연결한다.
   docker:
     compose:
@@ -96,6 +102,8 @@ app:
       min-buy-in-big-blinds: 20
       max-buy-in-big-blinds: 100
   profile-image:
+    # 업로드한 파일을 두는 로컬 디스크 위치. /images/profiles/** 로 그대로 서빙한다.
+    storage-dir: ./data/profile-images
     # 실제 CDN 이 붙기 전까지의 로컬 기본값
     base-url: "http://localhost:8080/images/profiles/"
     default-url: "http://localhost:8080/images/profiles/default.png"

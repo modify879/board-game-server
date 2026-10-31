@@ -69,4 +69,15 @@ class UserTest {
 
         assertEquals(PasswordHash("new-hash"), user.passwordHash)
     }
+
+    @Test
+    fun `changeProfileImage 로 키를 정하고 null 로 기본 이미지로 돌린다`() {
+        val user = newUser()
+
+        user.changeProfileImage(ProfileImageKey.of("1/a.png"))
+        assertEquals(ProfileImageKey.of("1/a.png"), user.profileImageKey)
+
+        user.changeProfileImage(null)
+        assertEquals(null, user.profileImageKey)
+    }
 }
