@@ -5,6 +5,7 @@ import com.jsm.boardgame.user.application.command.usecase.ChangeProfileImageUseC
 import com.jsm.boardgame.user.application.port.ProfileImageStorage
 import com.jsm.boardgame.user.application.exception.ProfileImageTooLargeException
 import com.jsm.boardgame.user.domain.exception.UserNotFoundException
+import com.jsm.boardgame.user.domain.model.ProfileImageKey
 import com.jsm.boardgame.user.domain.model.ProfileImageType
 import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.domain.repository.UserRepository
@@ -18,7 +19,7 @@ private const val MAX_BYTES = 2 * 1024 * 1024
  * 바깥 트랜잭션을 열지 않는다 — 파일 I/O 동안 DB 커넥션을 쥐지 않는다. DB 는 `findById`(없는 사용자면 파일을 쓰기 전에 거절)와
  * 짧은 트랜잭션(행 락 재조회 → 키 교체 → save)뿐이다. 지울 옛 키는 락 뒤에 읽은 것이다 — 동시 변경이 올린 파일을 고아로 만들지 않는다.
  *
- * 순서: 새 파일 저장 → DB 저장 → 옛 파일 삭제. DB 저장이 실패하면 방금 쓴 파일을 지우고 예외를 다시 던진다.
+ * 순서: 새 파일 저장 → DB 저장 → 옛 파일 삭제. DB 저장이 실패하면 방금 쓴 파일을 지우고 예외를 다시 던진다 — 단 커밋됐는지 모호한 실패일 수 있어 사용자를 다시 읽어 새 키가 저장돼 있으면 지우지 않는다.
  *
  * ponytail: 파일과 DB 는 원자적이지 않다 — 저장 직후·삭제 직전에 프로세스가 죽으면 고아 파일이 남는다.
  * 문제가 되면 저장소 디렉터리와 `users.profile_image_key` 를 대조해 지우는 정리 작업을 둔다.
@@ -51,8 +52,7 @@ class ChangeProfileImageService(
                 }
             }
         } catch (e: Exception) {
-            runCatching { storage.delete(key) }
-                .onFailure { log.warn("저장 실패 뒤 새 프로필 이미지 정리 실패: key={}", key.value, it) }
+            deleteIfNotReferenced(userId, key)
             throw e
         }
         previous?.let { old ->
@@ -60,6 +60,20 @@ class ChangeProfileImageService(
                 .onFailure { log.warn("옛 프로필 이미지 삭제 실패: key={}", old.value, it) }
         }
         return key.value
+    }
+
+    // 커밋 직후 연결이 끊긴 것처럼 실패가 모호하면 DB 는 이미 새 키를 가리킨다 — 그 파일을 지우면 dangling 이다.
+    // 실패한 트랜잭션 밖에서 다시 읽어 새 키가 아닐 때만 지운다. 읽기마저 실패하면 고아 파일이 참조 끊김보다 안전하다.
+    private fun deleteIfNotReferenced(userId: UserId, key: ProfileImageKey) {
+        val stored = try {
+            users.findById(userId)?.profileImageKey
+        } catch (e: Exception) {
+            log.warn("저장 실패 뒤 사용자 재조회 실패 — 새 프로필 이미지를 지우지 않는다: key={}", key.value, e)
+            return
+        }
+        if (stored == key) return
+        runCatching { storage.delete(key) }
+            .onFailure { log.warn("저장 실패 뒤 새 프로필 이미지 정리 실패: key={}", key.value, it) }
     }
 
     companion object {

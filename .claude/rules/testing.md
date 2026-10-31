@@ -10,9 +10,9 @@ paths:
   `@DynamicPropertySource`)은 빈을 갈아끼워야 할 때만 덧붙이고, 테스트 전체에 걸친 값은 build.gradle.kts 의 `systemProperty` 로 준다.
   컨텍스트가 하나 늘 때마다 공유 Postgres 에 풀을 하나 더 쥐고, max_connections 를 넘으면 컨텍스트가 30초 대기 뒤 실패한다
 - 예외: `QaProfileGuardMissingMarkerIntegrationTest` 는 `@IntegrationTest` 없이 자기 컨테이너와 `SpringApplicationBuilder` 로 기동한다 — 표식 없는 DB 에서 시작해야 하기 때문이다
-- 컨테이너가 필요한 테스트만 클래스 이름에 `IntegrationTest` 접미사를 붙인다
+- 컨테이너가 필요한 테스트 클래스는 이름이 `IntegrationTest` 로 끝나고, 그런 클래스만 그렇게 짓는다(지원 파일인 애너테이션 `IntegrationTest.kt` 와 공용 `TestcontainersConfiguration` 은 예외)
 - 목 라이브러리를 쓰지 않는다. 인메모리 페이크를 쓴다. 한 테스트만 쓰는 건 그 테스트 파일 안에, 여러 테스트가 같이 쓰는 건 포트의 테스트 패키지에 `Fake<Port>.kt` 로 둔다(접두 없음)
-- **테스트 파일 안의 페이크 이름에는 테스트별 접두를 붙인다**(`RequestFakeWalletRepository`). top-level `private`
+- **테스트 파일 안의 페이크 이름에는 테스트별 접두를 붙인다**(`BuyInFakeTableQuery`). top-level `private`
   클래스는 파일 안에서만 보이지만 이름은 패키지를 차지해, 같은 패키지의 두 테스트가 같은
   이름을 쓰면 `Redeclaration` 이다
 - 예외는 메시지가 아니라 `errorCode` 로 검증한다

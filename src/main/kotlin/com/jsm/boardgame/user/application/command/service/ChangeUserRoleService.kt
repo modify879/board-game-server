@@ -18,7 +18,7 @@ import java.time.Instant
 
 /**
  * 바깥 트랜잭션을 열지 않는다 — Redis 호출 동안 DB 커넥션을 쥐지 않기 위해서다. DB 접근은 짧은 트랜잭션 하나
- * (행 락 조회 → changeRole → save)뿐이다. 없는 사용자는 그 안에서 `USER_NOT_FOUND` 로 떨어진다 — 그 전의 폐기는 세션이 없어 아무것도 안 한다.
+ * (행 락 조회 → changeRole → save)뿐이다. 없는 사용자는 Redis 앞의 `findById` 에서 `USER_NOT_FOUND` 로 떨어지고, 그 사이 탈퇴하면 락 조회가 같은 오류를 낸다.
  *
  * 순서: 역할 검증 → **블랙리스트·소켓 종료(Redis) → 트랜잭션(DB)**.
  * 트랜잭션이 없어 Redis 실패 때 save 를 롤백할 수 없으므로, Redis 를 먼저 해서 fail-closed 를 얻는다:
@@ -48,6 +48,9 @@ class ChangeUserRoleService(
     override fun changeRole(command: ChangeUserRoleCommand) {
         val role = UserRole.of(command.role)
         val targetUserId = UserId(command.targetUserId)
+        // 없는·탈퇴한 사용자는 Redis 를 건드리기 전에 거절한다 — Redis 장애가 404 를 500 으로 바꾸지 않게. 저장할 인스턴스는 아래 락 뒤 재조회다.
+        users.findById(targetUserId)
+            ?: throw UserNotFoundException("역할을 변경하려는 사용자를 찾을 수 없음: userId=${command.targetUserId}")
         // 블랙리스트를 save() 앞에 둔다(위 KDoc). save 가 실패해도 토큰만 끊긴 안전한 쪽이다.
         //
         // 첫 폐기만으로는 경합이 남는다: 폐기 이후 save 커밋 이전에 들어온 refresh 는 옛 역할을 읽어 옛 역할 토큰을
