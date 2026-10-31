@@ -17,6 +17,7 @@ app:
     next-hand-delay: 1s
     turn-timeout: 8s
     idle-table-ttl: 15s
+    rejoin-obligation-window: 10s
   profile-image:
     storage-dir: ./data-qa/profile-images
     base-url: "http://localhost:8081/images/profiles/"

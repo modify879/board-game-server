@@ -1,13 +1,11 @@
 package com.jsm.boardgame.user.infrastructure.security.adapter
 
-import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.user.application.port.LoginAttemptLimiter
 import com.jsm.boardgame.user.domain.model.Username
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 import org.springframework.data.redis.core.StringRedisTemplate
 import java.time.Duration
 import java.util.UUID
@@ -19,8 +17,7 @@ import java.util.concurrent.TimeUnit
  *
  * 테스트 간 격리는 각 테스트가 고유한 사용자명을 쓰는 방식으로 확보한다.
  */
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class RedisLoginAttemptLimiterIntegrationTest {
 
     @Autowired
