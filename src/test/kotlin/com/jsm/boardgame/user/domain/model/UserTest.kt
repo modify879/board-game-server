@@ -51,4 +51,13 @@ class UserTest {
 
         assertFalse(user.isLocked)
     }
+
+    @Test
+    fun `changeNickname 하면 닉네임이 바뀐다`() {
+        val user = newUser()
+
+        user.changeNickname(Nickname.of("새닉네임"))
+
+        assertEquals(Nickname.of("새닉네임"), user.nickname)
+    }
 }

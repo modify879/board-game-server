@@ -28,6 +28,10 @@ class User private constructor(
         this.role = role
     }
 
+    fun changeNickname(nickname: Nickname) {
+        this.nickname = nickname
+    }
+
     /** 이미 잠겨 있으면 그대로 둔다 — 최초 잠긴 시각을 보존한다. */
     fun lock(at: Instant) {
         if (lockedAt == null) lockedAt = at
