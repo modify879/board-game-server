@@ -68,7 +68,7 @@ private class WithdrawFakeSessions : AuthSessionStore {
     override fun clear(userId: UserId) { sessions.remove(userId) }
     override fun blacklistAccessToken(accessTokenId: String, expiresAt: Instant) { blacklist += accessTokenId }
     override fun isAccessTokenBlacklisted(accessTokenId: String) = accessTokenId in blacklist
-    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession): RotationResult =
+    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession, nextAccessToken: String, nextAccessTokenExpiresAt: Instant, nextRole: UserRole): RotationResult =
         throw UnsupportedOperationException()
     override fun userIdForRefreshToken(refreshToken: String): UserId? = null
 }

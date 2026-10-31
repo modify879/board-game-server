@@ -84,6 +84,8 @@ private class RefreshInMemoryAuthSessionStore(
     private val blacklist = mutableMapOf<String, Instant>()
     // 인덱스는 회전해도 지우지 않는다 — 지우면 아래 재사용 탐지 테스트가 무의미해진다.
     private val refreshTokenIndex = mutableMapOf<String, UserId>()
+    // 밀려난 토큰 → 그 회전이 발급한 후속 토큰(멱등 재생용). 실제 저장소의 `auth:refresh:replay:*` 에 해당한다.
+    private val replays = mutableMapOf<String, RotationResult.Replayed>()
 
     override fun start(userId: UserId, session: AuthSession) {
         // 로그인은 항상 새 세션이다 — 직전 칸은 비운다.
@@ -123,26 +125,26 @@ private class RefreshInMemoryAuthSessionStore(
      * (stored.session.refreshToken)이 들어간다 — 제시된 토큰이 현재 칸과 일치했든 유예 중인 직전
      * 칸과 일치했든 상관없다. 호출자가 넘기는 [next] 에는 애초에 직전 칸을 정할 수단이 없다.
      */
-    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession): RotationResult {
+    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession, nextAccessToken: String, nextAccessTokenExpiresAt: Instant, nextRole: UserRole): RotationResult {
         val stored = sessions[userId] ?: return RotationResult.Mismatch
 
-        val matches = if (stored.session.refreshToken == presentedRefreshToken) {
-            true
-        } else {
+        if (stored.session.refreshToken != presentedRefreshToken) {
             val previous = stored.previousRefreshToken
-            previous != null && previous == presentedRefreshToken && Instant.now().isBefore(stored.graceExpiresAt)
+            val inGrace = previous != null && previous == presentedRefreshToken && Instant.now().isBefore(stored.graceExpiresAt)
+            // 유예 안의 직전 토큰은 다시 회전하지 않고 처음 회전의 후속 토큰을 그대로 돌려준다.
+            return if (inGrace) replays[presentedRefreshToken] ?: RotationResult.Mismatch else RotationResult.Mismatch
         }
 
-        if (!matches) return RotationResult.Mismatch
-
-        val previousAccessTokenId = stored.session.accessTokenId
         sessions[userId] = StoredSession(
             session = next,
             previousRefreshToken = stored.session.refreshToken,
             graceExpiresAt = Instant.now().plus(refreshReuseGrace),
         )
         refreshTokenIndex[next.refreshToken] = userId
-        return RotationResult.Rotated(previousAccessTokenId)
+        replays[presentedRefreshToken] = RotationResult.Replayed(
+            next.accessTokenId, nextAccessToken, next.refreshToken, nextAccessTokenExpiresAt, next.refreshTokenExpiresAt, nextRole,
+        )
+        return RotationResult.Rotated(stored.session.accessTokenId)
     }
 }
 
@@ -177,7 +179,7 @@ private class RefreshProbeSessions(
         if (op in failAt) throw IllegalStateException("redis down: $op")
     }
     override fun blacklistAccessToken(accessTokenId: String, expiresAt: Instant) { probe("blacklist"); inner.blacklistAccessToken(accessTokenId, expiresAt) }
-    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession): RotationResult { probe("rotate"); return inner.rotate(userId, presentedRefreshToken, next) }
+    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession, nextAccessToken: String, nextAccessTokenExpiresAt: Instant, nextRole: UserRole): RotationResult { probe("rotate"); return inner.rotate(userId, presentedRefreshToken, next, nextAccessToken, nextAccessTokenExpiresAt, nextRole) }
     override fun clear(userId: UserId) { probe("clear"); inner.clear(userId) }
     override fun userIdForRefreshToken(refreshToken: String): UserId? { probe("userId"); return inner.userIdForRefreshToken(refreshToken) }
 }
@@ -229,59 +231,51 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    fun `유예 안에서 회전된 옛 리프레시 토큰으로 재시도하면 세션이 폐기되지 않고 계속 갱신할 수 있다`() {
+    fun `유예 안에서 회전된 옛 리프레시 토큰으로 재시도하면 같은 후속 토큰을 돌려받고 아무것도 폐기되지 않는다`() {
         val userId = 6L
         val first = loginSession(userId)
         val rotated = service.refresh(RefreshTokenCommand(first.refreshToken))
+        val rotatedJti = sessions.currentAccessTokenId(UserId(userId))!!
+        val closeCallsBefore = realtimeConnections.closeAfterGraceCalls.toList()
 
-        // 회전 응답이 유실돼 클라이언트가 같은(옛) 토큰으로 재시도하는 상황을 재현한다.
-        val retried = service.refresh(RefreshTokenCommand(first.refreshToken))
+        // 동시 요청 또는 응답 유실 재시도 — 같은(옛) 쿠키로 다시 온다.
+        val replayed = service.refresh(RefreshTokenCommand(first.refreshToken))
 
-        assertNotEquals(rotated.refreshToken, retried.refreshToken)
-        assertNotNull(sessions.currentAccessTokenId(UserId(userId)))
+        assertEquals(rotated, replayed)
+        assertEquals(rotatedJti, sessions.currentAccessTokenId(UserId(userId)))
+        assertFalse(sessions.isAccessTokenBlacklisted(rotatedJti))
+        assertEquals(closeCallsBefore, realtimeConnections.closeAfterGraceCalls)
+        assertTrue(realtimeConnections.closeAllOfCalls.isEmpty())
 
-        // 세션이 폐기되지 않았으므로 최신 토큰으로 계속 갱신할 수 있다.
-        val next = service.refresh(RefreshTokenCommand(retried.refreshToken))
-        assertNotEquals(retried.refreshToken, next.refreshToken)
+        // 세션이 그대로이므로 최신 토큰으로 정상 갱신된다.
+        val next = service.refresh(RefreshTokenCommand(replayed.refreshToken))
+        assertNotEquals(replayed.refreshToken, next.refreshToken)
     }
 
     @Test
-    fun `유예 재시도 후에는 밀려난 직전 회전 토큰으로 정상 클라이언트가 계속 갱신할 수 있다`() {
-        val userId = 9L
-        val first = loginSession(userId)
-        // 정상 회전: 클라이언트 A 가 rotated 를 받아 든다.
-        val rotated = service.refresh(RefreshTokenCommand(first.refreshToken))
-
-        // 이미 소모된 first 가 다시 제시된다(응답 유실 재시도, 혹은 first 를 가로챈 다른 주체) —
-        // 유예 통과.
-        val retriedByOther = service.refresh(RefreshTokenCommand(first.refreshToken))
-        assertNotEquals(rotated.refreshToken, retriedByOther.refreshToken)
-
-        // 클라이언트 A 는 여전히 rotated 를 들고 있다 — 이번 회전으로 "밀려난 현재 토큰"은
-        // rotated 이므로 직전 칸에 들어가 있어야 하고, 유예 안에서 정상적으로 갱신에 성공해야 한다.
-        // 직전 칸에 "제시된 토큰"(first)을 그대로 기록하는 버그가 있었다면 rotated 는 두 칸
-        // 어디에도 없어 여기서 재사용으로 오인되어 세션째 폐기됐을 것이다.
-        val nextForA = service.refresh(RefreshTokenCommand(rotated.refreshToken))
-        assertNotEquals(rotated.refreshToken, nextForA.refreshToken)
-        assertNotNull(sessions.currentAccessTokenId(UserId(userId)))
-    }
-
-    @Test
-    fun `유예 중인 같은 직전 토큰을 반복 제시하면 두 번째부터는 거부된다`() {
+    fun `같은 직전 토큰을 유예 안에서 반복 제시해도 매번 같은 토큰을 돌려받는다`() {
         val userId = 10L
         val first = loginSession(userId)
-        service.refresh(RefreshTokenCommand(first.refreshToken))
+        val rotated = service.refresh(RefreshTokenCommand(first.refreshToken))
 
-        // 첫 번째 유예 재시도는 통과한다(응답 유실 후 정상 재시도, 혹은 탈취자의 최초 시도).
-        service.refresh(RefreshTokenCommand(first.refreshToken))
+        repeat(3) { assertEquals(rotated, service.refresh(RefreshTokenCommand(first.refreshToken))) }
+        assertNotNull(sessions.currentAccessTokenId(UserId(userId)))
+    }
 
-        // 같은 first 를 다시 제시한다 — 직전 칸에 "제시된 토큰"을 그대로 기록하는 버그가 있었다면
-        // 직전 칸이 계속 first 로 재기록되어 여기서도 통과했을 것이다(재사용의 무한 갱신).
-        // 고친 뒤에는 first 가 어느 칸에도 없으므로 거부되고 세션이 폐기된다.
+    @Test
+    fun `재생 중에 역할이 바뀌었으면 재생된 액세스 토큰을 블랙리스트에 올리고 세션을 지우고 거부한다`() {
+        val userId = 9L
+        val first = loginSession(userId)
+        service.refresh(RefreshTokenCommand(first.refreshToken))
+        val rotatedJti = sessions.currentAccessTokenId(UserId(userId))!!
+
+        users.put(userId, UserRole.ADMIN)
+
         val e = assertFailsWith<InvalidRefreshTokenException> {
             service.refresh(RefreshTokenCommand(first.refreshToken))
         }
         assertEquals(UserErrorCode.REFRESH_TOKEN_INVALID, e.errorCode)
+        assertTrue(sessions.isAccessTokenBlacklisted(rotatedJti))
         assertNull(sessions.currentAccessTokenId(UserId(userId)))
     }
 

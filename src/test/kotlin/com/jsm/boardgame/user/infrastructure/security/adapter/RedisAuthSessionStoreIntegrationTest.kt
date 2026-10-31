@@ -2,6 +2,7 @@ package com.jsm.boardgame.user.infrastructure.security.adapter
 
 import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.user.domain.model.UserId
+import com.jsm.boardgame.user.domain.model.UserRole
 import com.jsm.boardgame.user.infrastructure.security.config.JwtProperties
 import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
@@ -13,6 +14,7 @@ import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Primary
 import org.springframework.data.redis.core.StringRedisTemplate
+import java.security.MessageDigest
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -65,10 +67,8 @@ class MutableClock(
  *
  * [ClockTestConfig] 가 애플리케이션의 `Clock.systemUTC()` 빈을 `@Primary` [MutableClock] 으로
  * 덮어써서, `authSessionStore`(스프링이 주입한 실 구현체) 가 보는 시각을 테스트가 직접
- * 조작할 수 있게 한다 — 유예 만료·즉시 경합 가드(100ms)를 기다리려고 실제로 잠들 필요가 없다.
- * 단, 동시성 테스트는 실제 스레드 경합을 검증하는 것이므로 시계를 앞당기지 않는다 — 두 스레드가
- * 이 시계에서 정확히 같은 시각을 읽더라도(오히려 경합을 더 확실히 재현한다) 경합 가드가
- * 정확히 하나만 통과시키는 동작 자체는 그대로 검증된다.
+ * 조작할 수 있게 한다 — 유예 만료를 기다리려고 실제로 잠들 필요가 없다.
+ * 단, 동시성 테스트는 실제 스레드 경합을 검증하는 것이므로 시계를 앞당기지 않는다.
  */
 @IntegrationTest
 class RedisAuthSessionStoreIntegrationTest {
@@ -100,10 +100,10 @@ class RedisAuthSessionStoreIntegrationTest {
         authSessionStore.start(userId, session)
 
         // Mismatch 는 상태를 바꾸지 않으므로 먼저 확인해도 아래 성공 케이스에 영향이 없다.
-        val mismatchResult = authSessionStore.rotate(userId, "다른-리프레시-토큰", newSession())
+        val mismatchResult = authSessionStore.rotateWith(userId, "다른-리프레시-토큰", newSession())
         assertThat(mismatchResult).isEqualTo(RotationResult.Mismatch)
 
-        val matchResult = authSessionStore.rotate(userId, session.refreshToken, newSession())
+        val matchResult = authSessionStore.rotateWith(userId, session.refreshToken, newSession())
         assertThat(matchResult).isEqualTo(RotationResult.Rotated(session.accessTokenId))
     }
 
@@ -117,10 +117,10 @@ class RedisAuthSessionStoreIntegrationTest {
         authSessionStore.start(userId, secondSession)
 
         // Mismatch 는 상태를 바꾸지 않으므로 먼저 확인해도 아래 성공 케이스에 영향이 없다.
-        val firstResult = authSessionStore.rotate(userId, firstSession.refreshToken, newSession())
+        val firstResult = authSessionStore.rotateWith(userId, firstSession.refreshToken, newSession())
         assertThat(firstResult).isEqualTo(RotationResult.Mismatch)
 
-        val secondResult = authSessionStore.rotate(userId, secondSession.refreshToken, newSession())
+        val secondResult = authSessionStore.rotateWith(userId, secondSession.refreshToken, newSession())
         assertThat(secondResult).isEqualTo(RotationResult.Rotated(secondSession.accessTokenId))
     }
 
@@ -132,7 +132,7 @@ class RedisAuthSessionStoreIntegrationTest {
 
         authSessionStore.clear(userId)
 
-        val result = authSessionStore.rotate(userId, session.refreshToken, newSession())
+        val result = authSessionStore.rotateWith(userId, session.refreshToken, newSession())
         assertThat(result).isEqualTo(RotationResult.Mismatch)
         assertThat(authSessionStore.currentAccessTokenId(userId)).isNull()
     }
@@ -182,22 +182,17 @@ class RedisAuthSessionStoreIntegrationTest {
         assertThat(ttl).isPositive()
     }
 
-    // "직전 토큰도 유예 안이면 rotate 를 통과한다" 부분은 `유예 안의 직전 토큰으로 rotate 해도
-    // Rotated 다`(즉시 경합 가드를 피하려 시계를 앞당기는 것까지 포함해) 가 이미 정확히 같은 것을
-    // 검증하므로 여기서는 중복하지 않는다. 이 테스트는 그와 구별되는 부분 —
-    // 회전으로 새로 발급된 "현재" 토큰은 유예 가드(직전 칸에만 적용) 대상이 아니라서 시간을
-    // 앞당기지 않아도 곧바로 다시 rotate 할 수 있다는 것 — 만 남긴다.
     @Test
-    fun `rotate 직후 새로 발급된 현재 토큰은 시간을 앞당기지 않아도 곧바로 다시 rotate 된다`() {
+    fun `rotate 직후 새로 발급된 현재 토큰은 곧바로 다시 rotate 된다`() {
         val userId = newUserId()
         val first = newSession()
         authSessionStore.start(userId, first)
 
         val rotated = newSession()
-        authSessionStore.rotate(userId, first.refreshToken, rotated)
+        authSessionStore.rotateWith(userId, first.refreshToken, rotated)
 
         val next = newSession()
-        val result = authSessionStore.rotate(userId, rotated.refreshToken, next)
+        val result = authSessionStore.rotateWith(userId, rotated.refreshToken, next)
 
         assertThat(result).isEqualTo(RotationResult.Rotated(rotated.accessTokenId))
     }
@@ -220,15 +215,15 @@ class RedisAuthSessionStoreIntegrationTest {
         shortGraceStore.start(userId, first)
 
         val rotated = newSession()
-        shortGraceStore.rotate(userId, first.refreshToken, rotated)
+        shortGraceStore.rotateWith(userId, first.refreshToken, rotated)
 
         shortGraceClock.advanceBy(Duration.ofMillis(300))
 
         // Mismatch 는 상태를 바꾸지 않으므로 먼저 확인해도 아래 성공 케이스에 영향이 없다.
-        val expiredResult = shortGraceStore.rotate(userId, first.refreshToken, newSession())
+        val expiredResult = shortGraceStore.rotateWith(userId, first.refreshToken, newSession())
         assertThat(expiredResult).isEqualTo(RotationResult.Mismatch)
 
-        val currentResult = shortGraceStore.rotate(userId, rotated.refreshToken, newSession())
+        val currentResult = shortGraceStore.rotateWith(userId, rotated.refreshToken, newSession())
         assertThat(currentResult).isEqualTo(RotationResult.Rotated(rotated.accessTokenId))
     }
 
@@ -239,32 +234,69 @@ class RedisAuthSessionStoreIntegrationTest {
         authSessionStore.start(userId, first)
 
         val next = newSession()
-        val result = authSessionStore.rotate(userId, first.refreshToken, next)
+        val result = authSessionStore.rotateWith(userId, first.refreshToken, next)
 
         assertThat(result).isEqualTo(RotationResult.Rotated(first.accessTokenId))
         assertThat(authSessionStore.currentAccessTokenId(userId)).isEqualTo(next.accessTokenId)
     }
 
     @Test
-    fun `유예 안의 직전 토큰으로 rotate 해도 Rotated 다`() {
+    fun `유예 안의 직전 토큰을 제시하면 처음 회전의 후속 토큰이 그대로 재생되고 반복해도 같다`() {
         val userId = newUserId()
-        val gen0 = newSession()
-        authSessionStore.start(userId, gen0)
+        val t0 = newSession()
+        authSessionStore.start(userId, t0)
 
-        val gen1 = newSession()
-        authSessionStore.rotate(userId, gen0.refreshToken, gen1)
+        val t1 = newSession()
+        authSessionStore.rotateWith(userId, t0.refreshToken, t1)
 
-        // rotate() 는 유예 창이 열린 직후의 즉시 재사용을 "동시 경합"으로 보고 거부하는
-        // 가드(RedisAuthSessionStore.MIN_GRACE_ELAPSED_MILLIS, 100ms)를 둔다. 이 테스트는
-        // "응답 유실 후 나중에 재시도"를 재현하는 것이므로, 가드를 여유 있게 넘기고서 호출한다.
-        clock.advanceBy(Duration.ofMillis(300))
+        val first = authSessionStore.rotateWith(userId, t0.refreshToken, newSession())
+        val second = authSessionStore.rotateWith(userId, t0.refreshToken, newSession())
 
-        // gen0 은 gen1 의 유예 대상 직전 토큰이다.
-        val gen2 = newSession()
-        val result = authSessionStore.rotate(userId, gen0.refreshToken, gen2)
+        assertThat(first).isEqualTo(replayOf(t1))
+        assertThat(second).isEqualTo(replayOf(t1))
+        // 재생은 회전하지 않는다 — 세션은 여전히 t1 이고 t1 은 정상 회전한다.
+        assertThat(authSessionStore.currentAccessTokenId(userId)).isEqualTo(t1.accessTokenId)
+        val t2 = newSession()
+        assertThat(authSessionStore.rotateWith(userId, t1.refreshToken, t2))
+            .isEqualTo(RotationResult.Rotated(t1.accessTokenId))
+    }
 
-        assertThat(result).isEqualTo(RotationResult.Rotated(gen1.accessTokenId))
-        assertThat(authSessionStore.currentAccessTokenId(userId)).isEqualTo(gen2.accessTokenId)
+    @Test
+    fun `유예가 지난 뒤 직전 토큰을 제시하면 Mismatch 다`() {
+        val userId = newUserId()
+        val t0 = newSession()
+        authSessionStore.start(userId, t0)
+        authSessionStore.rotateWith(userId, t0.refreshToken, newSession())
+
+        clock.advanceBy(Duration.ofSeconds(6))
+
+        assertThat(authSessionStore.rotateWith(userId, t0.refreshToken, newSession())).isEqualTo(RotationResult.Mismatch)
+    }
+
+    @Test
+    fun `한 번 더 회전한 뒤 두 세대 전 토큰을 제시하면 Mismatch 다 - 유예 안이어도`() {
+        val userId = newUserId()
+        val t0 = newSession()
+        authSessionStore.start(userId, t0)
+        val t1 = newSession()
+        authSessionStore.rotateWith(userId, t0.refreshToken, t1)
+        authSessionStore.rotateWith(userId, t1.refreshToken, newSession())
+
+        assertThat(authSessionStore.rotateWith(userId, t0.refreshToken, newSession())).isEqualTo(RotationResult.Mismatch)
+    }
+
+    @Test
+    fun `재생 레코드는 후속 토큰 평문을 담지 않는다`() {
+        val userId = newUserId()
+        val t0 = newSession()
+        authSessionStore.start(userId, t0)
+        val t1 = newSession()
+        authSessionStore.rotateWith(userId, t0.refreshToken, t1)
+
+        val own = redisTemplate.opsForValue().get("auth:refresh:replay:${sha256Hex(t0.refreshToken)}")
+
+        assertThat(own).isNotNull()
+        assertThat(own).doesNotContain(t1.refreshToken).doesNotContain(accessTokenOf(t1)).doesNotContain(t0.refreshToken)
     }
 
     @Test
@@ -274,13 +306,13 @@ class RedisAuthSessionStoreIntegrationTest {
         authSessionStore.start(userId, gen0)
 
         val gen1 = newSession()
-        authSessionStore.rotate(userId, gen0.refreshToken, gen1)
+        authSessionStore.rotateWith(userId, gen0.refreshToken, gen1)
 
         val gen2 = newSession()
-        authSessionStore.rotate(userId, gen1.refreshToken, gen2)
+        authSessionStore.rotateWith(userId, gen1.refreshToken, gen2)
 
         val attempted = newSession()
-        val result = authSessionStore.rotate(userId, gen0.refreshToken, attempted)
+        val result = authSessionStore.rotateWith(userId, gen0.refreshToken, attempted)
 
         assertThat(result).isEqualTo(RotationResult.Mismatch)
         // 실패한 rotate 는 세션을 바꾸지 않는다.
@@ -291,101 +323,46 @@ class RedisAuthSessionStoreIntegrationTest {
     fun `세션이 없는 사용자는 rotate 가 Mismatch 다`() {
         val userId = newUserId()
 
-        val result = authSessionStore.rotate(userId, "아무-토큰", newSession())
+        val result = authSessionStore.rotateWith(userId, "아무-토큰", newSession())
 
         assertThat(result).isEqualTo(RotationResult.Mismatch)
     }
 
+    // 같은 토큰을 N 스레드가 동시에 제시하면 Lua 직렬화로 하나만 현재 토큰과 일치해 Rotated 가 되고,
+    // 나머지는 그 회전이 남긴 재생 레코드를 받는다 — 전부 이긴 쪽의 후속 토큰과 같다.
     @Test
-    fun `같은 직전 토큰을 100ms 이상 간격으로 두 번 제시하면 두 번째는 Mismatch 다`() {
-        val userId = newUserId()
-        val gen0 = newSession()
-        authSessionStore.start(userId, gen0)
-
-        val gen1 = newSession()
-        authSessionStore.rotate(userId, gen0.refreshToken, gen1)
-
-        clock.advanceBy(Duration.ofMillis(300))
-
-        // 첫 번째 유예 재시도: gen0 은 아직 직전 칸에 있다 — 통과해야 한다.
-        val gen2 = newSession()
-        val firstRetry = authSessionStore.rotate(userId, gen0.refreshToken, gen2)
-        assertThat(firstRetry).isEqualTo(RotationResult.Rotated(gen1.accessTokenId))
-
-        clock.advanceBy(Duration.ofMillis(300))
-
-        // 같은 gen0 을 다시 제시한다 — 직전 칸에 "제시된 토큰"을 그대로 기록하는 버그가 있었다면
-        // 직전 칸이 계속 gen0 으로 재기록되어 여기서도 통과했을 것이다(재사용의 무한 갱신).
-        // 고친 뒤에는 직전 칸에 "밀려난 현재 토큰"(gen1)이 들어가므로 gen0 은 어디에도 없어 거부된다.
-        val gen3 = newSession()
-        val secondRetry = authSessionStore.rotate(userId, gen0.refreshToken, gen3)
-        assertThat(secondRetry).isEqualTo(RotationResult.Mismatch)
-    }
-
-    @Test
-    fun `유예 재시도 후에는 밀려난 현재 토큰이 새 직전 칸에 들어간다`() {
-        val userId = newUserId()
-        val gen0 = newSession()
-        authSessionStore.start(userId, gen0)
-
-        val gen1 = newSession()
-        authSessionStore.rotate(userId, gen0.refreshToken, gen1)
-
-        clock.advanceBy(Duration.ofMillis(300))
-
-        // 유예 재시도: 직전 칸의 gen0 을 제시해 통과시킨다 — 이때 밀려나는 것은 "현재" 칸에 있던 gen1 이다.
-        val gen2 = newSession()
-        val retryResult = authSessionStore.rotate(userId, gen0.refreshToken, gen2)
-        assertThat(retryResult).isEqualTo(RotationResult.Rotated(gen1.accessTokenId))
-
-        clock.advanceBy(Duration.ofMillis(300))
-
-        // 밀려난 gen1 이 새 직전 칸에 들어가 있어야 한다 — gen1 으로 rotate 하면 성공해야 한다.
-        val gen3 = newSession()
-        val rotateWithBumped = authSessionStore.rotate(userId, gen1.refreshToken, gen3)
-        assertThat(rotateWithBumped).isEqualTo(RotationResult.Rotated(gen2.accessTokenId))
-    }
-
-    // 정확히 하나만 성공하는 이유: 두 스레드 모두 아직 회전되지 않은 first.refreshToken 을
-    // 제시하므로, Redis 가 직렬화하는 두 Lua 실행 중 먼저 도는 쪽만 "현재 토큰과 일치"로
-    // 통과한다. 나중 쪽은 그 직후 열린 유예 창의 "직전 토큰과 일치" 조건 자체는 만족하지만,
-    // 그 창이 열린 지 마이크로초~저수 ms 밖에 지나지 않아 즉시 경합 가드(100ms)에 걸려
-    // Mismatch 가 된다 — 응답 유실 후의 정상 재시도(최소 수백 ms 뒤)와는 구별된다.
-    @Test
-    fun `같은 토큰으로 두 스레드가 동시에 rotate 하면 정확히 하나만 Rotated 다`() {
+    fun `같은 토큰으로 여러 스레드가 동시에 rotate 하면 하나만 Rotated 이고 나머지는 같은 토큰을 재생받는다`() {
         val userId = newUserId()
         val first = newSession()
         authSessionStore.start(userId, first)
 
-        val nextSessions = List(2) { newSession() }
-        val readyLatch = CountDownLatch(2)
+        val n = 8
+        val nextSessions = List(n) { newSession() }
+        val readyLatch = CountDownLatch(n)
         val startLatch = CountDownLatch(1)
-        val executor = Executors.newFixedThreadPool(2)
+        val executor = Executors.newFixedThreadPool(n)
 
         val futures = nextSessions.map { next ->
             executor.submit(
                 Callable {
                     readyLatch.countDown()
                     startLatch.await()
-                    authSessionStore.rotate(userId, first.refreshToken, next)
+                    authSessionStore.rotateWith(userId, first.refreshToken, next)
                 },
             )
         }
 
-        // 두 스레드 모두 대기 지점에 도달한 뒤 동시에 풀어준다 — 순차 실행이면 경합이 재현되지 않는다.
         readyLatch.await()
         startLatch.countDown()
-        val outcomes = futures.map { it.get(5, TimeUnit.SECONDS) }
+        val outcomes = futures.map { it.get(10, TimeUnit.SECONDS) }
         executor.shutdownNow()
 
         assertThat(outcomes.count { it is RotationResult.Rotated }).isEqualTo(1)
-        assertThat(outcomes.count { it == RotationResult.Mismatch }).isEqualTo(1)
-
-        // 이긴 쪽의 next 세션이 실제로 저장돼 있어야 한다 — 진 쪽이 나중에 덮어쓰지 않았다는 뜻이다.
-        // currentAccessTokenId 로 확인한다: rotate 는 상태를 바꾸므로, 이미 끝난 경합을 다시
-        // rotate 로 검증하면 그 자체가 세 번째 회전이 되어 경합 재현과 무관한 부작용을 더한다.
-        val winningNext = nextSessions[outcomes.indexOfFirst { it is RotationResult.Rotated }]
-        assertThat(authSessionStore.currentAccessTokenId(userId)).isEqualTo(winningNext.accessTokenId)
+        val winner = nextSessions[outcomes.indexOfFirst { it is RotationResult.Rotated }]
+        val replays = outcomes.filterIsInstance<RotationResult.Replayed>()
+        assertThat(replays).hasSize(n - 1)
+        assertThat(replays).allSatisfy { assertThat(it).isEqualTo(replayOf(winner)) }
+        assertThat(authSessionStore.currentAccessTokenId(userId)).isEqualTo(winner.accessTokenId)
     }
 
     @Test
@@ -395,7 +372,7 @@ class RedisAuthSessionStoreIntegrationTest {
         authSessionStore.start(userId, first)
 
         val next = newSession()
-        authSessionStore.rotate(userId, first.refreshToken, next)
+        authSessionStore.rotateWith(userId, first.refreshToken, next)
 
         val ttl = redisTemplate.getExpire("auth:session:${userId.value}")
 
@@ -424,7 +401,7 @@ class RedisAuthSessionStoreIntegrationTest {
         authSessionStore.start(userId, first)
 
         val rotated = newSession()
-        authSessionStore.rotate(userId, first.refreshToken, rotated)
+        authSessionStore.rotateWith(userId, first.refreshToken, rotated)
 
         assertThat(authSessionStore.userIdForRefreshToken(first.refreshToken)).isEqualTo(userId)
 
@@ -432,7 +409,7 @@ class RedisAuthSessionStoreIntegrationTest {
         clock.advanceBy(Duration.ofSeconds(6))
 
         val reused = newSession()
-        val result = authSessionStore.rotate(userId, first.refreshToken, reused)
+        val result = authSessionStore.rotateWith(userId, first.refreshToken, reused)
 
         assertThat(result).isEqualTo(RotationResult.Mismatch)
     }
@@ -444,10 +421,27 @@ class RedisAuthSessionStoreIntegrationTest {
         authSessionStore.start(userId, first)
 
         val rotated = newSession()
-        authSessionStore.rotate(userId, first.refreshToken, rotated)
+        authSessionStore.rotateWith(userId, first.refreshToken, rotated)
 
         assertThat(authSessionStore.userIdForRefreshToken(rotated.refreshToken)).isEqualTo(userId)
     }
+
+    private fun accessTokenOf(session: AuthSession) = "jwt-${session.accessTokenId}"
+
+    private fun AuthSessionStore.rotateWith(userId: UserId, presented: String, next: AuthSession) =
+        rotate(userId, presented, next, accessTokenOf(next), ACCESS_EXPIRES_AT, UserRole.USER)
+
+    private fun replayOf(session: AuthSession) = RotationResult.Replayed(
+        accessTokenId = session.accessTokenId,
+        accessToken = accessTokenOf(session),
+        refreshToken = session.refreshToken,
+        accessTokenExpiresAt = ACCESS_EXPIRES_AT,
+        refreshTokenExpiresAt = session.refreshTokenExpiresAt,
+        role = UserRole.USER,
+    )
+
+    private fun sha256Hex(value: String) =
+        MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
 
     private fun newSession(
         accessTokenId: String = "access-${UUID.randomUUID()}",
@@ -459,6 +453,7 @@ class RedisAuthSessionStoreIntegrationTest {
 
     companion object {
         // 다른 통합 테스트가 같은 Redis 에 실제 사용자(IDENTITY 1, 2, 3…)의 세션을 남기므로 겹치지 않는 대역에서 시작한다.
+        private val ACCESS_EXPIRES_AT: Instant = Instant.parse("2099-01-01T00:00:00Z")
         private val userIdSequence = AtomicLong(1_000_000_000_000L)
     }
 }

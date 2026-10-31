@@ -4,6 +4,7 @@ import com.jsm.boardgame.user.application.port.AuthSession
 import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.RotationResult
 import com.jsm.boardgame.user.domain.model.UserId
+import com.jsm.boardgame.user.domain.model.UserRole
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.security.oauth2.jwt.Jwt
@@ -41,6 +42,6 @@ private class BlacklistFakeAuthSessionStore(private val blacklisted: Set<String>
     override fun currentAccessTokenId(userId: UserId): String? = error("unused")
     override fun clear(userId: UserId) = error("unused")
     override fun blacklistAccessToken(accessTokenId: String, expiresAt: Instant) = error("unused")
-    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession): RotationResult = error("unused")
+    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession, nextAccessToken: String, nextAccessTokenExpiresAt: Instant, nextRole: UserRole): RotationResult = error("unused")
     override fun userIdForRefreshToken(refreshToken: String): UserId? = error("unused")
 }

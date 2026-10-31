@@ -18,3 +18,4 @@ paths: ["**/wallet/**"]
 - 지갑·요청을 바꾸는 조회는 `PESSIMISTIC_WRITE` 로 잠그고 읽기 전용 조회(JDSL)와 메서드를 아예
   나눈다. 잠그는 메서드는 반드시 트랜잭션 안에서 부른다 — 아니면 `TransactionRequiredException`
   이거나(트랜잭션 없음), Postgres 가 읽기 전용 트랜잭션에서는 `FOR UPDATE` 를 거부한다
+- 조정·반려 사유에 길이 상한을 두지 않는다 — 관리자 전용(사용자 결정)

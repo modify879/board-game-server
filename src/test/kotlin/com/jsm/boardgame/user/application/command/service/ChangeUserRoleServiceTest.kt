@@ -48,7 +48,7 @@ private class ChangeRoleFakeAuthSessionStore : AuthSessionStore {
 
     override fun isAccessTokenBlacklisted(accessTokenId: String): Boolean = accessTokenId in blacklisted
 
-    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession): RotationResult =
+    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession, nextAccessToken: String, nextAccessTokenExpiresAt: Instant, nextRole: UserRole): RotationResult =
         RotationResult.Mismatch
 
     override fun userIdForRefreshToken(refreshToken: String): UserId? = null
