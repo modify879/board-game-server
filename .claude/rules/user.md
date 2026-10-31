@@ -20,8 +20,10 @@ paths: ["**/user/**"]
 - 프로필 이미지는 로컬 디스크(`app.profile-image.storage-dir`)에 둔다. 형식은 매직 바이트로만 판별하고(클라이언트 Content-Type·파일명 불신) 2MB 가 상한이다.
   파일과 DB 는 원자적이지 않아 고아 파일이 남을 수 있다 — 순서(저장 → DB → 옛 파일 삭제)는 `ChangeProfileImageService` KDoc.
   `default.png` 자산은 없다 — 기본 이미지는 클라이언트가 처리한다
-- 탈퇴(`withdrawn_at`)한 사용자는 어댑터에서 걸러낸다 — 명령 쪽 `findById`·`findByUsername` 과 조회 쪽 전부. 서비스마다 확인하지 않는다.
+- 탈퇴(`withdrawn_at`)한 사용자는 어댑터에서 걸러낸다 — 명령 쪽 `findById`·`findByIdForUpdate`·`findByUsername` 과 조회 쪽 전부. 서비스마다 확인하지 않는다.
   사용자명은 계속 예약되고(`existsByUsername` 은 탈퇴자도 센다) 닉네임은 `withdrawn-user-{id}` 묘비로 바꿔 반납한다(15자 이상이라 유효 닉네임과 겹치지 않는다)
 - 마지막 관리자의 자기 강등을 막지 않는다(사용자 결정)
-- 탈퇴의 사전 조건과 저장은 트랜잭션 하나다(`WithdrawService`, `TransactionOperations`). 안에서 **지갑 락(`WalletHoldings`) → 좌석·대기열 확인 → 저장** 순서를 지킨다.
+- **사용자를 바꾸는 명령은 전부 `findByIdForUpdate` 로 읽고 같은 짧은 트랜잭션에서 `save` 한다.** 트랜잭션 밖에서 읽은 `User` 를 저장하지 않는다 — `save` 는 행 전체를 덮어써
+  그사이 커밋된 변경(새 비밀번호, 탈퇴)을 되돌린다. 해싱·Redis·파일은 트랜잭션 밖. 근거는 `docs/decisions/concurrency.md` "사용자 행도 비관적 락"
+- 탈퇴의 사전 조건과 저장은 트랜잭션 하나다(`WithdrawService`, `TransactionOperations`). 안에서 **지갑 락(`WalletHoldings`) → 좌석·대기열 확인 → 사용자 행 락 재조회(해시가 확인한 것과 다르면 `CURRENT_PASSWORD_MISMATCH`) → 저장** 순서를 지킨다.
   좌석 확인을 락 앞으로 옮기면 그 사이 커밋된 착석을 놓쳐 앉은 채 탈퇴된다(`WithdrawConcurrencyIntegrationTest`). 세션 종료는 커밋 뒤다

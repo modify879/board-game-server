@@ -28,6 +28,9 @@ class UserRepositoryAdapter(
     override fun findById(id: UserId): User? =
         jpa.findByIdAndWithdrawnAtIsNull(id.value)?.toDomain()
 
+    override fun findByIdForUpdate(id: UserId): User? =
+        jpa.findForUpdateByIdAndWithdrawnAtIsNull(id.value)?.toDomain()
+
     // 탈퇴한 사용자도 센다 — 사용자명은 재사용하지 않는다. 닉네임은 묘비로 바뀌어 있어 자연히 반납된다.
     override fun existsByUsername(username: Username): Boolean =
         jpa.existsByUsername(username.value)

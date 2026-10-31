@@ -42,6 +42,7 @@ private class WithdrawFakeUserRepository : UserRepository {
     override fun findByUsername(username: Username): User? = stored.values.find { it.username == username }
     // 읽을 때마다 새 복사본을 준다 — 서비스가 락 뒤에 다시 읽는지 증명하려고
     override fun findById(id: UserId): User? = stored[id.value]?.let(::copyOf)
+    override fun findByIdForUpdate(id: UserId): User? = findById(id)
     override fun existsByUsername(username: Username): Boolean = false
     override fun existsByNickname(nickname: Nickname): Boolean = false
     override fun save(user: User): User { stored[user.id!!.value] = user; return user }
@@ -106,7 +107,7 @@ class WithdrawServiceTest {
     private var contendedLocks = 0
     private var concurrentChange: () -> Unit = {}
     private val logout = LogoutService(sessions, realtime, Duration.ofMinutes(30), Clock.systemUTC())
-    private val verifier = CurrentPasswordVerifier(users, WithdrawFakeHasher(), limiter, logout, 5, Duration.ofMinutes(15), Clock.systemUTC())
+    private val verifier = CurrentPasswordVerifier(users, WithdrawFakeHasher(), limiter, logout, 5, Duration.ofMinutes(15), TransactionOperations.withoutTransaction(), Clock.systemUTC())
     private val service = WithdrawService(
         users, verifier,
         { calls += "presence"; seated },
@@ -188,6 +189,25 @@ class WithdrawServiceTest {
         assertEquals(1, limiter.failures)
         assertNull(users.stored[1]!!.withdrawnAt)
         assertEquals("jti-1", sessions.currentAccessTokenId(UserId(1)))
+    }
+
+    @Test
+    fun `확인한 뒤 행 락 전에 비밀번호가 바뀌었으면 CURRENT_PASSWORD_MISMATCH 이고 탈퇴되지 않으며 세션은 그대로다`() {
+        seed()
+        concurrentChange = {
+            users.stored[1] = User.reconstitute(
+                id = UserId(1), username = Username.of("user_01"), passwordHash = PasswordHash("hashed:otherpassword1"),
+                nickname = Nickname.of("길동이"), profileImageKey = null, role = UserRole.USER,
+            )
+        }
+
+        val e = assertFailsWith<CurrentPasswordMismatchException> { service.withdraw(WithdrawCommand(1L, "password1")) }
+
+        assertEquals(UserErrorCode.CURRENT_PASSWORD_MISMATCH, e.errorCode)
+        assertNull(users.stored[1]!!.withdrawnAt)
+        assertEquals(PasswordHash("hashed:otherpassword1"), users.stored[1]!!.passwordHash)
+        assertEquals("jti-1", sessions.currentAccessTokenId(UserId(1)))
+        assertEquals(0, limiter.resets)
     }
 
     @Test

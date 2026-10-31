@@ -20,6 +20,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.springframework.transaction.support.TransactionOperations
 
 private class ProfileImageFakeUserRepository : UserRepository {
     val stored = mutableMapOf<Long, User>()
@@ -38,6 +39,7 @@ private class ProfileImageFakeUserRepository : UserRepository {
 
     override fun findByUsername(username: Username): User? = stored.values.find { it.username == username }
     override fun findById(id: UserId): User? = stored[id.value]
+    override fun findByIdForUpdate(id: UserId): User? = findById(id)
     override fun existsByUsername(username: Username): Boolean = false
     override fun existsByNickname(nickname: Nickname): Boolean = false
     override fun save(user: User): User {
@@ -68,8 +70,8 @@ class ChangeProfileImageServiceTest {
 
     private val users = ProfileImageFakeUserRepository()
     private val storage = ChangeProfileImageFakeProfileImageStorage()
-    private val change = ChangeProfileImageService(users, storage)
-    private val remove = RemoveProfileImageService(users, storage)
+    private val change = ChangeProfileImageService(users, storage, TransactionOperations.withoutTransaction())
+    private val remove = RemoveProfileImageService(users, storage, TransactionOperations.withoutTransaction())
 
     private val png = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0)
 

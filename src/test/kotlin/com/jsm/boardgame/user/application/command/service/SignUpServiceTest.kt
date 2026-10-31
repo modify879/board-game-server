@@ -28,6 +28,7 @@ private class SignUpFakeUserRepository : UserRepository {
 
     override fun findById(id: UserId): User? = stored.find { it.id == id }
 
+    override fun findByIdForUpdate(id: UserId): User? = findById(id)
     override fun existsByUsername(username: Username): Boolean =
         stored.any { it.username == username }
 

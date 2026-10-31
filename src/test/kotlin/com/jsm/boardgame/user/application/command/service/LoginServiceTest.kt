@@ -20,6 +20,7 @@ import com.jsm.boardgame.user.domain.model.UserRole
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import com.jsm.boardgame.user.domain.service.PasswordHasher
+import org.springframework.transaction.support.TransactionOperations
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Clock
 import java.time.Duration
@@ -39,6 +40,7 @@ private class LoginFakeUserRepository : UserRepository {
 
     override fun findById(id: UserId): User? = stored.find { it.id == id }
 
+    override fun findByIdForUpdate(id: UserId): User? = findById(id)
     override fun existsByUsername(username: Username): Boolean = stored.any { it.username == username }
 
     override fun existsByNickname(nickname: Nickname): Boolean = stored.any { it.nickname == nickname }
@@ -198,7 +200,7 @@ class LoginServiceTest {
     private val realtimeConnections = LoginFakeRealtimeConnections()
     private val txLog = mutableListOf<String>()
     private val failAt = mutableSetOf<String>()
-    private val service = LoginService(users, passwordHasher, tokenIssuer, LoginProbeSessions(sessions, txLog, failAt), LoginProbeRealtime(realtimeConnections, txLog), LoginProbeLimiter(attemptLimiter, txLog, failAt), Duration.ofMinutes(30), 5, Duration.ofMinutes(15), Clock.systemUTC())
+    private val service = LoginService(users, passwordHasher, tokenIssuer, LoginProbeSessions(sessions, txLog, failAt), LoginProbeRealtime(realtimeConnections, txLog), LoginProbeLimiter(attemptLimiter, txLog, failAt), Duration.ofMinutes(30), 5, Duration.ofMinutes(15), TransactionOperations.withoutTransaction(), Clock.systemUTC())
 
     @Test
     fun `존재하지 않는 사용자명이면 LoginFailedException 이 발생한다`() {

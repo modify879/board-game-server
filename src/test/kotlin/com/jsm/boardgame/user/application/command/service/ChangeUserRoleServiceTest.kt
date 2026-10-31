@@ -15,6 +15,7 @@ import com.jsm.boardgame.user.domain.model.UserId
 import com.jsm.boardgame.user.domain.model.UserRole
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
+import org.springframework.transaction.support.TransactionOperations
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Clock
 import java.time.Duration
@@ -80,6 +81,7 @@ private class ChangeRoleFakeUserRepository : UserRepository {
     override fun findById(id: UserId): User? = stored[id.value]?.let {
         User.reconstitute(it.id!!, it.username, it.passwordHash, it.nickname, null, it.role)
     }
+    override fun findByIdForUpdate(id: UserId): User? = findById(id)
     override fun existsByUsername(username: Username): Boolean = stored.values.any { it.username == username }
     override fun existsByNickname(nickname: Nickname): Boolean = stored.values.any { it.nickname == nickname }
     override fun save(user: User): User {
@@ -127,7 +129,7 @@ class ChangeUserRoleServiceTest {
     private val users = ChangeRoleFakeUserRepository()
     private val txLog = mutableListOf<String>()
     private val failAt = mutableSetOf<String>()
-    private val service = ChangeUserRoleService(ChangeRoleProbeUsers(users, failAt), ChangeRoleProbeSessions(sessions, txLog, failAt), ChangeRoleProbeRealtime(realtimeConnections, txLog), Duration.ofMinutes(30), Clock.systemUTC())
+    private val service = ChangeUserRoleService(ChangeRoleProbeUsers(users, failAt), ChangeRoleProbeSessions(sessions, txLog, failAt), ChangeRoleProbeRealtime(realtimeConnections, txLog), Duration.ofMinutes(30), TransactionOperations.withoutTransaction(), Clock.systemUTC())
 
     @Test
     fun `대상 사용자의 역할이 바뀌고 저장된다`() {

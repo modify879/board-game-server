@@ -32,11 +32,14 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.springframework.transaction.support.TransactionOperations
 
 private class ChangePwFakeUserRepository : UserRepository {
     val stored = mutableMapOf<Long, User>()
     override fun findByUsername(username: Username): User? = stored.values.find { it.username == username }
     override fun findById(id: UserId): User? = stored[id.value]
+    var beforeLockedRead: () -> Unit = {}
+    override fun findByIdForUpdate(id: UserId): User? { beforeLockedRead(); return findById(id) }
     override fun existsByUsername(username: Username): Boolean = false
     override fun existsByNickname(nickname: Nickname): Boolean = false
     override fun save(user: User): User { stored[user.id!!.value] = user; return user }
@@ -97,11 +100,11 @@ class ChangePasswordServiceTest {
     private val hasher = ChangePwFakeHasher()
     private val verifier = CurrentPasswordVerifier(
         users, hasher, limiter, LogoutService(sessions, realtime, Duration.ofMinutes(30), Clock.systemUTC()),
-        5, Duration.ofMinutes(15), Clock.systemUTC(),
+        5, Duration.ofMinutes(15), TransactionOperations.withoutTransaction(), Clock.systemUTC(),
     )
     private val service = ChangePasswordService(
         users, hasher, ChangePwFakeIssuer(), sessions, realtime, limiter, verifier,
-        Duration.ofMinutes(30), Clock.systemUTC(),
+        Duration.ofMinutes(30), TransactionOperations.withoutTransaction(), Clock.systemUTC(),
     )
 
     private fun seed(locked: Boolean = false) {
@@ -190,6 +193,34 @@ class ChangePasswordServiceTest {
         assertEquals(PasswordHash("hashed:oldpassword1"), users.stored[1]!!.passwordHash)
         assertFalse(sessions.isAccessTokenBlacklisted("old-jti"))
     }
+
+    @Test
+    fun `확인한 뒤 행 락 전에 비밀번호가 바뀌었으면 CURRENT_PASSWORD_MISMATCH 이고 그 비밀번호를 덮어쓰지 않는다`() {
+        seed()
+        users.beforeLockedRead = { users.stored[1] = copyWith(users.stored[1]!!, PasswordHash("hashed:otherpassword1")) }
+
+        val e = assertFailsWith<CurrentPasswordMismatchException> { change() }
+
+        assertEquals(UserErrorCode.CURRENT_PASSWORD_MISMATCH, e.errorCode)
+        assertEquals(PasswordHash("hashed:otherpassword1"), users.stored[1]!!.passwordHash)
+        assertEquals("old-jti", sessions.currentAccessTokenId(UserId(1)))
+    }
+
+    @Test
+    fun `확인한 뒤 행 락 전에 잠겼으면 ACCOUNT_LOCKED 이고 비밀번호는 그대로다`() {
+        seed()
+        users.beforeLockedRead = { users.stored[1] = copyWith(users.stored[1]!!, lockedAt = Instant.now()) }
+
+        val e = assertFailsWith<AccountLockedException> { change() }
+
+        assertEquals(UserErrorCode.ACCOUNT_LOCKED, e.errorCode)
+        assertEquals(PasswordHash("hashed:oldpassword1"), users.stored[1]!!.passwordHash)
+    }
+
+    private fun copyWith(u: User, hash: PasswordHash = u.passwordHash, lockedAt: Instant? = u.lockedAt) = User.reconstitute(
+        id = u.id!!, username = u.username, passwordHash = hash, nickname = u.nickname,
+        profileImageKey = u.profileImageKey, role = u.role, lockedAt = lockedAt,
+    )
 
     @Test
     fun `새 비밀번호가 너무 짧으면 PASSWORD_TOO_SHORT 이고 실패로 세지 않는다`() {

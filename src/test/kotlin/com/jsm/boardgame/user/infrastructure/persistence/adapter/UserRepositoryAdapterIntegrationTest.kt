@@ -13,6 +13,14 @@ import com.jsm.boardgame.user.domain.model.User
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.dao.DataAccessException
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.IllegalTransactionStateException
+import org.springframework.transaction.support.TransactionTemplate
+import java.sql.SQLException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -39,6 +47,12 @@ class UserRepositoryAdapterIntegrationTest {
 
     @Autowired
     private lateinit var jpaUsers: UserJpaRepository
+
+    @Autowired
+    private lateinit var tx: TransactionTemplate
+
+    @Autowired
+    private lateinit var jdbc: JdbcTemplate
 
     private fun uniqueUsername(): String =
         "u" + UniqueNames.suffix()
@@ -120,5 +134,63 @@ class UserRepositoryAdapterIntegrationTest {
 
         assertFalse(users.existsByNickname(Nickname.of(nickname)))
         users.save(newUser(username = uniqueUsername(), nickname = nickname))
+    }
+
+    /**
+     * 사용자 행 락이 `for no key update` 인지 실제 Postgres 의 락 충돌로 본다. 지갑 INSERT 의 FK 검사는 부모 행에
+     * `for key share` 를 잡는데, 이것은 `for update` 와는 충돌하고 `for no key update` 와는 충돌하지 않는다.
+     * 한 트랜잭션이 행 락을 쥔 동안 다른 커넥션에서 (1) 같은 행의 `for no key update nowait` 는 즉시 실패해야 하고 —
+     * 락이 정말 잡혔다는 대조군 — (2) 그 사용자의 지갑 INSERT 는 `lock_timeout` 500ms 안에 끝나야 한다.
+     * `for update` 였다면 (2) 가 500ms 뒤 락 타임아웃으로 실패한다. 시간 경합이 없다 — 락은 확인 전에 이미 잡혀 있다.
+     */
+    @Test
+    fun `행 락을 쥔 동안에도 그 사용자의 지갑 INSERT 는 막히지 않는다 - for no key update`() {
+        val userId = users.save(newUser(username = uniqueUsername(), nickname = uniqueNickname())).id!!
+        val pool = Executors.newSingleThreadExecutor()
+        val held = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        try {
+            val holder = pool.submit {
+                tx.executeWithoutResult {
+                    checkNotNull(users.findByIdForUpdate(userId))
+                    held.countDown()
+                    release.await(10, TimeUnit.SECONDS)
+                }
+            }
+            assertTrue(held.await(10, TimeUnit.SECONDS))
+
+            val notAcquired = assertFailsWith<DataAccessException> {
+                tx.executeWithoutResult {
+                    jdbc.queryForList("select id from users where id = ? for no key update nowait", userId.value)
+                }
+            }
+            assertEquals("55P03", (notAcquired.mostSpecificCause as SQLException).sqlState) // lock_not_available
+            tx.executeWithoutResult {
+                jdbc.execute("set local lock_timeout = '500ms'")
+                jdbc.update("insert into wallets (user_id, balance) values (?, 0)", userId.value)
+            }
+
+            release.countDown()
+            holder.get(10, TimeUnit.SECONDS)
+        } finally {
+            release.countDown()
+            pool.shutdown()
+        }
+    }
+
+    @Test
+    fun `findByIdForUpdate 는 트랜잭션 밖에서 부르면 실패한다`() {
+        val userId = users.save(newUser(username = uniqueUsername(), nickname = uniqueNickname())).id!!
+
+        assertFailsWith<IllegalTransactionStateException> { users.findByIdForUpdate(userId) }
+    }
+
+    @Test
+    fun `탈퇴한 사용자는 findByIdForUpdate 에서도 보이지 않는다`() {
+        val saved = users.save(newUser(username = uniqueUsername(), nickname = uniqueNickname()))
+        saved.withdraw(java.time.Instant.now())
+        users.save(saved)
+
+        assertNull(tx.execute { users.findByIdForUpdate(saved.id!!) })
     }
 }

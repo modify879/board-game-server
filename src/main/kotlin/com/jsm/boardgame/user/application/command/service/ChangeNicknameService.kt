@@ -18,7 +18,7 @@ class ChangeNicknameService(
 
     override fun changeNickname(command: ChangeNicknameCommand) {
         val nickname = Nickname.of(command.nickname)
-        val user = users.findById(UserId(command.userId))
+        val user = users.findByIdForUpdate(UserId(command.userId))
             ?: throw UserNotFoundException("닉네임을 바꾸려는 사용자를 찾을 수 없음: userId=${command.userId}")
         if (user.nickname == nickname) return
 

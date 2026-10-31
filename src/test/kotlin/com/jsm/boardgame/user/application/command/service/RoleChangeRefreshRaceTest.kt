@@ -26,6 +26,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.springframework.transaction.support.TransactionOperations
 
 private class RaceUsers : UserRepository {
     private val stored = mutableMapOf<Long, Pair<UserRole, String>>()
@@ -38,6 +39,7 @@ private class RaceUsers : UserRepository {
     override fun findById(id: UserId): User? = stored[id.value]?.let { (role, _) ->
         User.reconstitute(id, Username.reconstitute("user_${id.value}"), PasswordHash("h"), Nickname.reconstitute("닉네임${id.value}"), null, role)
     }
+    override fun findByIdForUpdate(id: UserId): User? = findById(id)
     override fun existsByUsername(username: Username): Boolean = false
     override fun existsByNickname(nickname: Nickname): Boolean = false
     override fun save(user: User): User {
@@ -88,7 +90,7 @@ class RoleChangeRefreshRaceTest {
     private val issuer = RaceIssuer()
     private val ttl = Duration.ofMinutes(30)
     private val refresh = RefreshTokenService(issuer, sessions, RaceRealtime(), users, ttl, Clock.systemUTC())
-    private val changeRole = ChangeUserRoleService(users, sessions, RaceRealtime(), ttl, Clock.systemUTC())
+    private val changeRole = ChangeUserRoleService(users, sessions, RaceRealtime(), ttl, TransactionOperations.withoutTransaction(), Clock.systemUTC())
 
     private fun login(role: UserRole): IssuedTokens {
         users.put(1L, role)
@@ -176,7 +178,7 @@ class RoleChangeRefreshRaceTest {
                 sessions.blacklistAccessToken(accessTokenId, expiresAt)
             }
         }
-        val svc = ChangeUserRoleService(users, flaky, RaceRealtime(), ttl, Clock.systemUTC())
+        val svc = ChangeUserRoleService(users, flaky, RaceRealtime(), ttl, TransactionOperations.withoutTransaction(), Clock.systemUTC())
 
         assertFailsWith<IllegalStateException> { svc.changeRole(roleChange(UserRole.USER)) }
         assertEquals(UserRole.USER, users.roleOf(1L))

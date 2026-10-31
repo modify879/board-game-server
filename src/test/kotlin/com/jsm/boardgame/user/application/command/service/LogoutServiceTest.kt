@@ -101,6 +101,7 @@ private class LogoutFakeUserRepository : UserRepository {
 
     override fun findByUsername(username: Username): User? = stored.values.find { it.username == username }
     override fun findById(id: UserId): User? = stored[id.value]
+    override fun findByIdForUpdate(id: UserId): User? = findById(id)
     override fun existsByUsername(username: Username): Boolean = stored.values.any { it.username == username }
     override fun existsByNickname(nickname: Nickname): Boolean = stored.values.any { it.nickname == nickname }
     override fun save(user: User): User = user

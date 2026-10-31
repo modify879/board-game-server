@@ -13,9 +13,13 @@ import jakarta.persistence.Entity
 import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
+import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
 import jakarta.persistence.UniqueConstraint
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 
 @Entity
@@ -64,6 +68,17 @@ interface UserJpaRepository :
     fun findByIdAndWithdrawnAtIsNull(id: Long): UserJpaEntity?
 
     fun findByUsernameAndWithdrawnAtIsNull(username: String): UserJpaEntity?
+
+    /**
+     * 명령 경로의 "읽고 고쳐 저장" 전용. 행을 트랜잭션 끝까지 잠근다 — Hibernate 의 PostgreSQL 방언은
+     * `PESSIMISTIC_WRITE` 를 `for no key update` 로 내보내 지갑·좌석의 FK 검사(`for key share`)를 막지 않는다
+     * (`UserRepositoryAdapterIntegrationTest`). 잠금 순서는 지갑 행 → 사용자 행이다(`.claude/rules/transactions.md`).
+     * 락을 기다린 뒤 Postgres 가 WHERE 를 새 행 버전으로 다시 평가하므로 그사이 탈퇴했으면 null 이다.
+     * `MANDATORY` 인 이유는 `WalletJpaRepository.findByUserIdForUpdate` 와 같다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun findForUpdateByIdAndWithdrawnAtIsNull(id: Long): UserJpaEntity?
 
     fun existsByUsername(username: String): Boolean
 
