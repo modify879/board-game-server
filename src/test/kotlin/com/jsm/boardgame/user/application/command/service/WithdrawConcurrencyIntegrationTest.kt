@@ -100,7 +100,7 @@ class WithdrawConcurrencyIntegrationTest {
         val userId = newUser()
         adjustWallet.adjust(AdjustWalletBalanceCommand(userId, buyIn, "테스트 지급", 1L, UUID.randomUUID().toString()))
 
-        // WithdrawService 의 트랜잭션을 그대로 흉내 낸다(지갑 락 → 탈퇴 저장). 잔액 확인 결과는 무시한다 —
+        // WithdrawService 의 트랜잭션을 그대로 흉내 낸다(지갑 락 → 사용자 행 락 → 탈퇴 저장). 잔액 확인 결과는 무시한다 —
         // 여기서 보려는 건 락을 기다린 쪽이 활성 확인에서 떨어지는 경로다.
         val pool = Executors.newFixedThreadPool(2)
         val locked = CountDownLatch(1)
@@ -109,7 +109,7 @@ class WithdrawConcurrencyIntegrationTest {
             val closure = pool.submit {
                 tx.executeWithoutResult {
                     walletHoldings.lockAndHasBalanceOrPendingRequests(UserId(userId))
-                    val user = users.findById(UserId(userId))!!
+                    val user = users.findByIdForUpdate(UserId(userId))!!
                     user.withdraw(Instant.now())
                     users.save(user)
                     locked.countDown()

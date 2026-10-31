@@ -18,6 +18,7 @@ import com.jsm.boardgame.user.domain.service.PasswordHasher
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import org.springframework.transaction.support.TransactionOperations
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -31,17 +32,17 @@ import java.time.Instant
  * 없는 아이디는 세지 않는다 — 잠글 대상(User 행)이 없어서다. 그 대가로 잠금 응답이 계정 존재를
  * 드러내는 것은 받아들인 트레이드오프다(응답 시간으로 아이디 존재가 새는 것과 같은 종류의 판단).
  *
- * 이 서비스는 트랜잭션을 열지 않는다 — Redis 호출 동안 DB 커넥션을 쥐지 않기 위해서다. DB 접근은
- * 호출마다 자기 트랜잭션을 갖는 `users.findByUsername`(읽기)과 `users.save`(saveAndFlush, 반환 시 커밋)뿐이다.
- * 바깥 트랜잭션이 없으므로 잠금 save 는 예외를 던지기 전에 이미 커밋돼 있다 — 잠근 직후 예외가
- * 나가도 잠금은 롤백되지 않는다.
+ * 이 서비스는 바깥 트랜잭션을 열지 않는다 — 비밀번호 해싱·Redis 동안 DB 커넥션을 쥐지 않기 위해서다. DB 접근은
+ * `users.findByUsername`(읽기)과, 잠글 때만 여는 짧은 트랜잭션(행 락 재조회 → lock → save)뿐이다.
+ * 처음 읽은 인스턴스를 저장하지 않는다 — 그사이 커밋된 비밀번호 변경 등을 덮어쓴다. 잠금 트랜잭션은
+ * 예외를 던지기 전에 이미 커밋돼 있다 — 잠근 직후 예외가 나가도 잠금은 롤백되지 않는다.
  *
  * 순서와 중간 실패 시 남는 상태(모두 fail-closed):
  * | 단계 | 실패하면 |
  * |---|---|
  * | 1. 사용자 조회·잠금 확인 (DB) | 로그인 안 됨 |
  * | 2. 비밀번호 실패 시 recordFailure (Redis) | 오류 응답, 로그인 안 됨. 카운트가 안 올라가 잠금이 늦어질 뿐이다 |
- * | 3. 임계 도달 시 lock + save (DB, 단독 커밋) | 오류 응답, 로그인 안 됨. 카운터는 이미 임계라 다음 실패가 다시 잠근다 |
+ * | 3. 임계 도달 시 트랜잭션: 행 락 재조회 → lock → save | 오류 응답, 로그인 안 됨. 카운터는 이미 임계라 다음 실패가 다시 잠근다 |
  * | 4. 성공: reset (Redis) | 오류 응답, 로그인 안 됨 |
  * | 5. 이전 토큰 블랙리스트 → 소켓 종료 (Redis) | 오류 응답, 새 세션 없음. 이전 토큰이 아직 살아 있을 수 있으나 새 권한이 생기지 않았다 |
  * | 6. 토큰 발급 → 세션 시작 (Redis) | 이전 토큰은 이미 무효이고 새 세션은 없다 — 재로그인하면 된다 |
@@ -58,6 +59,7 @@ class LoginService(
     @Value("\${app.jwt.access-token-ttl}") private val accessTokenTtl: Duration,
     @Value("\${app.auth.login-max-failures}") private val maxFailures: Int,
     @Value("\${app.auth.login-failure-window}") private val failureWindow: Duration,
+    private val transactions: TransactionOperations,
     private val clock: Clock,
 ) : LoginUseCase {
 
@@ -81,8 +83,13 @@ class LoginService(
         if (!passwordHasher.matches(rawPassword, user.passwordHash)) {
             val reachedThreshold = loginAttemptLimiter.recordFailure(username, maxFailures, failureWindow)
             if (reachedThreshold) {
-                user.lock(Instant.now(clock))
-                users.save(user)
+                val userId = checkNotNull(user.id) { "조회된 User 는 id 가 채워져 있어야 한다" }
+                transactions.executeWithoutResult {
+                    val current = users.findByIdForUpdate(userId)
+                        ?: throw LoginFailedException("잠그려는 사이 사용자가 사라졌습니다: username=${command.username}")
+                    current.lock(Instant.now(clock))
+                    users.save(current)
+                }
                 throw AccountLockedException("비밀번호 실패 누적으로 계정이 잠겼습니다: username=${username.value}")
             }
             throw LoginFailedException("비밀번호가 일치하지 않습니다: username=${command.username}")

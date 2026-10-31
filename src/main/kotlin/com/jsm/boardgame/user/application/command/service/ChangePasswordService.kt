@@ -9,6 +9,8 @@ import com.jsm.boardgame.user.application.port.AuthSessionStore
 import com.jsm.boardgame.user.application.port.AuthTokenIssuer
 import com.jsm.boardgame.user.application.port.LoginAttemptLimiter
 import com.jsm.boardgame.user.application.port.RealtimeConnections
+import com.jsm.boardgame.user.application.exception.AccountLockedException
+import com.jsm.boardgame.user.application.exception.CurrentPasswordMismatchException
 import com.jsm.boardgame.user.domain.exception.UserNotFoundException
 import com.jsm.boardgame.user.domain.model.RawPassword
 import com.jsm.boardgame.user.domain.model.UserId
@@ -17,6 +19,7 @@ import com.jsm.boardgame.user.domain.service.PasswordHasher
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import org.springframework.transaction.support.TransactionOperations
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -24,14 +27,16 @@ import java.time.Instant
 /**
  * 현재 비밀번호를 다시 확인([CurrentPasswordVerifier])한 뒤 바꾸고, 세션을 새 토큰으로 갈아끼운다.
  *
- * `LoginService` 처럼 트랜잭션을 열지 않는다 — DB 는 `findById`(읽기)와 `save`(saveAndFlush, 반환 시 커밋)뿐이고
- * 나머지는 Redis 라서 DB 커넥션을 쥔 채 Redis 를 기다리지 않게 한다.
+ * `LoginService` 처럼 바깥 트랜잭션을 열지 않는다 — 현재 비밀번호 확인과 새 비밀번호 해싱(느리다)은 트랜잭션 앞에서,
+ * Redis 는 커밋 뒤에 한다. 트랜잭션은 행 락 재조회 → 재확인 → 새 해시 save 만 묶는다. 재확인은 둘이다: 그사이 잠겼으면
+ * `ACCOUNT_LOCKED`, 그사이 비밀번호가 바뀌었으면(동시 변경) 확인한 비밀번호가 더는 현재 것이 아니므로 `CURRENT_PASSWORD_MISMATCH` —
+ * 순서대로 왔을 때와 같은 결과다. 사라졌으면(탈퇴) `USER_NOT_FOUND`.
  *
  * 순서와 중간 실패 시 남는 상태(모두 fail-closed):
  * | 단계 | 실패하면 |
  * |---|---|
- * | 1. 조회·잠금 확인·현재 비밀번호 확인 | 아무것도 안 바뀐다 |
- * | 2. 새 해시 save (DB, 단독 커밋) | 이후 단계는 실행되지 않는다. 비밀번호는 이미 바뀌었고 옛 세션은 그대로다 — 같은 요청을 다시 보내면 옛 비밀번호가 틀려 거부되므로 새 비밀번호로 재로그인한다 |
+ * | 1. 조회·잠금 확인·현재 비밀번호 확인·새 비밀번호 해싱 | 아무것도 안 바뀐다 |
+ * | 2. 트랜잭션: 행 락 재조회·재확인 → 새 해시 save | 이후 단계는 실행되지 않는다. 비밀번호는 이미 바뀌었고 옛 세션은 그대로다 — 같은 요청을 다시 보내면 옛 비밀번호가 틀려 거부되므로 새 비밀번호로 재로그인한다 |
  * | 3. reset → 이전 토큰 블랙리스트 → closeAfterGrace | 오류 응답. 비밀번호는 바뀌었고 옛 토큰이 살아 있을 수 있다 — 새 세션은 만들어지지 않았다 |
  * | 4. 발급 → 세션 시작 | 옛 토큰은 이미 무효이고 새 세션은 없다 — 새 비밀번호로 재로그인한다 |
  */
@@ -45,6 +50,7 @@ class ChangePasswordService(
     private val loginAttemptLimiter: LoginAttemptLimiter,
     private val verifier: CurrentPasswordVerifier,
     @Value("\${app.jwt.access-token-ttl}") private val accessTokenTtl: Duration,
+    private val transactions: TransactionOperations,
     private val clock: Clock,
 ) : ChangePasswordUseCase {
 
@@ -54,9 +60,20 @@ class ChangePasswordService(
         val user = users.findById(userId)
             ?: throw UserNotFoundException("비밀번호를 바꾸려는 사용자를 찾을 수 없음: userId=${command.userId}")
         verifier.verify(user, command.currentPassword)
+        val newHash = passwordHasher.hash(newPassword) // 행 락을 쥐기 전에 — 해싱은 느리다
 
-        user.changePassword(passwordHasher.hash(newPassword))
-        users.save(user)
+        transactions.executeWithoutResult {
+            val current = users.findByIdForUpdate(userId)
+                ?: throw UserNotFoundException("비밀번호를 바꾸려는 사용자를 찾을 수 없음: userId=${command.userId}")
+            if (current.isLocked) {
+                throw AccountLockedException("계정이 잠겨 있습니다: userId=${command.userId}")
+            }
+            if (current.passwordHash != user.passwordHash) {
+                throw CurrentPasswordMismatchException("확인한 뒤 비밀번호가 바뀌었습니다: userId=${command.userId}")
+            }
+            current.changePassword(newHash)
+            users.save(current)
+        }
         loginAttemptLimiter.reset(user.username)
 
         val previous = sessions.currentAccessTokenId(userId)

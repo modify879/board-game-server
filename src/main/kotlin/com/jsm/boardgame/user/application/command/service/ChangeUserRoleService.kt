@@ -11,20 +11,21 @@ import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import org.springframework.transaction.support.TransactionOperations
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
 /**
- * 트랜잭션을 열지 않는다 — Redis 호출 동안 DB 커넥션을 쥐지 않기 위해서다. DB 접근은 `findById`(읽기)와
- * `save`(saveAndFlush, 반환 시 커밋) 뿐이다.
+ * 바깥 트랜잭션을 열지 않는다 — Redis 호출 동안 DB 커넥션을 쥐지 않기 위해서다. DB 접근은 짧은 트랜잭션 하나
+ * (행 락 조회 → changeRole → save)뿐이다. 없는 사용자는 그 안에서 `USER_NOT_FOUND` 로 떨어진다 — 그 전의 폐기는 세션이 없어 아무것도 안 한다.
  *
- * 순서: 조회·역할 검증(메모리에서 changeRole) → **블랙리스트·소켓 종료(Redis) → save(DB)**.
+ * 순서: 역할 검증 → **블랙리스트·소켓 종료(Redis) → 트랜잭션(DB)**.
  * 트랜잭션이 없어 Redis 실패 때 save 를 롤백할 수 없으므로, Redis 를 먼저 해서 fail-closed 를 얻는다:
  * | 실패 지점 | 남는 상태 |
  * |---|---|
  * | 블랙리스트/소켓 종료 (Redis) | 역할 그대로, 토큰은 일부 무효 — 사용자는 refresh(옛 역할 그대로 유효)로 이어간다 |
- * | save (DB) | 역할 그대로, 토큰은 무효 — 다시 갱신하면 된다. 권한이 남는 상태는 없다 |
+ * | 트랜잭션 (DB) | 역할 그대로, 토큰은 무효 — 다시 갱신하면 된다. 권한이 남는 상태는 없다 |
  * 반대 순서(save 먼저)로 Redis 가 실패하면 새 역할은 저장됐는데 옛 권한 토큰이 살아남아 위험하다.
  *
  * 폐기 → save(커밋) → **다시 폐기**. 리프레시와의 경합에서 옛 역할 토큰이 살아남지 않는 이유 —
@@ -40,23 +41,25 @@ class ChangeUserRoleService(
     private val sessions: AuthSessionStore,
     private val realtimeConnections: RealtimeConnections,
     @Value("\${app.jwt.access-token-ttl}") private val accessTokenTtl: Duration,
+    private val transactions: TransactionOperations,
     private val clock: Clock,
 ) : ChangeUserRoleUseCase {
 
     override fun changeRole(command: ChangeUserRoleCommand) {
         val role = UserRole.of(command.role)
         val targetUserId = UserId(command.targetUserId)
-        val user = users.findById(targetUserId)
-            ?: throw UserNotFoundException("역할을 변경하려는 사용자를 찾을 수 없음: userId=${command.targetUserId}")
-        user.changeRole(role) // 메모리에서만 — 도메인 검증이 Redis 를 건드리기 전에 끝나게 한다.
-
         // 블랙리스트를 save() 앞에 둔다(위 KDoc). save 가 실패해도 토큰만 끊긴 안전한 쪽이다.
         //
         // 첫 폐기만으로는 경합이 남는다: 폐기 이후 save 커밋 이전에 들어온 refresh 는 옛 역할을 읽어 옛 역할 토큰을
         // 발급받고, 그 jti 는 방금 폐기한 jti 가 아니라 살아남는다. 그래서 save 뒤에 한 번 더 폐기한다(아래).
         revokeCurrentSession(targetUserId, role)
 
-        users.save(user)
+        transactions.executeWithoutResult {
+            val user = users.findByIdForUpdate(targetUserId)
+                ?: throw UserNotFoundException("역할을 변경하려는 사용자를 찾을 수 없음: userId=${command.targetUserId}")
+            user.changeRole(role)
+            users.save(user)
+        }
 
         // 두 번째 폐기 — 위 경합을 닫는 절반이다(나머지 절반은 RefreshTokenService 의 회전 뒤 역할 재확인).
         // 경합 창에서 옛 역할로 발급된 토큰은 rotate 로 세션에 저장되므로 지금의 "현재 토큰"이다.

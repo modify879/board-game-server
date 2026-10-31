@@ -19,6 +19,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.springframework.transaction.support.TransactionOperations
 
 private class UnlockFakeUserRepository : UserRepository {
     private val stored = mutableMapOf<Long, User>()
@@ -37,6 +38,7 @@ private class UnlockFakeUserRepository : UserRepository {
 
     override fun findByUsername(username: Username): User? = stored.values.find { it.username == username }
     override fun findById(id: UserId): User? = stored[id.value]
+    override fun findByIdForUpdate(id: UserId): User? = findById(id)
     override fun existsByUsername(username: Username): Boolean = stored.values.any { it.username == username }
     override fun existsByNickname(nickname: Nickname): Boolean = stored.values.any { it.nickname == nickname }
     override fun save(user: User): User {
@@ -55,7 +57,7 @@ class UnlockUserServiceTest {
 
     private val users = UnlockFakeUserRepository()
     private val limiter = UnlockFakeLoginAttemptLimiter()
-    private val service = UnlockUserService(users, limiter)
+    private val service = UnlockUserService(users, limiter, TransactionOperations.withoutTransaction())
 
     @Test
     fun `잠긴 사용자를 해제하면 잠금이 풀리고 저장된다`() {
