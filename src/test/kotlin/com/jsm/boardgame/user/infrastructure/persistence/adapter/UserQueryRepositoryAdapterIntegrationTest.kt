@@ -10,6 +10,7 @@ import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Autowired
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -40,6 +41,21 @@ class UserQueryRepositoryAdapterIntegrationTest {
         )
 
         assertTrue(userQuery.existsById(saved.id!!.value))
+    }
+
+    @Test
+    fun `findIdByUsername 은 정확히 일치하는 아이디만 찾고 탈퇴한 사용자는 찾지 않는다`() {
+        val username = uniqueUsername()
+        val saved = users.save(
+            User.register(Username.of(username), PasswordHash("hashed-password-value"), Nickname.of(uniqueNickname())),
+        )
+
+        assertEquals(saved.id!!.value, userQuery.findIdByUsername(username))
+        assertNull(userQuery.findIdByUsername(username.dropLast(1)))
+
+        saved.withdraw(java.time.Instant.now())
+        users.save(saved)
+        assertNull(userQuery.findIdByUsername(username))
     }
 
     @Test

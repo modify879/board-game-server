@@ -16,3 +16,4 @@ class JoinQueueFullException(logMessage: String) : BusinessException(HoldemError
 class NotConnectedException(logMessage: String) : BusinessException(HoldemErrorCode.NOT_CONNECTED, logMessage)
 class InsufficientBalanceException(logMessage: String) : BusinessException(HoldemErrorCode.INSUFFICIENT_BALANCE, logMessage)
 class ShowNotAllowedException(logMessage: String) : BusinessException(HoldemErrorCode.SHOW_NOT_ALLOWED, logMessage)
+class QaUserNotFoundException(logMessage: String) : BusinessException(HoldemErrorCode.USER_NOT_FOUND, logMessage)

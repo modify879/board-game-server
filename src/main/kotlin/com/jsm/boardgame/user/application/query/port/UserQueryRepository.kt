@@ -7,6 +7,8 @@ import org.springframework.data.domain.Pageable
 
 interface UserQueryRepository {
     fun findProfileById(id: Long): UserProfile?
+    /** 정확히 일치하는 아이디(이미 정규화된 값). 탈퇴한 사용자는 null. */
+    fun findIdByUsername(username: String): Long?
     fun existsById(id: Long): Boolean
 
     fun findSummaryById(id: Long): UserSummary?

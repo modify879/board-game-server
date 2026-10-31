@@ -28,6 +28,13 @@ class UserQueryRepositoryAdapter(
                 .where(and(path(UserJpaEntity::id).eq(id), path(UserJpaEntity::withdrawnAt).isNull()))
         }.firstOrNull()
 
+    override fun findIdByUsername(username: String): Long? =
+        jpa.findAll {
+            select(path(UserJpaEntity::id))
+                .from(entity(UserJpaEntity::class))
+                .where(and(path(UserJpaEntity::username).eq(username), path(UserJpaEntity::withdrawnAt).isNull()))
+        }.firstOrNull()
+
     override fun existsById(id: Long): Boolean =
         jpa.findAll {
             select(path(UserJpaEntity::id))

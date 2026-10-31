@@ -17,6 +17,7 @@ import kotlin.test.assertTrue
 private class UserQueryFakeRepository(private val profiles: Map<Long, UserProfile>) : UserQueryRepository {
     override fun findProfileById(id: Long): UserProfile? = profiles[id]
     override fun existsById(id: Long): Boolean = id in profiles
+    override fun findIdByUsername(username: String): Long? = profiles.values.firstOrNull { it.username == username }?.id
 
     override fun findSummaryById(id: Long): UserSummary? = null
 
@@ -50,6 +51,12 @@ class UserQueryServiceTest {
         val e = assertFailsWith<UserNotFoundException> { service.findSummary(999L) }
 
         assertEquals(UserErrorCode.USER_NOT_FOUND, e.errorCode)
+    }
+
+    @Test
+    fun `findIdByUsername 은 trim 과 소문자 정규화 후 찾는다`() {
+        assertEquals(1L, service.findIdByUsername("  Alice "))
+        assertEquals(null, service.findIdByUsername("bob"))
     }
 
     @Test

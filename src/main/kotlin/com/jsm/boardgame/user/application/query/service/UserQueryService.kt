@@ -26,6 +26,9 @@ class UserQueryService(
      */
     fun exists(id: Long): Boolean = userQuery.existsById(id)
 
+    /** 다른 컨텍스트용 정확 조회. [Username] 과 같이 trim·소문자로 정규화한다. 없거나 탈퇴했으면 null. */
+    fun findIdByUsername(username: String): Long? = userQuery.findIdByUsername(username.trim().lowercase())
+
     fun search(query: String?, pageable: Pageable): Page<UserSummary> =
         userQuery.search(query?.trim()?.takeIf { it.isNotEmpty() }, pageable)
 }
