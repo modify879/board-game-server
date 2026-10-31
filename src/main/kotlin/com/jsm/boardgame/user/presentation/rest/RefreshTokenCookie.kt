@@ -9,7 +9,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
-private const val REFRESH_TOKEN_COOKIE_NAME = "refresh_token"
+const val REFRESH_TOKEN_COOKIE_NAME = "refresh_token"
 private const val REFRESH_TOKEN_COOKIE_PATH = "/api/auth"
 
 /** 토큰을 본문으로, 리프레시 토큰을 쿠키로 내보내는 응답. 로그인·갱신·비밀번호 변경이 같은 모양이다. */

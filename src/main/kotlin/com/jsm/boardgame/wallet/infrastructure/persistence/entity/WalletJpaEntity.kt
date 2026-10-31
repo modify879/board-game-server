@@ -18,6 +18,7 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 
 @Entity
@@ -51,13 +52,13 @@ interface WalletJpaRepository :
      * 어기면 데드락이다(CLAUDE.md 참고). 조회 경로는 이 메서드를 쓰지 않는다
      * (`WalletQueryRepositoryAdapter` 가 JDSL 로 따로 읽는다).
      *
-     * `@Transactional` 을 명시하는 이유: Spring Data 리포지토리는 새로 선언한 쿼리 메서드에
-     * 기본 `readOnly = true` 트랜잭션을 씌운다. Postgres 는 읽기 전용 트랜잭션에서
-     * `SELECT ... FOR UPDATE` 를 거부하므로, 이 메서드만 명시적으로 쓰기 가능 트랜잭션을 연다.
-     * 이미 트랜잭션 안에서 부르면(모든 명령 서비스가 그렇다) 그 트랜잭션에 그대로 합류한다.
+     * `@Transactional(MANDATORY)` 인 이유: Spring Data 는 새로 선언한 쿼리 메서드에 기본 `readOnly = true`
+     * 트랜잭션을 씌우는데 Postgres 는 읽기 전용 트랜잭션에서 `SELECT ... FOR UPDATE` 를 거부한다.
+     * 이 메서드는 호출자의 쓰기 트랜잭션에 합류해야만 의미가 있으므로(모든 명령 서비스가 그렇다),
+     * 트랜잭션 밖에서 부르면 조용히 짧은 트랜잭션을 열지 않고 `IllegalTransactionStateException` 으로 실패한다.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Transactional
+    @Transactional(propagation = Propagation.MANDATORY)
     @Query("select w from WalletJpaEntity w where w.userId = :userId")
     fun findByUserIdForUpdate(@Param("userId") userId: Long): WalletJpaEntity?
 }

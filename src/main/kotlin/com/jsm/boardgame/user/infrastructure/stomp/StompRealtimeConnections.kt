@@ -1,4 +1,4 @@
-package com.jsm.boardgame.user.infrastructure.security.adapter
+package com.jsm.boardgame.user.infrastructure.stomp
 
 import com.jsm.boardgame.common.web.StompSessionRegistry
 import com.jsm.boardgame.user.domain.model.UserId

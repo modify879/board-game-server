@@ -14,10 +14,14 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.springframework.transaction.support.TransactionTemplate
 
 /** 탈퇴 사전 조건이 쓰는 `existsPendingByUserId` 가 PENDING 만 센다. */
 @IntegrationTest
 class PendingRequestQueryAdapterIntegrationTest {
+
+    @Autowired
+    private lateinit var tx: TransactionTemplate
 
     @Autowired private lateinit var depositRequests: DepositRequestRepository
     @Autowired private lateinit var withdrawalRequests: WithdrawalRequestRepository
@@ -34,7 +38,7 @@ class PendingRequestQueryAdapterIntegrationTest {
         val saved = depositRequests.save(DepositRequest.request(UserId(userId), 10_000, 1_000, "k", now))
         assertTrue(depositQuery.existsPendingByUserId(userId))
 
-        val reloaded = requireNotNull(depositRequests.findById(saved.id!!))
+        val reloaded = requireNotNull(tx.execute { depositRequests.findById(saved.id!!) })
         reloaded.reject(UserId(7), "사유", now)
         depositRequests.save(reloaded)
         assertFalse(depositQuery.existsPendingByUserId(userId))
@@ -49,7 +53,7 @@ class PendingRequestQueryAdapterIntegrationTest {
         val saved = withdrawalRequests.save(WithdrawalRequest.request(UserId(userId), 10_000, 1_000, bank, "k", now))
         assertTrue(withdrawalQuery.existsPendingByUserId(userId))
 
-        val reloaded = requireNotNull(withdrawalRequests.findById(saved.id!!))
+        val reloaded = requireNotNull(tx.execute { withdrawalRequests.findById(saved.id!!) })
         reloaded.reject(UserId(7), "사유", now)
         withdrawalRequests.save(reloaded)
         assertFalse(withdrawalQuery.existsPendingByUserId(userId))

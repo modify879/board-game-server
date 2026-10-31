@@ -41,6 +41,7 @@ import org.springframework.web.socket.messaging.WebSocketStompClient
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * qa 프로필에서 덱 고정 API 로 지정한 홀카드·보드가 실제 핸드에 그대로 딜되는지 본다.
@@ -55,6 +56,9 @@ class QaDeckIntegrationTest {
 
     @Autowired private lateinit var mockMvc: MockMvc
     @Autowired private lateinit var userRepository: UserRepository
+    @Autowired
+    private lateinit var tx: TransactionTemplate
+
     @Autowired private lateinit var walletRepository: WalletRepository
     @Autowired private lateinit var ledgerEntryRepository: LedgerEntryRepository
     @Autowired private lateinit var holdemTableRepository: HoldemTableRepository
@@ -90,7 +94,7 @@ class QaDeckIntegrationTest {
         mockMvc.perform(post(url).header("Authorization", "Bearer $token").contentType(MediaType.APPLICATION_JSON).content(body))
 
     private fun fundWallet(userId: Long, amount: Long) {
-        val wallet = walletRepository.findOrOpen(WalletUserId(userId))
+        val wallet = tx.execute { walletRepository.findOrOpen(WalletUserId(userId)) }!!
         val entry = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT,
             amount = Money.of(amount),

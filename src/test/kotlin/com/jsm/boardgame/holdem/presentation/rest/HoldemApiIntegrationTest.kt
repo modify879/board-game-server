@@ -41,6 +41,7 @@ import org.springframework.web.socket.messaging.WebSocketStompClient
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * `holdem` 방/좌석 REST API 통합 테스트.
@@ -62,6 +63,9 @@ class HoldemApiIntegrationTest {
 
     @Autowired
     private lateinit var mockMvc: MockMvc
+
+    @Autowired
+    private lateinit var tx: TransactionTemplate
 
     @Autowired
     private lateinit var walletRepository: WalletRepository
@@ -139,7 +143,7 @@ class HoldemApiIntegrationTest {
         mockMvc.perform(delete(url).header("Authorization", "Bearer $accessToken"))
 
     private fun fundWallet(userId: Long, amount: Long) {
-        val wallet = walletRepository.findOrOpen(WalletUserId(userId))
+        val wallet = tx.execute { walletRepository.findOrOpen(WalletUserId(userId)) }!!
         val entry = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT,
             amount = Money.of(amount),
@@ -152,7 +156,7 @@ class HoldemApiIntegrationTest {
 
     /** 지갑 잔액을 전부 빼 대기 중에 잔액이 사라진 경우를 만든다. */
     private fun drainWallet(userId: Long) {
-        val wallet = walletRepository.findOrOpen(WalletUserId(userId))
+        val wallet = tx.execute { walletRepository.findOrOpen(WalletUserId(userId)) }!!
         val entry = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_DEBIT,
             amount = wallet.balance,
@@ -163,7 +167,7 @@ class HoldemApiIntegrationTest {
         ledgerEntryRepository.save(entry)
     }
 
-    private fun balanceOf(userId: Long): Long = walletRepository.findByUserId(WalletUserId(userId))?.balance?.amount ?: 0L
+    private fun balanceOf(userId: Long): Long = tx.execute { walletRepository.findByUserId(WalletUserId(userId)) }?.balance?.amount ?: 0L
 
     // REST 생성은 만든 사람을 대기열에 넣는다(CreateTableService) — 이 헬퍼는 대기열이 비어 있는 테이블이 필요해
     // 저장소로 직접 만든다. accessToken 은 호출부 시그니처를 유지하려고 남겼다.

@@ -9,12 +9,16 @@ import org.springframework.beans.factory.annotation.Autowired
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * `DepositRequestRepositoryAdapter` 가 저장한 필드를 그대로 왕복시키는지 검증한다.
  */
 @IntegrationTest
 class DepositRequestRepositoryAdapterIntegrationTest {
+
+    @Autowired
+    private lateinit var tx: TransactionTemplate
 
     @Autowired
     private lateinit var depositRequests: DepositRequestRepository
@@ -26,11 +30,11 @@ class DepositRequestRepositoryAdapterIntegrationTest {
         val request = DepositRequest.request(userId = UserId(System.nanoTime()), amount = 10_000, minAmount = 1_000, idempotencyKey = "key", at = now)
         val saved = depositRequests.save(request)
 
-        val reloaded = requireNotNull(depositRequests.findById(saved.id!!))
+        val reloaded = requireNotNull(tx.execute { depositRequests.findById(saved.id!!) })
         reloaded.reject(adminUserId = UserId(7), reason = "증빙 불충분", at = now)
         depositRequests.save(reloaded)
 
-        val final = requireNotNull(depositRequests.findById(saved.id))
+        val final = requireNotNull(tx.execute { depositRequests.findById(saved.id!!) })
         assertEquals(DepositRequestStatus.REJECTED, final.status)
         assertEquals(10_000L, final.requestedAmount.amount)
         assertEquals(UserId(7), final.processedBy)

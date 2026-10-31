@@ -9,7 +9,6 @@ import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
 import com.jsm.boardgame.wallet.domain.model.LedgerReference
 import com.jsm.boardgame.wallet.domain.model.LedgerReferenceType
 import com.jsm.boardgame.wallet.domain.model.WithdrawalRequest
-import com.jsm.boardgame.wallet.domain.model.WithdrawalRequestId
 import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.LedgerEntryRepository
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
@@ -36,7 +35,7 @@ class RequestWithdrawalService(
     private val properties: WalletProperties,
 ) : RequestWithdrawalUseCase {
 
-    override fun request(command: RequestWithdrawalCommand): WithdrawalRequestId {
+    override fun request(command: RequestWithdrawalCommand): Long {
         val now = Instant.now(clock)
         val bankAccount = BankAccount.of(command.bankName, command.accountNumber, command.accountHolder)
         val key = requireValidIdempotencyKey(command.idempotencyKey)
@@ -46,12 +45,9 @@ class RequestWithdrawalService(
         // 재전송이면 지갑을 건드리기 전에 원래 요청을 돌려준다 — 두 번 차감하지 않는다.
         // 동시 요청은 uk_withdrawal_requests_user_key 가 아래 save 에서 한쪽을 막는다(요청 → 지갑 순서 유지).
         withdrawalRequests.findByUserAndIdempotencyKey(userId, key)?.let { existing ->
-            val same = existing.amount == request.amount &&
-                existing.bankAccount.bankName == bankAccount.bankName &&
-                existing.bankAccount.accountNumber == bankAccount.accountNumber &&
-                existing.bankAccount.accountHolder == bankAccount.accountHolder
+            val same = existing.amount == request.amount && existing.bankAccount == bankAccount
             if (!same) throw IdempotencyKeyReusedException("같은 키로 다른 환전 요청: requestId=${existing.id}")
-            return checkNotNull(existing.id)
+            return checkNotNull(existing.id).value
         }
 
         // 원장 엔트리가 요청을 가리켜야 하므로 요청을 먼저 저장해 id 를 받는다.
@@ -69,6 +65,6 @@ class RequestWithdrawalService(
         wallets.save(wallet)
         ledger.save(entry)
 
-        return saved.id
+        return saved.id.value
     }
 }

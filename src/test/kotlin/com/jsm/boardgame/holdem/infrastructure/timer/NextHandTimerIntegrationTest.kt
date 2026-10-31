@@ -41,6 +41,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 다음 핸드 자동 시작 타이머 재현 테스트. 실제 스프링 배선(TableExecutor/NextHandTimer/TurnTimer)을
@@ -59,6 +60,9 @@ class NextHandTimerIntegrationTest {
 
     @Autowired
     private lateinit var mockMvc: MockMvc
+
+    @Autowired
+    private lateinit var tx: TransactionTemplate
 
     @Autowired
     private lateinit var walletRepository: WalletRepository
@@ -134,7 +138,7 @@ class NextHandTimerIntegrationTest {
         mockMvc.perform(delete(url).header("Authorization", "Bearer $accessToken"))
 
     private fun fundWallet(userId: Long, amount: Long) {
-        val wallet = walletRepository.findOrOpen(WalletUserId(userId))
+        val wallet = tx.execute { walletRepository.findOrOpen(WalletUserId(userId)) }!!
         val entry = wallet.record(
             type = LedgerEntryType.ADMIN_ADJUSTMENT_CREDIT,
             amount = Money.of(amount),
@@ -309,7 +313,7 @@ class NextHandTimerIntegrationTest {
         // 4) 기립했던 사용자가 다시 앉는다(HandStarter.rescheduleOnEntry 가 카운트다운을 다시
         //    걸어야 한다).
         // 떠난 직후라 재착석 의무가 가져간 금액(지갑에 돌아온 전액)이다 — 지갑 전부로 앉는다.
-        val walletBalance = walletRepository.findByUserId(WalletUserId(folderUserId.value))!!.balance.amount
+        val walletBalance = tx.execute { walletRepository.findByUserId(WalletUserId(folderUserId.value)) }!!.balance.amount
         sitDown(folder.accessToken, tableId, buyIn = walletBalance).andExpect(status().isAccepted)
         awaitSeated(folderUserId.value)
 

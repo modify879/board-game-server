@@ -34,7 +34,3 @@ class InvalidUserRoleException(
 class UnsupportedProfileImageTypeException(
     logMessage: String,
 ) : BusinessException(UserErrorCode.PROFILE_IMAGE_UNSUPPORTED_TYPE, logMessage)
-
-class ProfileImageTooLargeException(
-    logMessage: String,
-) : BusinessException(UserErrorCode.PROFILE_IMAGE_TOO_LARGE, logMessage)

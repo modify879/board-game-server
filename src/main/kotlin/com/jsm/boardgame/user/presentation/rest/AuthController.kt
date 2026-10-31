@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.RestController
 import java.time.Clock
 import java.time.Duration
 
-private const val REFRESH_TOKEN_COOKIE_NAME = "refresh_token"
 
 @RestController
 @RequestMapping("/api/auth")

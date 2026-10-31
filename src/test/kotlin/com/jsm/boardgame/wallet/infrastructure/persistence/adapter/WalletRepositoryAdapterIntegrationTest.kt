@@ -7,7 +7,7 @@ import com.jsm.boardgame.user.domain.model.PasswordHash
 import com.jsm.boardgame.user.domain.model.User
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
-import com.jsm.boardgame.wallet.domain.exception.ConcurrentWalletUpdateException
+import com.jsm.boardgame.wallet.application.exception.ConcurrentWalletUpdateException
 import com.jsm.boardgame.wallet.domain.exception.InsufficientBalanceException
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
 import com.jsm.boardgame.wallet.domain.exception.WalletOwnerNotFoundException
@@ -17,6 +17,8 @@ import com.jsm.boardgame.wallet.domain.model.WalletId
 import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.transaction.IllegalTransactionStateException
+import org.springframework.transaction.support.TransactionTemplate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -37,6 +39,10 @@ class WalletRepositoryAdapterIntegrationTest {
 
     @Autowired
     private lateinit var users: UserRepository
+
+    // 잠그는 조회(findByUserId)는 트랜잭션 안에서만 부를 수 있다(MANDATORY) — 서비스가 하는 일을 흉내낸다.
+    @Autowired
+    private lateinit var tx: TransactionTemplate
 
     // fk_wallets_user 가 실제로 걸려 있으므로 존재하지 않는 userId 로는 저장할 수 없다 —
     // 가짜 nanoTime 대신 실제 사용자 행을 만들어 그 id 를 쓴다.
@@ -98,7 +104,7 @@ class WalletRepositoryAdapterIntegrationTest {
             Wallet.reconstitute(id = opened.id!!, userId = UserId(userId), balance = Money.of(500)),
         )
 
-        val found = wallets.findByUserId(UserId(userId))
+        val found = tx.execute { wallets.findByUserId(UserId(userId)) }
 
         assertEquals(Money.of(500), found?.balance)
     }
@@ -120,8 +126,15 @@ class WalletRepositoryAdapterIntegrationTest {
         val nonExistentUserId = 987_654_322L
 
         val e = assertFailsWith<WalletOwnerNotFoundException> {
-            wallets.findOrOpen(UserId(nonExistentUserId))
+            tx.execute { wallets.findOrOpen(UserId(nonExistentUserId)) }
         }
         assertEquals(WalletErrorCode.WALLET_OWNER_NOT_FOUND, e.errorCode)
+    }
+
+    @Test
+    fun `잠그는 조회를 트랜잭션 밖에서 부르면 조용히 트랜잭션을 열지 않고 실패한다`() {
+        assertFailsWith<IllegalTransactionStateException> {
+            wallets.findByUserId(UserId(uniqueUserId()))
+        }
     }
 }
