@@ -1,7 +1,7 @@
 package com.jsm.boardgame.wallet.application.command.service
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.user.domain.model.Nickname
 import com.jsm.boardgame.user.domain.model.PasswordHash
 import com.jsm.boardgame.user.domain.model.User
@@ -19,8 +19,6 @@ import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.UserId
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -34,8 +32,7 @@ import kotlin.test.assertIs
  * 막는지 검증한다. 인메모리 페이크는 행 잠금을 흉내낼 수 없으므로, 이 시나리오는
  * 실제 Postgres 를 켠 통합 테스트로만 증명할 수 있다.
  */
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class WalletPessimisticLockIntegrationTest {
 
     @Autowired

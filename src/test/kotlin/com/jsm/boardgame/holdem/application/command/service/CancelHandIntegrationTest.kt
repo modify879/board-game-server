@@ -1,9 +1,9 @@
 package com.jsm.boardgame.holdem.application.command.service
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.UniqueNames
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandCommand
 import com.jsm.boardgame.holdem.application.command.usecase.CancelHandUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
@@ -28,8 +28,6 @@ import com.jsm.boardgame.wallet.domain.model.Money
 import com.jsm.boardgame.wallet.domain.model.UserId as WalletUserId
 import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -39,8 +37,7 @@ import kotlin.test.assertNull
  * 만료 폴드로 핸드 도중 기립한 좌석이 있는 핸드를 취소해도 롤백되지 않고, 그 사용자가 시작 스택 전부를
  * 지갑으로 돌려받는지 실제 DB 로 검증한다(이탈 기록이 스냅샷 JSON 을 왕복해야 성립한다).
  */
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class CancelHandIntegrationTest {
 
     @Autowired private lateinit var tables: HoldemTableRepository

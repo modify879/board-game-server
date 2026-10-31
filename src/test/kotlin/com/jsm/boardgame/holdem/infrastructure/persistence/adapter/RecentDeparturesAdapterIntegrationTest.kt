@@ -1,12 +1,10 @@
 package com.jsm.boardgame.holdem.infrastructure.persistence.adapter
 
-import com.jsm.boardgame.TestcontainersConfiguration
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.infrastructure.persistence.entity.RecentDepartureJpaRepository
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -23,8 +21,7 @@ private class RecentDeparturesMutableClock(var now: Instant) : Clock() {
     override fun instant(): Instant = now
 }
 
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class RecentDeparturesAdapterIntegrationTest {
 
     @Autowired

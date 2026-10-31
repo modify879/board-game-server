@@ -1,9 +1,9 @@
 package com.jsm.boardgame.holdem.infrastructure.timer
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jayway.jsonpath.JsonPath
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnCommand
 import com.jsm.boardgame.holdem.application.command.usecase.ExpireTurnUseCase
 import com.jsm.boardgame.holdem.application.port.HandStore
@@ -23,10 +23,7 @@ import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.server.LocalServerPort
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
-import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.messaging.simp.stomp.StompHeaders
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter
@@ -56,9 +53,7 @@ import java.util.concurrent.atomic.AtomicLong
  * 이 상대 시간(단조 시계)만 쓰고 발화 후 벽시계로 다시 비교하지 않는다 — 이 클래스는 그 배선이
  * 실제로 동작하는지를 검증한다.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureMockMvc
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 @TestPropertySource(properties = ["app.holdem.next-hand-delay=1500ms"])
 class NextHandTimerIntegrationTest {
 

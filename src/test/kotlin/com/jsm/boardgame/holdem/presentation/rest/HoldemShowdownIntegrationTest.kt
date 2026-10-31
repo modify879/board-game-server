@@ -1,9 +1,9 @@
 package com.jsm.boardgame.holdem.presentation.rest
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jayway.jsonpath.JsonPath
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutCommand
 import com.jsm.boardgame.holdem.application.command.usecase.AdvanceRunoutUseCase
 import com.jsm.boardgame.holdem.application.command.usecase.StartScheduledHandCommand
@@ -30,12 +30,9 @@ import com.jsm.boardgame.wallet.domain.repository.WalletRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.test.web.server.LocalServerPort
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.messaging.simp.stomp.StompFrameHandler
@@ -75,9 +72,7 @@ import java.util.concurrent.TimeUnit
  * build.gradle.kts 가 테스트 전역으로 1h 를 준다 — 실제 10초 타이머가 우연히 발화하지 않는다.
  * 다른 holdem 통합 테스트와 같은 이유(HoldemApiIntegrationTest 참고).
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureMockMvc
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class HoldemShowdownIntegrationTest {
 
     @TestConfiguration(proxyBeanMethods = false)

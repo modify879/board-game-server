@@ -1,10 +1,10 @@
 package com.jsm.boardgame.holdem.infrastructure.persistence.adapter
 
+import com.jsm.boardgame.IntegrationTest
 import com.jsm.boardgame.holdem.domain.model.LeaveReservation
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
 import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.UniqueNames
-import com.jsm.boardgame.TestcontainersConfiguration
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
 import com.jsm.boardgame.holdem.domain.model.Chips
@@ -20,8 +20,6 @@ import com.jsm.boardgame.user.domain.model.User
 import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -31,8 +29,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
+@IntegrationTest
 class HoldemTableRepositoryAdapterIntegrationTest {
 
     private val buyIn: Chips = Chips.of(10_000)
