@@ -52,8 +52,9 @@ Robert's Rules: "You must wait until the button passes." 어기면 SB 와 진입
 남의 패는 `shown` 일 때만 보이게 하는 마스킹은 `HandHistoryQueryService` 가 한다.
 
 ### 재착석 의무 저장
-`RecentDepartures` 는 `holdem_recent_departure` 에 사용자당 1행으로 저장한다 — 기립과 같은 트랜잭션에 커밋되고, 만료된 행은 지우지 않고 읽을 때 무시한다.
-기립(`StandUpService`)·만료 폴드 기립(`ExpireTurnService`)은 돌려받은 금액을, 0칩 자동 기립(`HandSettler`)은 0(이전 의무를 지운다)을 덮어쓴다.
+`RecentDepartures` 는 `holdem_rejoin_obligation` 에 (사용자, 테이블)당 1행으로 저장한다(PK `user_id, table_id`) — 의무는 떠난 테이블에만 적용된다. 기립과 같은 트랜잭션에 커밋되고, 만료된 행은 지우지 않고 읽을 때 무시한다.
+예전 `holdem_recent_departure`(PK `user_id`)는 `ddl-auto: update` 가 PK 를 바꾸지 못해 새 테이블 이름으로 옮겼고, 옛 테이블은 더 쓰지 않는다(남은 행은 무시한다).
+기립(`StandUpService`)·만료 폴드 기립(`ExpireTurnService`)은 돌려받은 금액을, 0칩 자동 기립(`HandSettler`)은 0(그 테이블의 이전 의무를 지운다)을 덮어쓴다. QA 리셋은 `clear(userId)` 로 모든 테이블의 의무를 지운다.
 의무는 `buyInRange` 하한을 올리고 최대 바이인 상한보다 우선한다.
 
 ### 참가 대기열
