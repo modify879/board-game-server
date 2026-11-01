@@ -10,6 +10,9 @@ class WalletPropertiesTest {
         assertFailsWith<IllegalArgumentException> { WalletProperties(1_050, 1_000) }
         assertFailsWith<IllegalArgumentException> { WalletProperties(1_000, 950) }
         assertFailsWith<IllegalArgumentException> { WalletProperties(0, 1_000) }
+        assertFailsWith<IllegalArgumentException> { WalletProperties(-1_000, 1_000) }
+        assertFailsWith<IllegalArgumentException> { WalletProperties(1_000, 0) }
+        assertFailsWith<IllegalArgumentException> { WalletProperties(1_000, -1_000) }
     }
 
     @Test

@@ -9,6 +9,9 @@ import com.jsm.boardgame.wallet.domain.model.UserId
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
+import com.jsm.boardgame.wallet.domain.exception.DepositRequestNotFoundException
+import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
+import kotlin.test.assertFailsWith
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import com.jsm.boardgame.wallet.domain.repository.FakeDepositRequestRepository
@@ -43,5 +46,14 @@ class RejectDepositRequestServiceTest {
         assertEquals(DepositRequestStatus.REJECTED, reloaded.status)
         assertEquals("증빙 불충분", reloaded.rejectionReason)
         assertEquals(UserId(99), reloaded.processedBy)
+    }
+
+    @Test
+    fun `없는 충전 요청을 반려하면 DEPOSIT_REQUEST_NOT_FOUND`() {
+        val e = assertFailsWith<DepositRequestNotFoundException> {
+            service.reject(RejectDepositRequestCommand(requestId = 404, adminUserId = 99, reason = "사유"))
+        }
+
+        assertEquals(WalletErrorCode.DEPOSIT_REQUEST_NOT_FOUND, e.errorCode)
     }
 }
