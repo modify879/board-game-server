@@ -115,6 +115,10 @@ class HoldemTableQueryRepositoryAdapterIntegrationTest {
 
         assertEquals(2, summary1.occupiedSeats)
         assertEquals(HoldemTable.MAX_SEATS, summary1.maxSeats)
+        assertEquals(TestTablePolicy.smallBlind.amount, summary1.smallBlind)
+        assertEquals(TestTablePolicy.bigBlind.amount, summary1.bigBlind)
+        assertEquals(TestTablePolicy.minBuyInBigBlinds, summary1.minBuyInBigBlinds)
+        assertEquals(TestTablePolicy.maxBuyInBigBlinds, summary1.maxBuyInBigBlinds)
         assertEquals(0, summary2.occupiedSeats)
         assertEquals(HoldemTable.MAX_SEATS, summary2.maxSeats)
         assertTrue(summaries.map { it.tableId }.toSet().containsAll(listOf(saved1.id!!.value, saved2.id!!.value)))

@@ -56,6 +56,7 @@ Robert's Rules: "You must wait until the button passes." 어기면 SB 와 진입
 예전 `holdem_recent_departure`(PK `user_id`)는 `ddl-auto: update` 가 PK 를 바꾸지 못해 새 테이블 이름으로 옮겼고, 옛 테이블은 더 쓰지 않는다(남은 행은 무시한다).
 기립(`StandUpService`)·만료 폴드 기립(`ExpireTurnService`)은 돌려받은 금액을, 0칩 자동 기립(`HandSettler`)은 0(그 테이블의 이전 의무를 지운다)을 덮어쓴다. QA 리셋은 `clear(userId)` 로 모든 테이블의 의무를 지운다.
 의무는 `buyInRange` 하한을 올리고 최대 바이인 상한보다 우선한다.
+로비 목록(`GET /tables`)의 행은 사용자별 바이인 범위(의무 반영)를 미리보기로 싣는다. 착석 시점의 `GET /tables/{id}/buy-in` 과 착석 검증이 최종이다.
 
 ### 참가 대기열
 착석은 항상 대기열(`JoinQueue`)을 거친다 — 핸드 진행 여부와 무관하다. 좌석은 고르지 않는다: 가장 낮은 번호의 빈 좌석에 FIFO 순서대로 앉힌다.

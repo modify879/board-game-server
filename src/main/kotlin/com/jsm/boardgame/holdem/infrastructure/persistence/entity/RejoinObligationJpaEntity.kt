@@ -50,6 +50,8 @@ class RejoinObligationJpaEntity(
 }
 
 interface RejoinObligationJpaRepository : JpaRepository<RejoinObligationJpaEntity, RejoinObligationId> {
+    fun findByKeyUserIdAndExpiresAtAfter(userId: Long, now: Instant): List<RejoinObligationJpaEntity>
+
     // 파생 삭제 쿼리는 트랜잭션이 필요하다 — QA 리셋 서비스는 트랜잭션 밖이라 여기서 연다(호출자가 있으면 합류).
     @Transactional
     fun deleteByKeyUserId(userId: Long)

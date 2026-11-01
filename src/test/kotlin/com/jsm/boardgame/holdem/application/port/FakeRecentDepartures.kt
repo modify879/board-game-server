@@ -24,5 +24,8 @@ class FakeRecentDepartures : RecentDepartures {
 
     override fun obligationOf(userId: UserId, tableId: TableId): Departure? = obligations[userId to tableId]
 
+    override fun obligationsOf(userId: UserId): Map<TableId, Departure> =
+        obligations.filterKeys { it.first == userId }.mapKeys { it.key.second }
+
     override fun clear(userId: UserId) { obligations.keys.removeAll { it.first == userId } }
 }
