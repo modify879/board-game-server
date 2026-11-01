@@ -419,7 +419,7 @@ class HoldemApiIntegrationTest {
 
         assertThat(holdemTableRepository.findByUserId(UserId(ctx.userId))).isNull()
         assertThat(balanceOf(ctx.userId)).isGreaterThan(0L)
-        assertThat(recentDepartures.obligationOf(UserId(ctx.userId))).isNotNull()
+        assertThat(recentDepartures.obligationOf(UserId(ctx.userId), TableId(ctx.tableId))).isNotNull()
     }
 
     @Test

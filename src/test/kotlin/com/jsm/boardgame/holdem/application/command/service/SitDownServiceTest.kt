@@ -169,7 +169,7 @@ class SitDownServiceTest {
     @Test
     fun `재착석 의무가 100BB 를 넘으면 그 금액 이상으로 앉을 수 있다`() {
         walletBalance.balances[1L] = 100_000
-        departures.put(UserId(1), Departure(Chips.of(30_000), Instant.MAX))
+        departures.put(UserId(1), TableId(1), Departure(Chips.of(30_000), Instant.MAX))
         assertEquals(1, sitDownAs(30_000))
         assertEquals(Chips.of(30_000), joinQueue.entriesOf(TableId(1)).single().buyIn)
     }
@@ -177,16 +177,23 @@ class SitDownServiceTest {
     @Test
     fun `재착석 의무보다 적게는 앉을 수 없다`() {
         walletBalance.balances[1L] = 100_000
-        departures.put(UserId(1), Departure(Chips.of(15_000), Instant.MAX))
+        departures.put(UserId(1), TableId(1), Departure(Chips.of(15_000), Instant.MAX))
         assertBuyInRejected(14_900)
     }
 
     @Test
     fun `재착석 의무가 지갑 잔액보다 크면 INSUFFICIENT_BALANCE`() {
         walletBalance.balances[1L] = 9_000
-        departures.put(UserId(1), Departure(Chips.of(15_000), Instant.MAX))
+        departures.put(UserId(1), TableId(1), Departure(Chips.of(15_000), Instant.MAX))
         val e = assertFailsWith<InsufficientBalanceException> { sitDownAs(15_000) }
         assertEquals(HoldemErrorCode.INSUFFICIENT_BALANCE, e.errorCode)
+    }
+
+    @Test
+    fun `다른 테이블에서 떠난 재착석 의무는 이 테이블에 적용되지 않는다`() {
+        walletBalance.balances[1L] = 100_000
+        departures.put(UserId(1), TableId(2), Departure(Chips.of(15_000), Instant.MAX))
+        assertEquals(1, sitDownAs(8_000))
     }
 
     @Test

@@ -27,6 +27,7 @@ class SeatDepartureTest {
 
         assertEquals(Chips.of(8_000), returned)
         assertEquals(listOf(UserId(1) to Chips.of(8_000)), departures.recorded)
+        assertEquals(listOf(tableId), departures.recordedTableIds)
         assertEquals(listOf(FakeWalletTransfer.Call(UserId(1), 8_000L, tableId, "holdem")), wallet.fromGameCalls)
     }
 
@@ -40,6 +41,7 @@ class SeatDepartureTest {
 
         assertEquals(Chips.ZERO, returned)
         assertEquals(listOf(UserId(1) to Chips.ZERO), departures.recorded)
+        assertEquals(listOf(tableId), departures.recordedTableIds)
         assertTrue(wallet.fromGameCalls.isEmpty())
     }
 }

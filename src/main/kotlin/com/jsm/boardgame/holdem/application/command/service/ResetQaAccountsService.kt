@@ -8,7 +8,6 @@ import com.jsm.boardgame.holdem.application.port.QaAccounts
 import com.jsm.boardgame.holdem.application.port.RecentDepartures
 import com.jsm.boardgame.holdem.application.port.WalletBalance
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
-import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.springframework.context.annotation.Profile
@@ -39,7 +38,7 @@ class ResetQaAccountsService(
             }
         }
         userIds.forEach { userId ->
-            recentDepartures.record(UserId(userId), Chips.of(0)) // RecentDepartures.record KDoc: amount 0 이면 재착석 의무가 지워진다
+            recentDepartures.clear(UserId(userId)) // 모든 테이블의 재착석 의무를 지운다
             accounts.rejectPendingRequests(userId, command.adminUserId, REASON)
             val delta = BASELINE - walletBalance.balanceOf(UserId(userId))
             if (delta != 0L) accounts.adjustBalance(userId, delta, command.adminUserId, REASON)

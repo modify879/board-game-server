@@ -33,10 +33,11 @@ private class ResetQaFakeAccounts(val ids: Map<String, Long>) : QaAccounts {
 
 private class ResetQaFakeDepartures : RecentDepartures {
     val amounts = mutableMapOf<UserId, Chips>()
-    override fun record(userId: UserId, amount: Chips) {
+    override fun record(userId: UserId, tableId: TableId, amount: Chips) {
         if (amount.isZero()) amounts.remove(userId) else amounts[userId] = amount
     }
-    override fun obligationOf(userId: UserId) = amounts[userId]?.let { Departure(it, Instant.MAX) }
+    override fun obligationOf(userId: UserId, tableId: TableId) = amounts[userId]?.let { Departure(it, Instant.MAX) }
+    override fun clear(userId: UserId) { amounts.remove(userId) }
 }
 
 private class ResetQaFakeTables(val seated: Set<UserId> = emptySet()) : HoldemTableRepository {
@@ -51,7 +52,7 @@ private class ResetQaFakeTables(val seated: Set<UserId> = emptySet()) : HoldemTa
 class ResetQaAccountsServiceTest {
     private val accounts = ResetQaFakeAccounts(mapOf("qa1" to 1L, "qa2" to 2L))
     private val departures = ResetQaFakeDepartures().apply {
-        record(UserId(1L), Chips.of(5_000)); record(UserId(2L), Chips.of(5_000))
+        record(UserId(1L), TableId(1L), Chips.of(5_000)); record(UserId(2L), TableId(1L), Chips.of(5_000))
     }
     private val queue = InMemoryJoinQueue(50)
     private val balances = mutableMapOf(1L to 3_000_000L, 2L to 10_000_000L)
@@ -68,8 +69,8 @@ class ResetQaAccountsServiceTest {
     fun `의무를 지우고 대기 요청을 반려하고 잔액이 다르면 차액만큼만 조정한다`() {
         service().reset(command)
 
-        assertNull(departures.obligationOf(UserId(1L)))
-        assertNull(departures.obligationOf(UserId(2L)))
+        assertNull(departures.obligationOf(UserId(1L), TableId(1L)))
+        assertNull(departures.obligationOf(UserId(2L), TableId(1L)))
         assertEquals(
             listOf("reject:1:QA 리셋", "adjust:1:7000000", "reject:2:QA 리셋"),
             accounts.calls,

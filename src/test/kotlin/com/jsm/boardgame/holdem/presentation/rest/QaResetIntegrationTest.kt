@@ -7,6 +7,7 @@ import com.jsm.boardgame.holdem.application.port.RecentDepartures
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TestTablePolicy
+import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import com.jsm.boardgame.user.domain.model.UserRole
@@ -85,14 +86,14 @@ class QaResetIntegrationTest {
         val token = adminToken()
         val (username, id) = signUp()
         adjust.adjust(AdjustWalletBalanceCommand(id, 3_000_000, "seed", 0, "k-${UniqueNames.suffix()}"))
-        recentDepartures.record(UserId(id), Chips.of(5_000))
+        recentDepartures.record(UserId(id), TableId(1L), Chips.of(5_000))
         requestDeposit.request(RequestDepositCommand(id, 1_000, "d-${UniqueNames.suffix()}"))
         requestWithdrawal.request(RequestWithdrawalCommand(id, 500_000, "bank", "123456789012", "holder", "w-${UniqueNames.suffix()}"))
         assertThat(wallets.findBalance(id).balance).isEqualTo(2_500_000) // 환전 보류금 차감
 
         reset(token, username).andExpect(status().isNoContent)
 
-        assertThat(recentDepartures.obligationOf(UserId(id))).isNull()
+        assertThat(recentDepartures.obligationOf(UserId(id), TableId(1L))).isNull()
         assertThat(deposits.findMine(id, PageRequest.of(0, 10)).content.map { it.status }).containsOnly("REJECTED")
         assertThat(withdrawals.findMine(id, PageRequest.of(0, 10)).content.map { it.status }).containsOnly("REJECTED")
         assertThat(wallets.findBalance(id).balance).isEqualTo(10_000_000)
@@ -115,13 +116,13 @@ class QaResetIntegrationTest {
     fun `없는 아이디가 섞이면 404 USER_NOT_FOUND 이고 다른 계정도 바뀌지 않는다`() {
         val token = adminToken()
         val (username, id) = signUp()
-        recentDepartures.record(UserId(id), Chips.of(5_000))
+        recentDepartures.record(UserId(id), TableId(1L), Chips.of(5_000))
 
         reset(token, username, "nobody-" + UniqueNames.suffix())
             .andExpect(status().isNotFound)
             .andExpect(jsonPath("$.errorCode").value("USER_NOT_FOUND"))
 
-        assertThat(recentDepartures.obligationOf(UserId(id))).isNotNull()
+        assertThat(recentDepartures.obligationOf(UserId(id), TableId(1L))).isNotNull()
     }
 
     @Test
@@ -129,14 +130,14 @@ class QaResetIntegrationTest {
         val token = adminToken()
         val (username, id) = signUp()
         val (seatedName, seatedId) = signUp()
-        recentDepartures.record(UserId(id), Chips.of(5_000))
+        recentDepartures.record(UserId(id), TableId(1L), Chips.of(5_000))
         tables.save(HoldemTable.create("qa-${UniqueNames.suffix()}", TestTablePolicy).also { it.sitDown(UserId(seatedId), Chips.of(10_000)) })
 
         reset(token, username, seatedName)
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.errorCode").value("ALREADY_SEATED"))
 
-        assertThat(recentDepartures.obligationOf(UserId(id))).isNotNull()
+        assertThat(recentDepartures.obligationOf(UserId(id), TableId(1L))).isNotNull()
     }
 
     @Test
