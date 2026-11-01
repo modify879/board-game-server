@@ -99,12 +99,14 @@ private class AuthRefreshFakeJwtDecoder(
         tokensBySubject[token] ?: throw JwtException("invalid token: $token")
 }
 
-private fun fakeJwt(subject: String, jti: String, expiresAt: Instant): Jwt =
+private fun fakeJwt(subject: String, jti: String?, expiresAt: Instant?): Jwt =
     Jwt.withTokenValue("token-$subject-$jti")
         .header("alg", "none")
         .subject(subject)
-        .jti(jti)
-        .expiresAt(expiresAt)
+        .apply {
+            jti?.let { jti(it) }
+            expiresAt?.let { expiresAt(it) }
+        }
         .build()
 
 class StompAuthRefreshControllerTest {
@@ -171,6 +173,25 @@ class StompAuthRefreshControllerTest {
 
         assertThat(reply.result).isEqualTo("ERROR")
         assertThat(reply.errorCode).isEqualTo(CommonErrorCode.ACCESS_DENIED.code)
+        assertThat(scheduler.scheduled).hasSize(1)
+        assertThat(scheduler.scheduled[0].future.cancelled).isFalse()
+    }
+
+    @Test
+    fun `새 토큰에 jti 나 exp 가 없으면 AUTHENTICATION_REQUIRED 로 거부하고 기존 예약을 건드리지 않는다`() {
+        registry.registerSession("session-1", AuthRefreshFakeWebSocketSession("session-1"))
+        registry.register("session-1", "old-jti", 1L, fixedInstant.plusSeconds(60))
+        val noJti = fakeJwt(subject = "1", jti = null, expiresAt = fixedInstant.plusSeconds(300))
+        val noExp = fakeJwt(subject = "1", jti = "new-jti", expiresAt = null)
+        val decoder = AuthRefreshFakeJwtDecoder(mapOf("no-jti" to noJti, "no-exp" to noExp))
+        val controller = StompAuthRefreshController(decoder, registry, clock)
+
+        for (token in listOf("no-jti", "no-exp")) {
+            val reply = controller.refresh(RefreshTokenPayload(token), AuthRefreshFakePrincipal("1"), "session-1")
+
+            assertThat(reply.result).isEqualTo("ERROR")
+            assertThat(reply.errorCode).isEqualTo(CommonErrorCode.AUTHENTICATION_REQUIRED.code)
+        }
         assertThat(scheduler.scheduled).hasSize(1)
         assertThat(scheduler.scheduled[0].future.cancelled).isFalse()
     }
