@@ -37,6 +37,7 @@ private class ResetQaFakeDepartures : RecentDepartures {
         if (amount.isZero()) amounts.remove(userId) else amounts[userId] = amount
     }
     override fun obligationOf(userId: UserId, tableId: TableId) = amounts[userId]?.let { Departure(it, Instant.MAX) }
+    override fun obligationsOf(userId: UserId): Map<TableId, Departure> = emptyMap()
     override fun clear(userId: UserId) { amounts.remove(userId) }
 }
 

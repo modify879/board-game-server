@@ -295,6 +295,19 @@ class HoldemApiIntegrationTest {
     }
 
     @Test
+    fun `테이블 목록 행은 블라인드와 사용자별 바이인 범위를 싣고 의무가 없으면 obligationExpiresAt 은 null 이다`() {
+        val ctx = seatedWithoutHand()
+
+        authGet("/api/holdem/tables", ctx.accessToken)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.content[0].smallBlind").isNumber)
+            .andExpect(jsonPath("$.content[0].bigBlind").isNumber)
+            .andExpect(jsonPath("$.content[0].minBuyIn").isNumber)
+            .andExpect(jsonPath("$.content[0].maxBuyIn").isNumber)
+            .andExpect(jsonPath("$.content[0].obligationExpiresAt").value(org.hamcrest.Matchers.nullValue()))
+    }
+
+    @Test
     fun `테이블 목록은 핸드 진행 중인 테이블에 handInProgress true 를 싣는다`() {
         val busy = seatedWithHandInProgress()
         val idle = seatedWithoutHand()

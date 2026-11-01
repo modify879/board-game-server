@@ -44,5 +44,9 @@ class RecentDeparturesAdapter(
         return Departure(Chips.reconstitute(row.amount), row.expiresAt)
     }
 
+    override fun obligationsOf(userId: UserId): Map<TableId, Departure> =
+        jpa.findByKeyUserIdAndExpiresAtAfter(userId.value, clock.instant())
+            .associate { TableId(it.key.tableId) to Departure(Chips.reconstitute(it.amount), it.expiresAt) }
+
     override fun clear(userId: UserId) = jpa.deleteByKeyUserId(userId.value)
 }

@@ -1,6 +1,11 @@
 package com.jsm.boardgame.holdem.application.query.service
 
 import com.jsm.boardgame.holdem.application.exception.HandInProgressException
+import com.jsm.boardgame.holdem.application.port.RecentDepartures
+import com.jsm.boardgame.holdem.domain.model.Chips
+import com.jsm.boardgame.holdem.domain.model.TableId
+import com.jsm.boardgame.holdem.domain.model.TablePolicy
+import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.query.port.HoldemTableQueryRepository
 import com.jsm.boardgame.holdem.application.query.view.TableSummaryView
 import org.springframework.data.domain.Page
@@ -13,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional
 @Transactional(readOnly = true)
 class HoldemTableQueryService(
     private val holdemTableQuery: HoldemTableQueryRepository,
+    private val recentDepartures: RecentDepartures,
 ) {
     /** 사용자가 앉은 열린 테이블의 id. 앉아 있지 않으면 null. */
     fun findTableIdOf(userId: Long): Long? = holdemTableQuery.findSeatOf(userId)?.tableId
@@ -24,6 +30,17 @@ class HoldemTableQueryService(
         }
         val page = holdemTableQuery.findAllTables(pageable)
         val inProgress = holdemTableQuery.findTableIdsWithHandInProgress(page.content.map { it.tableId })
-        return page.map { it.copy(handInProgress = it.tableId in inProgress) }
+        val obligations = recentDepartures.obligationsOf(UserId(userId))
+        return page.map {
+            val obligation = obligations[TableId(it.tableId)]
+            val range = TablePolicy.reconstitute(it.smallBlind, it.bigBlind, it.minBuyInBigBlinds, it.maxBuyInBigBlinds)
+                .buyInRange(obligation?.amount ?: Chips.ZERO)
+            it.copy(
+                handInProgress = it.tableId in inProgress,
+                minBuyIn = range.start.amount,
+                maxBuyIn = range.endInclusive.amount,
+                obligationExpiresAt = obligation?.expiresAt,
+            )
+        }
     }
 }

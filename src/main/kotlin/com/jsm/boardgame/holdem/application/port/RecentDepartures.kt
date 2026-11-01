@@ -17,6 +17,9 @@ interface RecentDepartures {
     /** 만료됐거나 그 테이블에 기록이 없으면 null. */
     fun obligationOf(userId: UserId, tableId: TableId): Departure?
 
+    /** 사용자의 만료되지 않은 의무 전부(테이블별). 로비 목록이 한 번에 읽는다. */
+    fun obligationsOf(userId: UserId): Map<TableId, Departure>
+
     /** 사용자의 모든 테이블 의무를 지운다(QA 리셋). */
     fun clear(userId: UserId)
 }

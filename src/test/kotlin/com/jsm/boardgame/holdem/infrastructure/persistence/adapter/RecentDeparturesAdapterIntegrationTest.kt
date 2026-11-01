@@ -109,6 +109,22 @@ class RecentDeparturesAdapterIntegrationTest {
     }
 
     @Test
+    fun `obligationsOf 는 사용자의 만료되지 않은 의무만 테이블별로 한 번에 돌려준다`() {
+        val other = UserId(user.value + 500_000L)
+        departures.record(user, table, Chips.of(9_000))
+        departures.record(other, table, Chips.of(3_000))
+        clock.now = start.plus(Duration.ofMinutes(20))
+        departures.record(user, otherTable, Chips.of(4_000))
+
+        clock.now = start.plus(Duration.ofMinutes(35)) // table 은 만료, otherTable 은 유효
+
+        val result = departures.obligationsOf(user)
+        assertEquals(setOf(otherTable), result.keys)
+        assertEquals(Chips.of(4_000), result.getValue(otherTable).amount)
+        assertEquals(start.plus(Duration.ofMinutes(50)), result.getValue(otherTable).expiresAt)
+    }
+
+    @Test
     fun `clear 는 사용자의 모든 테이블 의무를 지우고 다른 사용자는 건드리지 않는다`() {
         val other = UserId(user.value + 500_000L)
         departures.record(user, table, Chips.of(9_000))

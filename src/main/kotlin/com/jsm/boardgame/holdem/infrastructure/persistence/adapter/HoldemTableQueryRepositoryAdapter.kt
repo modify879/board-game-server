@@ -73,6 +73,10 @@ class HoldemTableQueryRepositoryAdapter(
                 intLiteral(0),
                 intLiteral(HoldemTable.MAX_SEATS),
                 booleanLiteral(false),
+                path(HoldemTableJpaEntity::smallBlind),
+                path(HoldemTableJpaEntity::bigBlind),
+                path(HoldemTableJpaEntity::minBuyInBigBlinds),
+                path(HoldemTableJpaEntity::maxBuyInBigBlinds),
             ).from(entity(HoldemTableJpaEntity::class))
                 .where(path(HoldemTableJpaEntity::closedAt).isNull())
                 .orderBy(path(HoldemTableJpaEntity::id).asc())
