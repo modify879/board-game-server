@@ -39,7 +39,7 @@ class ResetQaAccountsService(
             }
         }
         userIds.forEach { userId ->
-            recentDepartures.record(UserId(userId), Chips.of(0)) // RecentDepartures.record KDoc: amount 0 이면 재착석 의무가 지워진다
+            recentDepartures.clear(UserId(userId)) // 모든 테이블의 재착석 의무를 지운다
             accounts.rejectPendingRequests(userId, command.adminUserId, REASON)
             val delta = BASELINE - walletBalance.balanceOf(UserId(userId))
             if (delta != 0L) accounts.adjustBalance(userId, delta, command.adminUserId, REASON)

@@ -77,7 +77,7 @@ class HandSettler(
         table.applyStacks(toApply)
 
         for (seat in table.standUpBusted(toApply.keys)) {
-            recentDepartures.record(seat.userId, Chips.ZERO)
+            recentDepartures.record(seat.userId, tableId, Chips.ZERO)
             log.info("auto stand-up after 0-stack settle: tableId={}, seatNo={}, userId={}", tableId.value, seat.seatNo, seat.userId)
         }
 

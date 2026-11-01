@@ -51,7 +51,7 @@ class SeatRequester(
         }
         // 단위(100)·음수 검사는 Chips.of 가 한다. 범위는 재착석 의무가 정한다 — 의무가 최대 바이인(기본 100BB)을 넘으면 상한도 넘는다.
         val chips = Chips.of(buyIn)
-        val range = table.buyInRange(recentDepartures.obligationOf(userId)?.amount ?: Chips.ZERO)
+        val range = table.buyInRange(recentDepartures.obligationOf(userId, tableId)?.amount ?: Chips.ZERO)
         if (chips !in range) {
             throw BuyInOutOfRangeException("바이인이 허용 범위(${range.start}~${range.endInclusive}) 밖입니다: $buyIn")
         }

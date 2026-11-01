@@ -79,7 +79,7 @@ class SeatChipsReservationApplier(
     private fun standUpIfEmpty(tableId: TableId, table: HoldemTable, userId: UserId): Boolean {
         if (!table.seatOf(userId)!!.stack.isZero()) return false
         table.standUp(userId)
-        recentDepartures.record(userId, Chips.ZERO)
+        recentDepartures.record(userId, tableId, Chips.ZERO)
         log.info("auto stand-up after empty chips reservation: tableId={}, userId={}", tableId.value, userId.value)
         return true
     }

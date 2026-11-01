@@ -5,6 +5,7 @@ import com.jsm.boardgame.holdem.application.config.TablePolicyProperties
 import com.jsm.boardgame.holdem.application.port.FakeRecentDepartures
 import com.jsm.boardgame.holdem.application.port.WalletBalance
 import com.jsm.boardgame.holdem.domain.model.Chips
+import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
 import com.jsm.boardgame.holdem.application.query.port.HoldemTableQueryRepository
@@ -51,15 +52,38 @@ class BuyInQueryServiceTest {
     }
 
     @Test
-    fun `새 테이블 조회도 재착석 의무로 하한이 올라가고 만료 시각을 돌려준다`() {
-        val expiresAt = Instant.parse("2030-01-01T00:00:00Z")
-        departures.put(UserId(1), Departure(Chips.of(10_000), expiresAt))
+    fun `새 테이블 조회는 재착석 의무를 무시한다`() {
+        departures.put(UserId(1), TableId(7), Departure(Chips.of(10_000), Instant.parse("2030-01-01T00:00:00Z")))
 
         val view = service.findForNewTable(1)
+
+        assertEquals(4_000, view.minBuyIn)
+        assertEquals(20_000, view.maxBuyIn)
+        assertNull(view.obligationExpiresAt)
+    }
+
+    @Test
+    fun `테이블 조회는 그 테이블의 재착석 의무로 하한이 올라가고 만료 시각을 돌려준다`() {
+        val expiresAt = Instant.parse("2030-01-01T00:00:00Z")
+        tableQuery.policies[7L] = TablePolicyView(100, 200, 20, 100)
+        departures.put(UserId(1), TableId(7), Departure(Chips.of(10_000), expiresAt))
+
+        val view = service.find(7L, 1)
 
         assertEquals(10_000, view.minBuyIn)
         assertEquals(20_000, view.maxBuyIn)
         assertEquals(expiresAt, view.obligationExpiresAt)
+    }
+
+    @Test
+    fun `다른 테이블의 재착석 의무는 테이블 조회에 적용되지 않는다`() {
+        tableQuery.policies[8L] = TablePolicyView(100, 200, 20, 100)
+        departures.put(UserId(1), TableId(7), Departure(Chips.of(10_000), Instant.parse("2030-01-01T00:00:00Z")))
+
+        val view = service.find(8L, 1)
+
+        assertEquals(4_000, view.minBuyIn)
+        assertNull(view.obligationExpiresAt)
     }
 
     @Test

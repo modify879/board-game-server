@@ -250,13 +250,13 @@ class HandSettlerTest {
         val stacks = mapOf(1 to Chips.of(200), 2 to Chips.of(200))
         val hand = Hand.start(stacks, buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, Chips.of(100), Chips.of(200), bustingShuffler)
         handStore.save(tableId, hand)
-        departures.record(UserId(2000L), Chips.of(9_000)) // 좌석 2 의 옛 의무
+        departures.record(UserId(2000L), tableId, Chips.of(9_000)) // 좌석 2 의 옛 의무
         hand.act(1, BettingAction.Call)
         while (hand.isRunningOut) hand.advanceRunout()
 
         settler.settle(tableId, table, hand)
 
-        assertNull(departures.obligationOf(UserId(2000L)))
+        assertNull(departures.obligationOf(UserId(2000L), tableId))
         assertEquals(Chips.ZERO, departures.recorded.last { it.first == UserId(2000L) }.second)
     }
 

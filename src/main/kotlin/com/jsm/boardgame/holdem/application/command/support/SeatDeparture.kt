@@ -19,7 +19,7 @@ class SeatDeparture(
 ) {
     fun standUp(tableId: TableId, table: HoldemTable, userId: UserId): Chips {
         val returned = table.standUp(userId)
-        recentDepartures.record(userId, returned)
+        recentDepartures.record(userId, tableId, returned)
         if (returned.isPositive()) {
             // memo 가 유일하게 "어느 게임인가" 를 나른다 — LedgerEntryType 이 이미 방향을 말하고
             // LedgerReferenceType.GAME_TABLE 엔 게임 이름이 없다. 표시 문구를 넣지 않는다(규칙 8, 문구는 클라이언트가 만든다).
