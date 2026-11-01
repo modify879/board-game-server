@@ -4,113 +4,56 @@ paths: ["**/holdem/**"]
 
 # holdem
 
-목표 규칙(하우스 룰)은 `docs/decisions/holdem-house-rules.md` — 이 파일은 구현된 동작을 적는다. 바꿀 때는 하우스 룰 문서와 맞춘다.
+목표 규칙(하우스 룰)은 `docs/decisions/holdem-house-rules.md`, 이유·메커니즘은 `docs/decisions/holdem.md` — 이 파일은 어기면 깨지는 것만 적는다. 바꿀 때는 하우스 룰 문서와 맞춘다.
 
-패키지 하위 구성 예시 — `presentation/ws/`: `config/` `payload/` `assembler/` `broadcast/` `subscription/`(목적지 상수 `HoldemDestinations` 는 `ws/` 바로 아래). `infrastructure/`: `timer/` `event/` `job/` `retry/` `config/` `executor/` `queue/` `memory/` `recovery/` `shuffle/` `stomp/`.
+## 정보 노출
 
-## 이 컨텍스트에서만 지킬 것
+- 브로드캐스트 페이로드 타입에 홀카드 필드를 두지 않는다. 예외는 `ShownHandView`(`HandResult.shownSeatNos`·`ShowHandService`)와 `RevealedHandView`(올인 런아웃 중 `Hand.revealedSeatNos`) 둘뿐. nullable 홀카드를 마스킹으로 비우는 방식 금지 — 빠뜨리면 패가 샌다. 개인 뷰 `SeatPrivateView.hand = null` 은 위반이 아니다(개인 큐엔 본인 데이터만 흐른다)
+- 관전은 공개 토픽 구독이다. 서버에 관전자 상태를 두지 않는다. 공개 뷰에 위 예외 밖의 카드성 필드를 추가하면 관전이 곧 유출이다
+- 폴드 승자의 보여 주기 카드는 `LastHandResult` 에 두지 않는다 — 재구독 스냅샷으로 샌다. `FoldWinnerCards`(인메모리)에 담고 새 핸드·쇼다운 정산 때 지운다
+- 진행 중 핸드 스냅샷에 덱·팟을 담지 않는다 — 덱은 미래 카드가 DB 로 새고, 팟은 좌석별 투입액과 어긋난다. 복원 때 덱은 새로 섞는다
+- 베팅 라운드 스냅샷에는 `actedSinceLastFullRaise` 가 반드시 들어간다 — 빠지면 복구 후 BB 옵션이 사라지고 행동한 좌석이 다시 레이즈한다
+- 개인 큐 유실은 돈 문제다(당신 차례 증발 → 자동 폴드로 칩 손실). `convertAndSendToUser` 경고 규칙(`websocket.md`)을 특히 지킨다
+- 닫힌·없는 테이블 재구독을 ERROR 프레임으로 거부하지 않는다 — STOMP 세션 전체가 끊긴다. `TABLE_CLOSED` 알림을 다시 보낸다
+- join-queue 구독도 스냅샷을 보낸다(SUBSCRIBE-REST 순서 미보장). DROPPED 는 재전송하지 않는다
+- 공개/개인 뷰의 `seq`(`TableViewSequence`)는 `HandBroadcaster` 가 `BEFORE_COMMIT` 에서 따고, `WebSocketConfig.setPreservePublishOrder(true)` 와 함께 쓴다 — 하나라도 빠지면 메시지가 뒤섞인다. 구독 스냅샷도 테이블 실행기에서 읽는다
 
-- **브로드캐스트 페이로드 타입에 홀카드를 담을 필드를 두지 않는다.** 예외는 둘뿐이다 — `ShownHandView` 는
-  끝난 핸드의 `HandResult.shownSeatNos` 와 폴드 승자의 보여 주기(`ShowHandService`)로만, `RevealedHandView` 는 올인 런아웃 중(TDA) `Hand.revealedSeatNos` 로만 만든다. `/topic/tables/{id}` 에는 `TablePublicView` 와 카드 필드가 없는 `TableClosedView`,
-  `/user/queue/tables/{id}` 에는 `SeatPrivateView`, `/user/queue/holdem/join-queue` 에는 카드 필드가 없는 `JoinQueueView` 만 흐르게 해 규칙 6을 "좌석마다 루프 돌 것을 기억하라" 가 아니라
-  **컴파일러**로 보장한다. 한 타입에 nullable 홀카드 필드를 두고 마스킹으로 비우는 방식은 쓰지 않는다 —
-  빠뜨리면 패가 새고, 빠뜨렸는지는 런타임에만 드러난다
-- **테이블 정책(블라인드·바이인 범위)은 생성 시점의 설정(`app.holdem.table-policy.*`, 기본 100/200·20~100BB)을 `TablePolicy` 로 테이블에 고정한다.** 설정을 바꿔도 열린 테이블은 판 도중 규칙이 바뀌지 않는다. 컬럼은 `holdem_tables` 의 `small_blind`·`big_blind`·`min_buy_in_big_blinds`·`max_buy_in_big_blinds`. 상수로 블라인드·바이인을 쓰지 않고 항상 `table.policy` 를 거친다. 예외 둘 — 생성 화면용 바이인 조회(`BuyInQueryService.findForNewTable`)는 아직 테이블이 없어 현재 설정을 쓰고, 바이인 컬럼의 기본값(`default 20`/`default 100`)은 컬럼이 생기기 전 행용이다
-- **참가 대기열 길이는 `app.holdem.join-queue-max-length`(기본 50)로 제한한다.** 넘으면 `JOIN_QUEUE_FULL` 409. 이미 대기 중인 사용자의 재요청은 큐가 가득 차도 `ALREADY_SEATED` 를 유지한다(중복 검사가 먼저)
-- **방/좌석은 holdem 안에 둔다.** 별도 컨텍스트로 빼지 않는다
-- **핸드 히스토리는 결과 요약만 남긴다(하우스 룰 11, 액션 로그 없음).** `HandSettler.settle` 이 같은 트랜잭션에서 `HandHistory` 포트로 쓴다.
-  취소된 핸드(`CancelHandService`)는 남기지 않는다. 남의 패는 `shown` 일 때만 보이게 하는 마스킹은 `HandHistoryQueryService` 가 한다.
-  진행 중 핸드는 이벤트 로그가 아니라 **상태 스냅샷 1행**만 둔다(이벤트 소싱은 정상 경로와 다른 재생 코드를 하나 더 만든다).
-  직전 핸드의 공개 결과 1행(`holdem_last_hand_result`)은 재구독 스냅샷용이고 새 핸드가 시작되면 지운다
-  공개 뷰 좌석의 `lastAction` 은 로그가 아니다 — 핸드가 좌석별 마지막 행동 하나만 들고(`Hand.lastActions`), 정산 때 `LastHandResult.lastActions`(좌석+사용자)로 옮겨 다음 핸드 시작 전까지 보인다
-- **보여 주기(하우스 룰 10)의 폴드 승자 카드는 `LastHandResult` 에 두지 않는다.** 그건 공개 결과의 출처라 비공개 카드가 섞이면 재구독 스냅샷으로 샌다.
-  `FoldWinnerCards` 포트(인메모리)에 정산 때 담고, 새 핸드·쇼다운 정산 때 지운다
-- **개인 큐 유실은 돈 문제다.** "당신 차례" 가 증발하면 타임아웃 자동 폴드로 칩이 날아간다 —
-  `convertAndSendToUser` 경고 규칙(`websocket.md`)을 여기서 특히 지킨다
-- **진행 중 핸드 스냅샷에 덱을 담지 않는다.** 담으면 DB 를 읽을 수 있는 사람이 미래 카드를 안다.
-  복원할 때 아직 딜되지 않은 카드로 덱을 새로 섞는다. 팟도 담지 않는다 — 좌석별 총 투입액에서
-  유도되므로 두 곳이 어긋날 수 있다
-- **베팅 라운드 스냅샷에는 `actedSinceLastFullRaise` 가 반드시 들어간다.** 빠지면 복구 후 BB 옵션이 사라지고
-  이미 행동한 좌석이 다시 레이즈할 수 있게 된다
-- **턴 타이머와 연결 타이머는 상수를 공유하지 않는다.** 재는 대상(차례 무응답 vs
-  자리만 차지하고 사라짐)과 만료 동작(폴드 vs 퇴장)이 다르다. 연결 타이머 만료 시 핸드가 진행 중이면 퇴장시키지 않고 감시를 다시 건다
-- **관전은 공개 토픽 구독이다. 서버에 관전자 상태를 두지 않는다.** `/topic/tables/{id}` 는 인증된
-  사용자면 누구나, `/user/queue/tables/{id}` 는 **그 테이블 착석자만** 구독할 수 있다(`websocket.md`).
-  공개 토픽이 안전한 이유는 `TablePublicView` 에 (`ShownHandView`·`RevealedHandView` 를 빼면) 홀카드를 담을 필드가 없기 때문이다 —
-  **그 예외 밖에서 카드 성격의 필드를 추가하는 순간 관전이 곧 정보 유출이 된다**
-- **올인으로 더 베팅할 수 없으면 남은 보드를 한 번에 깔지 않는다.** `RunoutTimer` 가 `runout-step-delay` 간격으로 한 스트리트씩
-  진행한다 — 공개 → 플랍/턴/리버 → 쇼다운 순(사용자 결정)
-- **QA 덱 고정 API(`POST /api/admin/qa/holdem/tables/{tableId}/next-deck`, ADMIN, qa 프로필에서만)** 는 다음 핸드 한 번만 덱을 지정한다(`QaNewHandShuffler`). 딜 순서는 버튼 다음 참가 좌석부터 두 바퀴, 번 카드 없음. 고정 덱으로 시작한 핸드는 복원 시에도 그 순서를 유지한다(`QaRestoreShuffler`).
-- **"핸드가 진행 중인가" 는 `Hand?.isInProgress`(핸드가 있고 결과가 없다) / `HandStore.findInProgress` 하나로 묻는다.** 핸드 객체 자체가 필요하거나 "저장된 핸드가 있는가"를 묻는 곳(중복 시작 방지 `StartScheduledHandService`, 재기동 복구 `HandRecovery`, 정산·액션)은 `find` 를 쓴다. 판단 지점마다 `find != null` 과 `!isFinished` 를 따로 쓰지 않는다
-- **퇴장 예약(핸드 뒤 일어나기, 하우스 룰 13)은 DB 에 저장한다**(`holdem_seats.leave_after_hand`·`leave_reservation`). 핸드 참가 좌석이 핸드 중에 떠나면 `HandInProgressException` 대신 예약만 걸고,
-  핸드 도중 앉아 참가하지 않은 좌석은 핸드와 무관하므로 즉시 기립한다. 실행은 `LeaveReservations.standUpAll` — `HandSettler.settle`(0칩 기립 뒤, 후보 수 판단·`JoinRequestsDue` 앞)과
-  `CancelHandService` 가 부른다. StandUpService 와 같이 재착석 의무 기록·지갑 환급을 한다. 좌석이 어떤 이유로든 사라지면 예약도 함께 사라진다.
-  종류(SPECTATE|LEAVE)는 클라이언트가 기립 뒤 행동을 정하는 데만 쓰고 서버 실행과 무관하다. 종류가 생기기 전의 행(`leave_after_hand=true`, 종류 null)은 SPECTATE 로 복원한다
-- 개인 뷰는 모든 브로드캐스트·구독 스냅샷마다 착석자 전원에게 간다. 핸드에 묶인 필드는 `SeatPrivateView.hand`(`PrivateHandView`) 아래에 있고 `null` = 핸드 없음 / 이번 핸드 비참가다. 이는 금지된 "마스킹으로 비우는 nullable 홀카드" 가 아니다 — 개인 큐에는 주인 본인의 데이터만 흐른다. 공개 뷰에 대한 규칙 6의 컴파일러 보장은 그대로다.
-- 연결 상태(`presence`)가 실제로 바뀌면 `UpdateSeatPresenceService` 가 표시 전용(`handProgressed=false`) 브로드캐스트를 낸다.
-- **BB 대기 규칙은 판을 굶겨 죽이지 않는다.** 후보(스택 양수 점유 좌석)가 2명 이상인데 대기를
-  빼면 2명 미만이면, 전원의 대기를 풀고 참가시킨다. 없으면 영구 데드락이다 — 참가자 부족 예외가
-  `@Transactional` 을 롤백해 블라인드 전진과 플래그 해제가 취소되고, 다음 호출도 같은 상태라 영원히 실패한다.
-  완화가 걸리면 그 핸드의 즉시 포스팅 진입료도 면제한다. 참가자·진입료·플래그 갱신은 `HoldemTable.seatForNextHand` 한 곳이 정하고 `HandStarter` 는 조율만 한다
-- **정산은 스택을 먼저 반영하고 그다음 0칩 좌석을 내보낸다.** 순서를 뒤집으면 `applyStacks` 가
-  이미 빠진 좌석을 만나 터진다. 0칩 기립 규칙은 `HoldemTable.standUpBusted` 가, 재착석 의무 기록은 `HandSettler` 가 한다. 돌려줄 칩이 없으므로 지갑을 부르지 않는다. 칩 추가 예약이 있는 0칩 좌석(퇴장 예약 없음)은 이 단계에서 건너뛴다 — 커밋 후 `ChipsReservationsDue`(→ `JoinRequestsDue` 앞)가 채우거나 기립시킨다
-- **좌석의 `awaitingBigBlind` 와 `owesImmediatePost` 는 다른 축이다.** 즉시 포스팅을 고르면 대기는
-  바로 풀리지만 진입료는 아직 안 낸 상태라, 한 필드로는 "이미 정상 참가 중" 과 구분되지 않는다
-- **포지션은 두 단계다. 테이블에 저장하는 것은 명목 포지션뿐이다.** `advanceBlinds` 는 대기 좌석까지 포함한
-  후보로 회전(명목)을 정하고, `HandPositions.forParticipants` 가 실제 참가자로 좁힌다. 헤즈업 판정은 **실제
-  참가자 수**로 한다 — 후보 수로 하면 대기 좌석이 빠진 판에서 버튼이 BB 와 같은 좌석이 되고 액션 순서가 뒤집힌다.
-  헤즈업은 BB 가 아닌 한 좌석이 버튼·SB 를 겸하고, BB 는 직전 BB 다음 좌석으로 간다(TDA 34). 헤즈업 뒤 3인이 되면
-  버튼은 "직전 SB" 가 아니라 새 SB 바로 앞 좌석이다
-  실제 포지션은 진행 중 핸드 스냅샷(`Hand.buttonSeatNo`·`smallBlindSeatNo`·`bigBlindSeatNo`)에만 있다. 공개 뷰의 `buttonSeatNo` 는
-  핸드가 있으면 그 핸드의 실제 버튼, 없으면 테이블의 명목 버튼이다. `smallBlindSeatNo`·`bigBlindSeatNo` 는 핸드가 없으면 null 이고 dead small blind 면 SB 만 null 이다
-- **새 참가자는 버튼에서 첫 블라인드까지의 구간에서는 포스팅을 자청해도 딜인되지 않는다.** 구간 = 명목 버튼(포함)부터
-  원형(`MAX_SEATS`)으로 버튼 뒤 첫 블라인드까지 — 첫 블라인드는 SB 이고 dead SB 면 BB 다. SB 는 구간에 포함하고 BB 는
-  제외한다(SB~BB 사이 좌석은 막지 않는다). dead button 으로 BB 가 빈 좌석을 건너뛰면 버튼~SB 사이에 신규 좌석이 앉을 수 있어
-  버튼·SB 좌석 한 점만 막으면 놓친다. Robert's Rules: "You must wait until
-  the button passes." 어기면 SB 와 진입료를 이중으로 내 `committed > currentBet` 이 되고, 콜이
-  `CHIPS_NEGATIVE` 로 터진다. 차단된 좌석은 `owesImmediatePost` 를 그대로 들고 기다린다.
-  BB 대기 완화(참가자가 2명 미만이 되면 후보 전원 참가)는 차단된 좌석도 딜인시킨다 — 이때는 진입료를 면제한다
-- **쇼다운까지 간 좌석은 전원 공개한다(사용자 결정, 머크 없음).** `showdownOrder` 는 공개 패를 나열하는 순서로만 쓴다. 모두 폴드한 판은 공개하지 않는다
-- **다음 핸드 카운트다운은 상대 시간(단조 시계)만 쓴다 — `NextHandCountdown`, 메모리 전용이다.**
-  `next_hand_at` 같은 DB 컬럼을 두지 않고, 발화 이후 벽시계로 다시 비교하지 않는다(`docs/decisions/concurrency.md`).
-  입장(착석/참가 요청 처리)마다 카운트다운을 전체 지연으로 다시 시작한다 — 사용자 결정: 3초 남았을 때 새
-  참가자가 들어와도 이어지지 않고 처음부터 다시 센다. 기립으로 후보가 2명 미만이면 취소하고, 아니면
-  건드리지 않는다(나가는 쪽은 리셋하지 않는다). 정산 뒤 후보가 2명 이상이면 새로 건다. 재시작하면
-  `HandRecovery` 가 부팅 시 조건에 맞는 테이블마다 새로 건다. 수동 시작은 없다 — 대기 중 끼어들면 다른 좌석의 기립 결정
-  시간을 빼앗는다
-- **`NextHandTimer` 의 의도된 지름길.** `restart` 는 호출자 트랜잭션 커밋 전에 바로 예약한다 — 롤백되면 예약이 남지만 해롭지 않다(`onFire` 가 실행기 안에서 핸드 없음·후보 2명 이상을 다시 확인한다). `cancel` 은 트랜잭션 안이면 커밋 뒤로 미룬다(롤백이면 카운트다운이 남아야 한다)
-- **`InMemoryFoldWinnerCards` 는 재시작하면 사라진다.** 재시작 직후 그 핸드의 폴드 승자는 카드를 보여 줄 수 없을 뿐이다 — DB 에 저장하지 않는다
-- **`InMemoryJoinQueue` 는 락 하나로 모든 테이블을 직렬화한다.** 락 안은 작은 메모리 작업뿐이고 지갑 I/O·DB 저장은 락 밖(`AdmitJoinRequestService`)에서 한다. 이 락이 병목이 되면 그때 테이블별로 쪼갠다
-- **만료 폴드한 좌석은 판 도중 즉시 기립시킨다**(하우스 룰 2) — 스택이 더 변하지 않으므로 그 자리에서 정산하고,
-  그 핸드가 끝날 때까지 그 좌석 번호에는 앉을 수 없다(정산이 새 착석자를 덮어쓴다)
-- **바이인 자동 합산은 없다.** 지갑에 들어온 돈(충전 승인·출금 취소/반려·관리자 증액)은 지갑에만 남고 `WalletCredited` 를 듣는 쪽은 holdem 에 없다.
-  스택에 넣는 길은 착석 때의 바이인과 **칩 추가**(`AddChipsService`) 둘뿐이다. 칩 추가는 핸드 중이면 좌석의 `chipsReservation` 에 예약만 걸고, 적용은 정산 뒤(`ChipsReservationsDue`, `JoinRequestsDue` 앞) 좌석마다 `SeatChipsReservationApplier`(`REQUIRES_NEW`) — 지갑 실패가 정산을 롤백하지 않게.
-  적용이 던지면 예약을 버리고(0칩이면 기립) 넘어간다 — 0칩 좌석이 영영 앉아 있지 않게. 퇴장 예약이 함께 있으면 퇴장이 이긴다. 부팅 시 `HandRecovery` 가 남은 예약 적용을 다시 올린다.
-  범위는 `HoldemTable.buyInRange(obligation)` 하나가 정한다 — 도메인 `sitDown` 은 하한만 보고 상한은 `SeatRequester` 가 본다. 잔액 부족은 wallet 과 같은 코드 `INSUFFICIENT_BALANCE`(클라이언트가 하나만 처리한다). 대기열 항목(`JoinQueueEntry`)이 고른 금액을 들고 있고
-  `AdmitJoinRequestService` 가 정확히 그만큼만 `WalletTransfer.toGame` 으로 옮긴다
-- **재착석 의무(ratholing 방지, 하우스 룰 7)**: `RecentDepartures` 는 `holdem_recent_departure` 에 사용자당 1행으로 저장한다 — 기립과 같은 트랜잭션에 커밋되고,
-  만료된 행은 지우지 않고 읽을 때 무시한다. 기립(`StandUpService`)·만료 폴드 기립(`ExpireTurnService`)은 돌려받은 금액을, 0칩 자동 기립(`HandSettler`)은 0(이전 의무를 지운다)을 덮어쓴다.
-  의무는 `buyInRange` 하한을 올리고 최대 바이인 상한보다 우선한다
-- **착석은 항상 대기열을 거친다 — 핸드 진행 여부와 무관하다.** 좌석은 고르지 않는다: 가장 낮은 번호의 빈 좌석에
-  FIFO 순서대로 앉힌다. 대기열은 인메모리(`JoinQueue`)다 — 좌석 배정 전이라 돈이 걸려 있지 않고, 재시작하면
-  비워져도 안전하다. 트리거(`JoinRequestsDue`): 대기열 삽입 커밋(SeatRequester — SitDownService·CreateTableService 가 부른다), 핸드 정산(HandSettler),
-  기립 커밋(StandUpService), 핸드 취소(CancelHandService). 항목마다 커밋 후 별도 트랜잭션(AdmitJoinRequestService,
-  REQUIRES_NEW)으로 처리한다 — 같은 트랜잭션이면 지갑 이체 실패 하나가 다른 처리 전체를 롤백시킨다. 연결이
-  끊기면 대기열에서도 빠진다(ConnectionTimer). 핸드 진행 중이거나 빈 좌석이 없어 막힌(`Blocked`) 항목은 큐에 남고, 처리가 실패한 항목만 버린다. 취소는 그 테이블의 `TableExecutor` 를 거쳐 착석 처리와 순서대로 실행된다.
-- **테이블의 상태를 바꾸는 명령은 전부 `TableExecutor` 로 그 테이블의 스레드에서 실행한다 — 한 테이블에 쓰는 쪽은 하나다(single writer).** 새 명령 진입점도 반드시 거친다. 예외: `CreateTableService`(새 테이블 id 라 동시에 쓰는 쪽이 없다)와 qa 전용 경로(`ResetQaAccountsService`, `ReserveNextDeckService`). 트랜잭션은 그 스레드 안에서 연다. 같은 테이블 스레드 안에서 다시 `call` 하면 인라인으로 돈다(트랜잭션이 활성이면 예외 — `transactions.md`). 서버 한 대 전제.
-- **공개/개인 뷰에는 테이블별 순번(`seq`, `TableViewSequence`)이 붙는다.** `HandBroadcaster` 는 커밋 후가 아니라
-  `BEFORE_COMMIT` 에서 순번을 따는데, 같은 테이블을 바꾸는 명령은 `TableExecutor` 한 스레드에서 직렬로 돌아 커밋 순서대로만
-  여기 도달하기 때문이다(순번 순서 = 커밋 순서). 행 락이 아니다 — 바뀐 게 없는 merge 는 UPDATE 를 내지 않는다. 구독 스냅샷도 테이블 실행기에서 읽는다 — 같은 seq 는 같은 상태다. (`HoldemSubscriptionSnapshotListener` 가 `HoldemTableRepository`·`HandStore` 를 직접 읽는 것은 규칙 3 의 의도된 예외다 — `HandBroadcaster` 와 같은 애그리거트에서 스냅샷을 조립해야 한다.) 실제 전송은 여전히 `afterCommit` 이라 규칙 6은 그대로 지켜진다.
-  `TableViewSequence` 는 메모리 전용이라 재시작하면 0부터 다시 세지만, 클라이언트가 재구독 시 채널별 last seq 를 리셋하면 문제없다.
-  `WebSocketConfig` 의 `setPreservePublishOrder(true)` 와 함께 써야 한다 — 순번만 있고 세션별 발행 순서가 안 지켜지면 같은 세션 안에서도 메시지가 뒤섞인다
-- **테이블별 인메모리 상태는 `TableId` 를 키로 두고 `TableClosed` 커밋 후 리스너로 스스로 치운다.** `TableClosedListenersTest` 가 `TableId` 키 필드를 가진 컴포넌트를 스캔해 리스너를 강제한다 — Long 키로 두면 이 검사에 보이지 않는다
-- **테이블은 비면 자동으로 닫힌다.** 마지막 사람이 떠나면 `JoinRequestsDue` 처리(대기열 착석) 직후 `JoinRequestsProcessor` 가 `closed_at` 으로 닫는다.
-  아무도 앉은 적 없는 테이블·재시작 뒤 남은 빈 테이블은 `IdleTableSweeper` 폴백이 닫는다 —
-  행을 지우지 않는다(지갑 원장이 테이블 id 를 참조한다). 닫힌 테이블은 `HoldemTableRepository.findById` 가 없는 것으로 돌려 명령·조회 모두 `TABLE_NOT_FOUND`.
-  닫힐 때 공개 토픽에 `{"tableId","type":"TABLE_CLOSED"}` 를 보내고, 닫힌·없는 테이블을 재구독하면 스냅샷 대신 같은 알림을 다시 보낸다
-  (ERROR 프레임으로 거부하지 않는다 — STOMP 세션 전체가 끊긴다)
-- join-queue 구독도 스냅샷(대기 순번 또는 착석)을 보낸다 — SUBSCRIBE 와 REST 요청의 도착 순서가 보장되지 않고 심플 브로커는 SUBSCRIBE 에 RECEIPT 를 주지 않으므로. DROPPED 는 재전송되지 않는다
-- **`SerialTableExecutor` 는 실행기를 새로 만들 때만 `existsOpen` 으로 확인한다.** 없거나 닫힌 테이블엔 실행기를 만들지 않고 호출자 스레드에서 돌린다 —
-  임의 id 요청·닫힘 직후 타이머가 실행기를 되살려 쌓지 않게
-- **타이머 스케줄러는 가상 스레드 `SimpleAsyncTaskScheduler` 다.** 단 `scheduleWithFixedDelay` 작업은 모든 타이머를 깨우는 단일 스케줄러 스레드에서 돈다 —
-  거기서 `tableExecutor.call` 로 기다리면 서버 전체 타이머가 멈추므로 `post` 한다(`IdleTableSweeper`)
+## 실행기·동시성
+
+- 테이블 상태를 바꾸는 명령은 전부 `TableExecutor` 를 거친다(single writer) — 새 진입점도. 예외는 `CreateTableService` 와 qa 전용 경로(`ResetQaAccountsService`·`ReserveNextDeckService`)뿐. 트랜잭션은 실행기 스레드 안에서 연다. 서버 한 대 전제
+- 테이블별 인메모리 상태는 `TableId` 키로 두고 `TableClosed` 커밋 후 리스너로 치운다 — Long 키면 `TableClosedListenersTest` 가 못 본다
+- `SerialTableExecutor` 는 실행기를 새로 만들 때만 `existsOpen` 을 본다 — 임의 id·닫힘 직후 타이머가 실행기를 되살려 쌓는다
+- `scheduleWithFixedDelay` 안에서 `tableExecutor.call` 로 기다리지 않는다(`post`) — 모든 타이머를 깨우는 단일 스레드가 멈춘다
+- 착석(`AdmitJoinRequestService`)·칩 적용(`SeatChipsReservationApplier`)은 항목마다 `REQUIRES_NEW` — 지갑 실패 하나가 다른 처리·정산을 롤백한다
+- 칩 적용이 던지면 예약을 버리고 0칩이면 기립시킨다 — 0칩 좌석이 영영 앉아 있다
+- "핸드가 진행 중인가" 는 `Hand?.isInProgress` / `HandStore.findInProgress` 하나로 묻는다. 핸드 객체나 "저장된 핸드 유무"가 필요한 곳(`StartScheduledHandService`·`HandRecovery`·정산·액션)만 `find`. `find != null` 과 `!isFinished` 를 따로 쓰지 않는다
+- 턴 타이머와 연결 타이머는 상수를 공유하지 않는다. 연결 타이머 만료 때 핸드가 진행 중이면 퇴장시키지 않고 감시를 다시 건다
+- 카운트다운(`NextHandCountdown`)은 상대 시간(단조 시계)·메모리 전용이다. `next_hand_at` 같은 DB 컬럼을 두지 않고 발화 뒤 벽시계로 다시 비교하지 않는다(`concurrency.md`)
+
+## 정산·순서
+
+- 정산은 스택 반영 → 0칩 기립 순서다 — 뒤집으면 `applyStacks` 가 빠진 좌석을 만나 터진다. 0칩 기립은 `HoldemTable.standUpBusted`, 재착석 의무 기록은 `HandSettler`, 지갑은 부르지 않는다. 칩 추가 예약이 있는 0칩 좌석(퇴장 예약 없음)은 건너뛴다(`ChipsReservationsDue` 가 처리, `JoinRequestsDue` 앞)
+- 테이블 정책은 항상 `table.policy` 를 거친다. 블라인드·바이인 상수 금지 — 설정을 바꾸면 열린 테이블 규칙이 판 도중 바뀐다
+- 바이인 범위는 `HoldemTable.buyInRange(obligation)` 하나가 정한다. 도메인 `sitDown` 은 하한만, 상한은 `SeatRequester` 가 본다. `JoinQueueEntry` 가 든 금액만큼만 `WalletTransfer.toGame` 으로 옮긴다
+- 퇴장 예약(`leave_after_hand`·`leave_reservation`)은 DB 에 저장한다. 실행은 `LeaveReservations.standUpAll`(`HandSettler.settle` 0칩 기립 뒤·`JoinRequestsDue` 앞, `CancelHandService`). 좌석이 사라지면 예약도 사라진다. 종류가 null 인 레거시 행은 SPECTATE
+- 만료 폴드로 기립한 좌석 번호는 그 핸드가 끝날 때까지 앉을 수 없다 — 정산이 새 착석자를 덮어쓴다
+- 핸드 이력은 `HandSettler.settle` 과 같은 트랜잭션에서 쓴다. 취소된 핸드는 남기지 않는다
+
+## 포지션·블라인드
+
+- 포지션은 두 단계다. 테이블에는 명목 포지션만 저장하고 실제는 `Hand` 스냅샷에만 있다. 헤즈업 판정은 실제 참가자 수로 한다(`HandPositions.forParticipants`) — 후보 수로 하면 버튼이 BB 와 겹치고 액션 순서가 뒤집힌다
+- BB 대기 완화: 후보가 2명 이상인데 대기를 빼면 2명 미만이면 전원 참가시키고 그 핸드의 진입료는 면제한다 — 없으면 영구 데드락. 참가자·진입료·플래그는 `HoldemTable.seatForNextHand` 한 곳이 정한다
+- `awaitingBigBlind` 와 `owesImmediatePost` 는 다른 축이다 — 한 필드로는 "이미 정상 참가 중" 과 구분되지 않는다
+- 버튼~첫 블라인드 구간(명목 버튼 포함, SB 포함·BB 제외, dead SB 면 BB 가 첫 블라인드)에서 신규 좌석을 딜인하지 않는다 — 이중 납부로 `committed > currentBet` 이 되어 콜이 `CHIPS_NEGATIVE` 로 터진다. 차단된 좌석은 `owesImmediatePost` 를 들고 기다린다(BB 대기 완화는 이들도 딜인, 진입료 면제)
+- 헤즈업은 BB 아닌 쪽이 버튼·SB 를 겸한다(TDA 34). 헤즈업 뒤 3인이 되면 버튼은 새 SB 바로 앞 좌석이다
+
+## 의도된 한계
+
+- `NextHandTimer.restart` 는 호출자 트랜잭션 커밋 전에 예약한다(롤백이면 예약이 남지만 `onFire` 가 재확인한다). `cancel` 은 트랜잭션 안이면 커밋 뒤로 미룬다
+- `InMemoryFoldWinnerCards` 는 재시작하면 사라진다 — 그 핸드의 폴드 승자가 카드를 못 보여 줄 뿐이다. DB 에 저장하지 않는다
+- `InMemoryJoinQueue` 는 락 하나로 모든 테이블을 직렬화한다(락 안은 작은 메모리 작업뿐, 지갑 I/O·DB 는 락 밖). 이 락이 병목이 되면 그때 테이블별로 쪼갠다
+- `TableViewSequence` 는 메모리 전용이라 재시작하면 0부터 센다 — 클라이언트가 재구독 시 채널별 last seq 를 리셋해야 한다
+
+## QA 덱
+
+- `POST /api/admin/qa/holdem/tables/{tableId}/next-deck`(ADMIN, qa 프로필만)은 다음 핸드 한 번만 덱을 지정한다(`QaNewHandShuffler`). 딜 순서는 버튼 다음 참가 좌석부터 두 바퀴, 번 카드 없음. 고정 덱 핸드는 복원 시에도 그 순서를 유지한다(`QaRestoreShuffler`)

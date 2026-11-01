@@ -13,6 +13,7 @@
 | 동시성 | `docs/decisions/concurrency.md` |
 | 인증 | `docs/decisions/auth.md` |
 | 홀덤 하우스 룰 | `docs/decisions/holdem-house-rules.md` |
+| 홀덤 구현 | `docs/decisions/holdem.md` |
 
 ## 하지 않기로 한 것
 
