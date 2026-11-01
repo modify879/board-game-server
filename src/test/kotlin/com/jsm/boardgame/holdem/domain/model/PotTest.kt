@@ -158,4 +158,33 @@ class PotTest {
         val result = Pot.distribute(layout.pots, mapOf(1 to rank(HandCategory.PAIR, 5), 2 to rank(HandCategory.HIGH_CARD, 9)), listOf(1, 2, 3, 4))
         assertEquals(c(2400), result.total())
     }
+
+    @Test
+    fun `투입액이 하나도 없으면 팟도 언콜드도 없다`() {
+        val layout = Pot.layout(emptyMap(), folded = emptySet())
+
+        assertEquals(emptyList(), layout.pots)
+        assertNull(layout.uncalledSeatNo)
+        assertEquals(Chips.ZERO, layout.uncalledAmount)
+    }
+
+    @Test
+    fun `최대 투입액이 동률이면 언콜드 반환 없이 전부 팟에 쌓인다`() {
+        val layout = Pot.layout(mapOf(1 to c(1000), 2 to c(1000), 3 to c(500)), folded = emptySet())
+
+        assertNull(layout.uncalledSeatNo)
+        assertEquals(Chips.ZERO, layout.uncalledAmount)
+        assertEquals(listOf(SidePot(c(1500), setOf(1, 2, 3)), SidePot(c(1000), setOf(1, 2))), layout.pots)
+    }
+
+    @Test
+    fun `나머지 칩은 좌석 번호가 아니라 버튼 기준 순서의 첫 승자에게 간다`() {
+        val pot = SidePot(c(2500), setOf(1, 8))
+        val ranks = mapOf(1 to rank(HandCategory.PAIR, 10), 8 to rank(HandCategory.PAIR, 10))
+
+        val result = Pot.distribute(listOf(pot), ranks, seatOrderFromButton = listOf(8, 9, 1))
+
+        assertEquals(c(1300), result[8])
+        assertEquals(c(1200), result[1])
+    }
 }

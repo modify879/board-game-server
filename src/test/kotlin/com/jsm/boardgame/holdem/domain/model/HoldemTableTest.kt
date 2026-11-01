@@ -633,4 +633,68 @@ class HoldemTableTest {
         assertEquals(listOf(UserId(1L), UserId(3L)), stoodUp.map { it.userId })
         assertEquals(listOf(2, 4, 5), table.occupiedSeats().map { it.seatNo })
     }
+
+    @Test
+    fun `앉은 적 없는 사용자의 퇴장 예약 설정과 취소와 칩 추가 예약 적용은 NOT_SEATED 로 거부된다`() {
+        val table = newTable()
+        table.sitDown(userId = UserId(1L), buyIn = Chips.of(10_000))
+
+        assertEquals(HoldemErrorCode.NOT_SEATED, assertFailsWith<NotSeatedException> { table.reserveLeave(UserId(9L), LeaveReservation.LEAVE) }.errorCode)
+        assertEquals(HoldemErrorCode.NOT_SEATED, assertFailsWith<NotSeatedException> { table.cancelLeaveReservation(UserId(9L)) }.errorCode)
+        assertEquals(HoldemErrorCode.NOT_SEATED, assertFailsWith<NotSeatedException> { table.applyChipsReservation(UserId(9L), Chips.of(5_000)) }.errorCode)
+    }
+
+    @Test
+    fun `퇴장 예약은 덮어쓰고 취소하며 취소할 예약이 없어도 아무 일이 없다`() {
+        val table = newTable()
+        table.sitDown(userId = UserId(1L), buyIn = Chips.of(10_000))
+
+        table.cancelLeaveReservation(UserId(1L))
+        assertNull(table.seatAt(1)!!.leaveReservation)
+
+        table.reserveLeave(UserId(1L), LeaveReservation.SPECTATE)
+        table.reserveLeave(UserId(1L), LeaveReservation.LEAVE)
+        assertEquals(LeaveReservation.LEAVE, table.seatAt(1)!!.leaveReservation)
+
+        table.cancelLeaveReservation(UserId(1L))
+        assertNull(table.seatAt(1)!!.leaveReservation)
+    }
+
+    @Test
+    fun `칩 추가 예약이 없으면 적용은 0 을 돌려주고 스택을 바꾸지 않는다`() {
+        val table = newTable()
+        table.sitDown(userId = UserId(1L), buyIn = Chips.of(10_000))
+
+        assertEquals(Chips.ZERO, table.applyChipsReservation(UserId(1L), Chips.of(50_000)))
+        assertEquals(Chips.of(10_000), table.seatAt(1)!!.stack)
+    }
+
+    @Test
+    fun `헤즈업 뒤 3인이 되어 직전 BB 가 가장 작은 좌석이면 버튼은 가장 큰 좌석으로 한 바퀴 돈다`() {
+        val table = newTable()
+        table.advanceBlinds(setOf(1, 5)) // 버튼·SB 1, BB 5
+        table.advanceBlinds(setOf(1, 5)) // 버튼·SB 5, BB 1
+
+        val positions = table.advanceBlinds(setOf(1, 5, 7))
+
+        assertEquals(HoldemTable.HandPositions(buttonSeatNo = 7, smallBlindSeatNo = 1, bigBlindSeatNo = 5), positions)
+        assertEquals(7, table.buttonSeatNo)
+    }
+
+    @Test
+    fun `직전 SB 가 새 BB 로 오고 직전 BB 가 가장 작은 좌석이면 버튼은 가장 큰 좌석으로 한 바퀴 돈다`() {
+        val table = HoldemTable.reconstitute(
+            id = TableId(1L),
+            name = "t",
+            policy = TestTablePolicy,
+            buttonSeatNo = 3,
+            seats = emptyMap(),
+            smallBlindSeatNo = 5,
+            bigBlindSeatNo = 1,
+        )
+
+        val positions = table.advanceBlinds(setOf(1, 5, 6))
+
+        assertEquals(HoldemTable.HandPositions(buttonSeatNo = 6, smallBlindSeatNo = 1, bigBlindSeatNo = 5), positions)
+    }
 }

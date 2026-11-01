@@ -668,4 +668,70 @@ class HandTest {
         assertEquals(chips(200), result.pots.fold(Chips.ZERO) { acc, p -> acc + p.amount })
         assertEquals(chips(10_100), hand.stackOf(1) + hand.stackOf(2))
     }
+
+    private fun threeHanded(shuffler: Shuffler = identityShuffler) =
+        Hand.start(stacksOf(1 to 10_000, 2 to 10_000, 3 to 10_000), buttonSeatNo = 1, smallBlindSeatNo = 2, bigBlindSeatNo = 3, chips(100), chips(200), shuffler)
+
+    @Test
+    fun `폴드한 참가 좌석만 이탈로 기록할 수 있고 행동 중인 좌석과 참가하지 않은 좌석은 DEPARTURE_NOT_FOLDED 다`() {
+        val hand = threeHanded()
+        hand.act(1, BettingAction.Fold)
+
+        hand.recordDeparture(1, UserId(11L))
+        assertEquals(mapOf(1 to UserId(11L)), hand.departedUserIds)
+
+        val active = assertFailsWith<IllegalHandStateException> { hand.recordDeparture(2, UserId(12L)) }
+        assertEquals(HoldemErrorCode.DEPARTURE_NOT_FOLDED, active.errorCode)
+        val outsider = assertFailsWith<IllegalHandStateException> { hand.recordDeparture(9, UserId(19L)) }
+        assertEquals(HoldemErrorCode.DEPARTURE_NOT_FOLDED, outsider.errorCode)
+        assertEquals(setOf(1), hand.departedUserIds.keys)
+    }
+
+    @Test
+    fun `런아웃 중이 아니면 공개 좌석이 없고 런아웃 중에는 폴드한 좌석을 뺀 좌석만 공개된다`() {
+        val hand = threeHanded()
+        assertEquals(emptySet(), hand.revealedSeatNos)
+
+        hand.act(1, BettingAction.Fold)
+        hand.act(2, BettingAction.RaiseTo(chips(10_000)))
+        hand.act(3, BettingAction.Call)
+
+        assertTrue(hand.isRunningOut)
+        assertEquals(setOf(2, 3), hand.revealedSeatNos)
+    }
+
+    @Test
+    fun `끝난 핸드는 어느 좌석이든 availableActionsFor 가 null 이다`() {
+        val hand = threeHanded()
+        hand.act(1, BettingAction.Fold)
+        hand.act(2, BettingAction.Fold)
+        assertTrue(hand.isFinished)
+
+        assertEquals(null, hand.availableActionsFor(3))
+    }
+
+    @Test
+    fun `currentRankOf 는 홀카드가 없는 좌석이면 null 이고 있는 좌석이면 프리플랍 2장 기준 족보다`() {
+        // 딜 순서(버튼 1 다음인 2 부터): seat2=Kh,Kd  seat3=Ah,Ad  seat1=Qh,Qd
+        val hand = threeHanded(fixedShuffler("Kh", "Ah", "Qh", "Kd", "Ad", "Qd"))
+
+        assertEquals(null, hand.currentRankOf(9))
+        assertEquals(HandCategory.PAIR, hand.currentRankOf(2)!!.category)
+    }
+
+    @Test
+    fun `쇼다운 공개 순서의 시작점은 마지막 공격자이고 그 좌석이 폴드했으면 버튼 다음 좌석부터다`() {
+        fun showdownOrderWithLeader(leader: Int): List<Int> {
+            val hand = threeHanded()
+            hand.act(1, BettingAction.Fold)
+            hand.act(2, BettingAction.RaiseTo(chips(10_000)))
+            hand.act(3, BettingAction.Call)
+            val restored = Hand.reconstitute(hand.snapshot().copy(showdownLeaderSeatNo = leader), identityShuffler)
+            while (!restored.isFinished) restored.advanceRunout()
+            return restored.result!!.showdownOrder
+        }
+
+        assertEquals(listOf(3, 2), showdownOrderWithLeader(3))
+        assertEquals(listOf(2, 3), showdownOrderWithLeader(1)) // 1 은 폴드해 라이브가 아니다
+    }
 }
