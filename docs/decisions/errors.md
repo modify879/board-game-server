@@ -1,10 +1,7 @@
 ## 예외와 오류 계약
 
 ### 예외를 계층별로 두고 에러 코드는 컨텍스트당 하나인 이유
-도메인 불변식 위반이 domain 예외라는 데는 문헌상 이견이 없다
-(MS Learn: *"invariants enforcement is the responsibility of the domain entities"*).
-`presentation` 이 자기 예외를 갖는 것도 같다 — *"that model is meant to be a ViewModel or DTO
-and that's an MVC or API concern **not a domain model concern**."*
+도메인 불변식 위반이 domain 예외라는 데, `presentation` 이 자기 예외를 갖는 데는 문헌상 이견이 없다(MS Learn, DDD 아키텍처 가이드).
 
 반면 에러 코드까지 계층별로 쪼개면 **클라이언트가 보는 계약이 패키지 구조를 따라 흔들린다.**
 예외를 한 계층 옮기는 리팩터링이 API 변경이 되어선 안 된다.

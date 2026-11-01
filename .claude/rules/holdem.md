@@ -6,6 +6,8 @@ paths: ["**/holdem/**"]
 
 목표 규칙(하우스 룰)은 `docs/decisions/holdem-house-rules.md` — 이 파일은 구현된 동작을 적는다. 바꿀 때는 하우스 룰 문서와 맞춘다.
 
+패키지 하위 구성 예시 — `presentation/ws/`: `config/` `payload/` `assembler/` `broadcast/` `subscription/`(목적지 상수 `HoldemDestinations` 는 `ws/` 바로 아래). `infrastructure/`: `timer/` `event/` `job/` `retry/` `config/` `executor/` `queue/` `memory/` `recovery/` `shuffle/` `stomp/`.
+
 ## 이 컨텍스트에서만 지킬 것
 
 - **브로드캐스트 페이로드 타입에 홀카드를 담을 필드를 두지 않는다.** 예외는 둘뿐이다 — `ShownHandView` 는
@@ -33,23 +35,19 @@ paths: ["**/holdem/**"]
 - **턴 타이머와 연결 타이머는 상수를 공유하지 않는다.** 재는 대상(차례 무응답 vs
   자리만 차지하고 사라짐)과 만료 동작(폴드 vs 퇴장)이 다르다. 연결 타이머 만료 시 핸드가 진행 중이면 퇴장시키지 않고 감시를 다시 건다
 - **관전은 공개 토픽 구독이다. 서버에 관전자 상태를 두지 않는다.** `/topic/tables/{id}` 는 인증된
-  사용자면 누구나, `/user/queue/tables/{id}` 는 **그 테이블 착석자만** 구독할 수 있다(아니면 SUBSCRIBE 를 조용히 버린다 — WARN, 연결 유지).
+  사용자면 누구나, `/user/queue/tables/{id}` 는 **그 테이블 착석자만** 구독할 수 있다(`websocket.md`).
   공개 토픽이 안전한 이유는 `TablePublicView` 에 (`ShownHandView`·`RevealedHandView` 를 빼면) 홀카드를 담을 필드가 없기 때문이다 —
   **그 예외 밖에서 카드 성격의 필드를 추가하는 순간 관전이 곧 정보 유출이 된다**
 - **올인으로 더 베팅할 수 없으면 남은 보드를 한 번에 깔지 않는다.** `RunoutTimer` 가 `runout-step-delay` 간격으로 한 스트리트씩
   진행한다 — 공개 → 플랍/턴/리버 → 쇼다운 순(사용자 결정)
 - **QA 덱 고정 API(`POST /api/admin/qa/holdem/tables/{tableId}/next-deck`, ADMIN, qa 프로필에서만)** 는 다음 핸드 한 번만 덱을 지정한다(`QaNewHandShuffler`). 딜 순서는 버튼 다음 참가 좌석부터 두 바퀴, 번 카드 없음. 고정 덱으로 시작한 핸드는 복원 시에도 그 순서를 유지한다(`QaRestoreShuffler`).
 - **"핸드가 진행 중인가" 는 `Hand?.isInProgress`(핸드가 있고 결과가 없다) / `HandStore.findInProgress` 하나로 묻는다.** 핸드 객체 자체가 필요하거나 "저장된 핸드가 있는가"를 묻는 곳(중복 시작 방지 `StartScheduledHandService`, 재기동 복구 `HandRecovery`, 정산·액션)은 `find` 를 쓴다. 판단 지점마다 `find != null` 과 `!isFinished` 를 따로 쓰지 않는다
-- **퇴장 예약(핸드 뒤 일어나기, 하우스 룰 13)은 DB 에 저장한다.** `DELETE /api/holdem/seat` 가 핸드 중이면(그 좌석이 핸드 참가자일 때만 — 핸드 도중 앉아 참가하지 않은 좌석은 핸드와 무관하므로 즉시 기립 204) `HandInProgressException` 대신 좌석의 `leaveReserved`(`holdem_seats.leave_after_hand`)를
-  켜고 **202**(멱등), 핸드가 없으면 즉시 기립 204. 실행은 `LeaveReservations.standUpAll` — `HandSettler.settle`(0칩 기립 뒤, 후보 수 판단·`JoinRequestsDue` 앞)과
+- **퇴장 예약(핸드 뒤 일어나기, 하우스 룰 13)은 DB 에 저장한다**(`holdem_seats.leave_after_hand`·`leave_reservation`). 핸드 참가 좌석이 핸드 중에 떠나면 `HandInProgressException` 대신 예약만 걸고,
+  핸드 도중 앉아 참가하지 않은 좌석은 핸드와 무관하므로 즉시 기립한다. 실행은 `LeaveReservations.standUpAll` — `HandSettler.settle`(0칩 기립 뒤, 후보 수 판단·`JoinRequestsDue` 앞)과
   `CancelHandService` 가 부른다. StandUpService 와 같이 재착석 의무 기록·지갑 환급을 한다. 좌석이 어떤 이유로든 사라지면 예약도 함께 사라진다.
-  예약에는 종류가 있다 — `DELETE /api/holdem/seat?after=SPECTATE|LEAVE`(기본 SPECTATE, 잘못된 값은 400 `REQUEST_INVALID`). 서버 실행은 종류와 무관하고 클라이언트가 기립 뒤 행동(관전 유지 / 방 목록 이동)을 정하는 데만 쓴다.
-  같은 종류 재요청은 브로드캐스트 없는 멱등이고, 다른 종류는 202 를 유지한 채 종류만 바꿔 브로드캐스트한다(개인 뷰 갱신). 개인 뷰 `SeatPrivateView.leaveReservation`(null | "SPECTATE" | "LEAVE")으로 재접속 뒤에도 노출하고 공개 뷰는 `leaveReserved` 불리언 그대로다.
-  종류는 `holdem_seats.leave_reservation`(nullable)에 저장하며 `leave_after_hand` 도 함께 쓴다. 종류가 생기기 전의 행(`leave_after_hand=true`, 종류 null)은 SPECTATE 로 복원한다
-- 개인 뷰는 모든 브로드캐스트·구독 스냅샷마다 그 테이블의 착석자 전원에게 간다. 핸드에 묶인 필드(`holeCards`·`currentHand`·`availableActions`)는 `SeatPrivateView.hand`(`PrivateHandView`) 아래에 있고 `null` = 핸드 없음 / 이번 핸드에 참가하지 않음이다. 끝난 핸드도 참가 좌석에는 그대로 실린다(`availableActions` 만 null). 이는 금지된 "마스킹으로 비우는 nullable 홀카드" 가 아니다 — 개인 큐에는 주인 본인의 데이터만 흐른다. 공개 뷰에 대한 규칙 6의 컴파일러 보장은 그대로다.
-- 공개 뷰 좌석 `status` 는 핸드 참가 좌석이면 핸드 안의 상태, 아니면 `NOT_IN_HAND`(핸드 없을 때 포함 — sit-out 은 없다). BB 를 기다리는 중이면 `awaitingBigBlind=true`.
+  종류(SPECTATE|LEAVE)는 클라이언트가 기립 뒤 행동을 정하는 데만 쓰고 서버 실행과 무관하다. 종류가 생기기 전의 행(`leave_after_hand=true`, 종류 null)은 SPECTATE 로 복원한다
+- 개인 뷰는 모든 브로드캐스트·구독 스냅샷마다 착석자 전원에게 간다. 핸드에 묶인 필드는 `SeatPrivateView.hand`(`PrivateHandView`) 아래에 있고 `null` = 핸드 없음 / 이번 핸드 비참가다. 이는 금지된 "마스킹으로 비우는 nullable 홀카드" 가 아니다 — 개인 큐에는 주인 본인의 데이터만 흐른다. 공개 뷰에 대한 규칙 6의 컴파일러 보장은 그대로다.
 - 연결 상태(`presence`)가 실제로 바뀌면 `UpdateSeatPresenceService` 가 표시 전용(`handProgressed=false`) 브로드캐스트를 낸다.
-- 개인 뷰 `SeatPrivateView.hand.currentHand`({category: HandCategory 이름, tiebreakers: Rank 값, 비교 우선순위 순} | 홀카드가 없으면 null)는 홀카드 + 보드의 현재 족보다. 프리플랍은 2장 기준이라 PAIR/HIGH_CARD 만 나온다. 공개·브로드캐스트 뷰에는 싣지 않는다.
 - **BB 대기 규칙은 판을 굶겨 죽이지 않는다.** 후보(스택 양수 점유 좌석)가 2명 이상인데 대기를
   빼면 2명 미만이면, 전원의 대기를 풀고 참가시킨다. 없으면 영구 데드락이다 — 참가자 부족 예외가
   `@Transactional` 을 롤백해 블라인드 전진과 플래그 해제가 취소되고, 다음 호출도 같은 상태라 영원히 실패한다.
@@ -85,17 +83,10 @@ paths: ["**/holdem/**"]
 - **`InMemoryJoinQueue` 는 락 하나로 모든 테이블을 직렬화한다.** 락 안은 작은 메모리 작업뿐이고 지갑 I/O·DB 저장은 락 밖(`AdmitJoinRequestService`)에서 한다. 이 락이 병목이 되면 그때 테이블별로 쪼갠다
 - **만료 폴드한 좌석은 판 도중 즉시 기립시킨다**(하우스 룰 2) — 스택이 더 변하지 않으므로 그 자리에서 정산하고,
   그 핸드가 끝날 때까지 그 좌석 번호에는 앉을 수 없다(정산이 새 착석자를 덮어쓴다)
-- **바이인 자동 합산은 없다.** 지갑에 들어온 돈(충전 승인·출금 취소/반려·관리자 증액)은 지갑에만 남고
-  `WalletCredited` 를 듣는 쪽은 holdem 에 없다. 스택에 넣는 길은 두 가지뿐이다 — 착석 때의 바이인과 **칩 추가**(`AddChipsService`:
-  핸드 중에 그 핸드의 참가자가 부르면 바로 더하지 않고 좌석의 `chipsReservation`(`holdem_seats.chips_reservation`, 요청 금액)에 예약만 걸어 **202**(`AddChipsResult.RESERVED`, 덮어쓴다, 개인 뷰 `SeatPrivateView.chipsReservation`(Long|null, 핸드 밖에서도 실린다)으로 노출, 공개 뷰엔 없다).
-  예약 때는 단위·양수만 본다(0 은 `CHIP_ADD_OUT_OF_RANGE`) — 한도·잔액은 적용 때 본다. 핸드가 없거나 핸드 도중 앉아 참가하지 않은 좌석은 즉시 더하고 204.
-  취소는 `DELETE /api/holdem/seat/chips-reservation`(204, 멱등, 미착석 404). 적용은 `HandSettler.settle`·`CancelHandService` 가 `JoinRequestsDue` **앞에** 발행하는 `ChipsReservationsDue` 를
-  `ChipsReservationsProcessor` 가 커밋 후 테이블 실행기에 올려 `ApplyChipsReservationsService`(트랜잭션 없음) → 좌석마다 `SeatChipsReservationApplier`(REQUIRES_NEW)로 돈다 — 지갑 실패가 정산을 롤백하지 않게.
-  적용액 = min(요청, 최대 스택 − 핸드 끝 스택, 지갑 잔액)을 100 단위로 내림(0 이면 이체 없이 예약만 지운다). 예약이 있는 0칩 좌석은 0칩 자동 기립(`HoldemTable.standUpBusted`)이 건너뛰어 적용을 기다린다(퇴장 예약이 함께 있으면 퇴장이 이기고 예약은 좌석과 함께 사라진다).
-  적용 뒤에도 0칩이면 기립(지갑 없이, 재착석 의무 0), 기립하지 않았고(적용액이 0 이어도) 후보가 2명 이상이면 카운트다운을 다시 센다. 좌석 적용이 던지면 예약을 버리고(0칩이면 기립) 넘어간다(버리기마저 실패하면 `ApplyChipsReservationsService` 가 ERROR 로그를 남기고 다음 좌석으로 계속한다) — 0칩 좌석이 영영 앉아 있지 않게. 부팅 시 `HandRecovery` 가 핸드 없는 테이블의 남은 예약 적용을 다시 올린다.
-  결과 스택이 테이블 정책의 최대 바이인(기본 100BB)을 넘으면 `CHIP_ADD_OUT_OF_RANGE`, 테이블 실행기 안에서 지갑 이체를 먼저 하고 `tables.save` 한 뒤 공개 뷰를 브로드캐스트).
-  범위는 `HoldemTable.buyInRange(obligation)` 하나가 정한다 — 도메인 `sitDown` 은 하한만 보고 상한은 `SeatRequester` 가 본다. 잔액이 바이인보다 적으면
-  `INSUFFICIENT_BALANCE`(wallet 과 같은 코드 문자열 — 클라이언트가 하나만 처리한다). 대기열 항목(`JoinQueueEntry`)이 고른 금액을 들고 있고
+- **바이인 자동 합산은 없다.** 지갑에 들어온 돈(충전 승인·출금 취소/반려·관리자 증액)은 지갑에만 남고 `WalletCredited` 를 듣는 쪽은 holdem 에 없다.
+  스택에 넣는 길은 착석 때의 바이인과 **칩 추가**(`AddChipsService`) 둘뿐이다. 칩 추가는 핸드 중이면 좌석의 `chipsReservation` 에 예약만 걸고, 적용은 정산 뒤(`ChipsReservationsDue`, `JoinRequestsDue` 앞) 좌석마다 `SeatChipsReservationApplier`(`REQUIRES_NEW`) — 지갑 실패가 정산을 롤백하지 않게.
+  적용이 던지면 예약을 버리고(0칩이면 기립) 넘어간다 — 0칩 좌석이 영영 앉아 있지 않게. 퇴장 예약이 함께 있으면 퇴장이 이긴다. 부팅 시 `HandRecovery` 가 남은 예약 적용을 다시 올린다.
+  범위는 `HoldemTable.buyInRange(obligation)` 하나가 정한다 — 도메인 `sitDown` 은 하한만 보고 상한은 `SeatRequester` 가 본다. 잔액 부족은 wallet 과 같은 코드 `INSUFFICIENT_BALANCE`(클라이언트가 하나만 처리한다). 대기열 항목(`JoinQueueEntry`)이 고른 금액을 들고 있고
   `AdmitJoinRequestService` 가 정확히 그만큼만 `WalletTransfer.toGame` 으로 옮긴다
 - **재착석 의무(ratholing 방지, 하우스 룰 7)**: `RecentDepartures` 는 `holdem_recent_departure` 에 사용자당 1행으로 저장한다 — 기립과 같은 트랜잭션에 커밋되고,
   만료된 행은 지우지 않고 읽을 때 무시한다. 기립(`StandUpService`)·만료 폴드 기립(`ExpireTurnService`)은 돌려받은 금액을, 0칩 자동 기립(`HandSettler`)은 0(이전 의무를 지운다)을 덮어쓴다.

@@ -14,14 +14,14 @@
 ### 컨텍스트마다 `UserId` 를 따로 두는 이유
 `user` 의 `UserId` 를 공유하는 공유 커널은 규칙 1 위반이고 Common 창고가 되기 쉽다. 반면 원시 `Long` 은 userId 와 tableId 를
 바꿔 넣어도 컴파일러가 못 잡는다. Wlaschin "Designing with types"(감싸서 쓰고 경계에서 푼다)·jMolecules `Identifier` 와 같은 방향이다.
-경계(Command·DTO·JPA·조회·컨텍스트 간 이벤트)는 원시 타입으로 둔다 — 아래 절과 같은 이유다.
+경계(Command·DTO·JPA·조회·컨텍스트 간 이벤트)는 원시 타입으로 둔다(아래 검증 절).
 
 
-## value class 는 경계에서도 동작한다 — 그래도 경계는 원시 타입
+### value class 는 경계에서도 동작한다 — 그래도 경계는 원시 타입
 
 검증일 2026-10 · Spring Boot 4.1 / Jackson 3.1.5 + jackson-module-kotlin / Hibernate 7
 
 - `@PathVariable`·`@RequestParam` 이 `@JvmInline value class` 로 바인딩된다.
 - Jackson 3 + kotlin 모듈이 요청 본문을 역직렬화하고, 응답을 `{"id":1}` 처럼 감싸지 않고 직렬화한다 (`ValueClassBindingIntegrationTest` 가 못 박는다).
 - Hibernate 7 은 value class 필드를 필드 접근으로 bigint 컬럼에 저장·조회한다. 단 주 생성자 파라미터(기본값 포함)로 두면 `InstantiationException: No default constructor` — 본문 프로퍼티로 둬야 한다. 프로퍼티 접근은 getter 이름이 맹글링되어 검증하지 않았다.
-- 그래도 경계(Command·DTO·JPA 엔티티)는 원시 타입으로 둔다: 규칙 2·3 과 Command 규칙 때문이며, 기술적 제약 때문이 아니다.
+- 그래도 경계는 원시 타입이다 — 규칙 2·3 과 Command 규칙 때문이며 기술적 제약 때문이 아니다.

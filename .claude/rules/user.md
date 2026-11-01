@@ -25,5 +25,6 @@ paths: ["**/user/**"]
 - 마지막 관리자의 자기 강등을 막지 않는다(사용자 결정)
 - **사용자를 바꾸는 명령은 전부 `findByIdForUpdate` 로 읽고 같은 짧은 트랜잭션에서 `save` 한다.** 트랜잭션 밖에서 읽은 `User` 를 저장하지 않는다 — `save` 는 행 전체를 덮어써
   그사이 커밋된 변경(새 비밀번호, 탈퇴)을 되돌린다. 해싱·Redis·파일은 트랜잭션 밖. 근거는 `docs/decisions/concurrency.md` "사용자 행도 비관적 락"
+- **DB 를 쓰는 서비스는 바깥 `@Transactional` 없이 `TransactionOperations` 짧은 트랜잭션을 쓰고, 외부 I/O(해싱·Redis·파일)는 트랜잭션 밖에서 한다.** `ChangeNicknameService` 처럼 외부 I/O 가 없으면 클래스 단위 `@Transactional` 이다. fail-closed 순서는 각 서비스 KDoc
 - 탈퇴의 사전 조건과 저장은 트랜잭션 하나다(`WithdrawService`, `TransactionOperations`). 안에서 **지갑 락(`WalletHoldings`) → 좌석·대기열 확인 → 사용자 행 락 재조회(해시가 확인한 것과 다르면 `CURRENT_PASSWORD_MISMATCH`) → 저장** 순서를 지킨다.
   좌석 확인을 락 앞으로 옮기면 그 사이 커밋된 착석을 놓쳐 앉은 채 탈퇴된다(`WithdrawConcurrencyIntegrationTest`). 세션 종료는 커밋 뒤다

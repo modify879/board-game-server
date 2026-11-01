@@ -15,10 +15,10 @@ PostgreSQL + Redis / 단일 Gradle 모듈.
 ./gradlew bootRun --args='--spring.profiles.active=qa'   # QA 서버 :8081 (별도 DB, 덱 고정 API)
 ```
 
-서버가 떠 있는 트리에서는 빌드하지 않는다 — bootRun 은 build/classes 를 그대로 읽어, 실행 중에 바뀌면 아직 로드되지 않은 클래스가 새 버전으로 섞인다. DevTools 는 쓰지 않는다(오래 떠 있는 서버를 승인 없이 재시작시키고, 개발용 기본값으로 오류 응답 형태를 바꾼다).
+서버가 떠 있는 트리에서는 빌드하지 않는다 — bootRun 은 build/classes 를 그대로 읽어, 실행 중에 바뀌면 아직 로드되지 않은 클래스가 새 버전으로 섞인다. DevTools 는 쓰지 않는다(이유: `docs/decisions/README.md`).
 
 qa 프로필은 `app_environment` 표식이 `qa` 인 DB 에서만 기동한다(`QaProfileGuard`). 표식은 compose-qa 초기화 SQL 이 만든다.
-`GET /api/server-info` 는 인증 없이 열려 있고 가드를 통과한 QA 서버만 `environment=qa` 를 돌려준다. qa 프로필에서만 QA 덱 고정 API(`POST /api/admin/qa/holdem/tables/{tableId}/next-deck`, ADMIN)가 켜진다.
+`GET /api/server-info` 는 인증 없이 열려 있고 가드를 통과한 QA 서버만 `environment=qa` 를 돌려준다.
 
 Docker 가 떠 있어야 한다. 접속 정보는 `application.yaml` 에 적지 않는다 — Compose 지원이 연결한다.
 
@@ -42,8 +42,7 @@ com.jsm.boardgame
 
 - **한 패키지에 역할이 섞이면 가른다. 크기는 기준이 아니다.** 파일 1개짜리 하위 패키지도 그대로 둔다
 - `domain/model` 처럼 패키지명이 이미 역할인 곳은 더 가르지 않는다
-- `presentation/ws/` 하위도 역할 이름으로 만든다(holdem: `config/` `payload/` `assembler/` `broadcast/` `subscription/`, 목적지 상수 `HoldemDestinations` 는 `ws/` 바로 아래)
-- `infrastructure/` 의 위 셋은 최소 형태다. DB·보안·타 컨텍스트가 아닌 기술 어댑터는 역할 이름으로 하위 패키지를 만든다(holdem: `timer/` `event/` `job/` `retry/` `config/` `executor/` `queue/` `memory/` `recovery/` `shuffle/` `stomp/`)
+- `presentation/ws/`·`infrastructure/` 도 같다 — `infrastructure/` 의 persistence·security·acl 은 최소 형태이고, 그 밖의 기술 어댑터는 역할 이름으로 하위 패키지를 만든다(holdem 예시는 `.claude/rules/holdem.md`)
 - 계층 이름은 `domain`/`application`/`infrastructure`/`presentation`. `interfaces` 는 쓰지 않는다
 - 새 게임은 최상위에 자기 컨텍스트를 갖는다(`com.jsm.boardgame.<game>`). `game/` 같은 상위 묶음 금지
 
@@ -57,8 +56,7 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 
 - `domain` 은 `common/error` 외에 아무것도 의존하지 않는다
 - **`application`·`domain` 은 `infrastructure` 를 참조하지 않는다. 예외 없다**
-- `infrastructure` 는 `domain` 과 `application` 을 둘 다 참조한다 — 어댑터가 자기가 구현하는
-  포트를 import 하는 것이라 정상이다. 금지는 반대 방향 하나뿐이다
+- 금지는 안쪽이 바깥을 아는 방향 하나뿐이다 — `infrastructure` 가 `domain`·`application` 을 참조하는 건 정상(`docs/decisions/layers-and-ports.md`)
 - 컨텍스트끼리 서로의 `domain`·`infrastructure` 를 참조하지 않는다.
   필요하면 부르는 쪽이 포트를 소유하고 `infrastructure/acl/` 의 어댑터가 상대의
   공개 `application` 만 부른다(`wallet/application/port/UserExistence`).
@@ -66,17 +64,15 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 
 ## 바운디드 컨텍스트
 
-| 컨텍스트 | 상태 | 책임 |
-|---|---|---|
-| `user` | 구현됨 | 사용자, 인증, 세션, 역할, 계정 잠금 |
-| `wallet` | 구현됨 | 잔액·원장, 충전/환전 요청, 관리자 승인·반려·조정 |
-| `holdem` | 구현됨 | 텍사스 홀덤 캐시게임 |
+| 컨텍스트 | 책임 |
+|---|---|
+| `user` | 사용자, 인증, 세션, 역할, 계정 잠금 |
+| `wallet` | 잔액·원장, 충전/환전 요청, 관리자 승인·반려·조정 |
+| `holdem` | 텍사스 홀덤 캐시게임 |
 
 `user` 가 참조 구현이다. 새 컨텍스트는 그 파일 배치를 그대로 따른다.
 
-컨텍스트 전용 규칙은 `.claude/rules/<context>.md` 에 있고 그 컨텍스트 파일을 건드릴 때만 로드된다(`holdem`·`wallet`·`user`).
-
-주제별 규칙은 `.claude/rules/` 의 `testing`·`websocket`·`errors`·`persistence`·`transactions`·`domain-model` 에 있고, 해당 경로 파일을 읽거나 고칠 때만 로드된다.
+컨텍스트·주제별 규칙은 `.claude/rules/*.md` 에 있고 해당 경로 파일을 읽거나 고칠 때만 로드된다.
 
 ## 규칙
 
@@ -125,9 +121,7 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
 
 `master`(배포·태그) ← `release/*` ← `develop` ← `feature/*`. `hotfix/*` 는 `master` 에서 분기해 양쪽에 병합.
 
-- `master`·`develop` 에 직접 커밋하지 않는다
-- **첫 편집 전에 `feature/` 브랜치부터 만든다** — 문서 한 줄도 예외 없다. 커밋할 때 만드는 건 위반이다
-- 작업 브랜치는 **항상 `feature/` 로 시작한다** — 버그 수정·리팩터링·테스트·문서 작업도 예외 없다(`fix/`·`chore/`·`test/`·`docs/` 브랜치를 만들지 않는다). 그 뒤에 컨텍스트 접두를 붙인다(`feature/user-signup`, `feature/holdem-view-seq`)
+- `master`·`develop` 에 직접 커밋하지 않는다. **첫 편집 전에 `feature/` 브랜치부터 만든다** — 문서 한 줄도 예외 없다.
+  작업 브랜치는 항상 `feature/<컨텍스트>-<주제>` 다(`fix/`·`chore/`·`docs/` 등 금지, `feature/holdem-view-seq`)
 - 커밋은 Conventional Commits + 컨텍스트 스코프(`fix(holdem): ...`) — 작업 성격은 브랜치가 아니라 커밋 타입으로 드러낸다
-- `feature/*` → `develop` 은 `git merge --no-ff` 로 합친다
-- 충돌이 나면 `develop` 에서 해결하지 않는다 — feature 브랜치에 `develop` 을 먼저 합쳐 거기서 풀고 테스트한 뒤 병합한다
+- `feature/*` → `develop` 은 `git merge --no-ff`. 충돌은 `develop` 에서 풀지 않는다 — feature 에 `develop` 을 먼저 합쳐 거기서 풀고 테스트한 뒤 병합한다
