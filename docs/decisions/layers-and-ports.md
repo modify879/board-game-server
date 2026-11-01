@@ -19,14 +19,11 @@ DDD 전통(Evans)은 Repository 를 domain 에, BuckPal 은 모든 출력 포트
 ### `infrastructure` 가 `application` 을 참조해도 되는 이유
 의존성 규칙이 금지하는 것은 **안쪽이 바깥쪽을 아는 것** 하나뿐이다.
 
-> "source code dependencies can only point inwards. Nothing in an inner circle can know
-> anything at all about something in an outer circle." — Uncle Bob, *The Clean Architecture*
+출처: Uncle Bob, *The Clean Architecture* — 소스 의존은 안쪽으로만 향한다.
 
 `presentation` 과 `infrastructure` 는 둘 다 바깥 원이다. 어댑터가 자기가 구현하는 포트를
 import 하는 것은 규칙 위반이 아니라 **의존성 역전이 작동하는 방식 자체**다.
-BuckPal 의 ArchUnit 규칙이 검사하는 것도 `applicationLayer.doesNotDependOn(adapters)`,
-`domainDoesNotDependOnAdapters()`, `adapters.dontDependOnEachOther()` 셋뿐이고
-`adapter → application` 을 금지하는 규칙은 **없다**.
+BuckPal 의 ArchUnit 규칙에도 `adapter → application` 을 금지하는 규칙은 **없다**.
 
 이 저장소가 포트를 종류별로 나눠 두므로 어댑터의 참조 대상도 양쪽으로 갈린다.
 **포트를 어디 두느냐가 어댑터가 무엇을 import 하는지를 정한다.**
