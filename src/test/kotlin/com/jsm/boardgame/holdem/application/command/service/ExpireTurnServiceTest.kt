@@ -171,5 +171,20 @@ class ExpireTurnServiceTest {
         val credited = walletTransfer.fromGameCalls.single().amount
         assertEquals(Chips.of(20_000), winnerStack + Chips.of(credited))
     }
-}
 
+    @Test
+    fun `폴드 시점에 좌석이 테이블에서 이미 사라졌으면 폴드만 기록하고 지갑과 의무는 건드리지 않는다`() {
+        val tableId = tableWithHand(1 to 10_000L, 2 to 10_000L, 3 to 10_000L)
+        val toAct = handStore.find(tableId)!!.toActSeatNo!!
+        val table = tables.findById(tableId)!!
+        table.standUp(UserId(toAct * 1000L))
+        tables.save(table)
+
+        service.expire(ExpireTurnCommand(tableId.value, toAct))
+
+        val hand = handStore.find(tableId)!!
+        assertEquals(SeatStatus.FOLDED, hand.statusOf(toAct))
+        assertEquals(0, walletTransfer.fromGameCalls.size)
+        assertEquals(emptyList(), departures.recorded)
+    }
+}

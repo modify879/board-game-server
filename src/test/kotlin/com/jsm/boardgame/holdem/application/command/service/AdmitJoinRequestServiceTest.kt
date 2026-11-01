@@ -7,6 +7,7 @@ import com.jsm.boardgame.holdem.domain.repository.FakeHandStore
 import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestCommand
 import com.jsm.boardgame.holdem.application.command.usecase.AdmitJoinRequestResult
+import com.jsm.boardgame.holdem.application.exception.TableNotFoundException
 import com.jsm.boardgame.holdem.application.port.FakeFoldWinnerCards
 import com.jsm.boardgame.holdem.application.port.WalletTransfer
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
@@ -198,5 +199,14 @@ class AdmitJoinRequestServiceTest {
         assertEquals(AdmitJoinRequestResult.Blocked, result)
         assertTrue(walletTransfer.toGameCalls.isEmpty())
     }
-}
 
+    @Test
+    fun `없는 테이블이면 TABLE_NOT_FOUND 이고 지갑을 부르지 않는다`() {
+        val e = assertFailsWith<TableNotFoundException> {
+            service.admit(AdmitJoinRequestCommand(999L, 9001L, postBlindImmediately = false, buyIn = 8_000))
+        }
+
+        assertEquals(HoldemErrorCode.TABLE_NOT_FOUND, e.errorCode)
+        assertTrue(walletTransfer.toGameCalls.isEmpty())
+    }
+}

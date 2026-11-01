@@ -136,4 +136,15 @@ class ShowHandServiceTest {
         val e = assertFailsWith<BusinessException> { service.show(ShowHandCommand(99, winnerUser.value)) }
         assertEquals(HoldemErrorCode.TABLE_NOT_FOUND, e.errorCode)
     }
+
+    @Test
+    fun `직전 핸드 결과가 없으면 SHOW_NOT_ALLOWED 이고 폴드 승자 카드와 히스토리는 그대로다`() {
+        foldWinnerCards.save(tableId, winner)
+
+        assertShowRejected(winnerUser.value, HoldemErrorCode.SHOW_NOT_ALLOWED)
+
+        assertEquals(winner, foldWinnerCards.find(tableId))
+        assertEquals(emptyList(), handHistory.shown)
+        assertEquals(emptyList(), events)
+    }
 }

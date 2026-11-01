@@ -6,7 +6,12 @@ import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
+import java.util.concurrent.AbstractExecutorService
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import org.springframework.transaction.TransactionDefinition
@@ -258,5 +263,63 @@ class SerialTableExecutorTest {
             }
         }
         assertTrue(caught is IllegalStateException)
+    }
+
+    /** 테이블 닫힘과 경합하는 제출 — 첫 제출은 거부되고 그 사이 닫힘이 실행기를 치운다. 비공개 맵에 거부하는 실행기를 심는다. */
+    @Suppress("UNCHECKED_CAST")
+    private fun plantRejectingExecutors(executor: SerialTableExecutor, tableId: TableId, removeOnReject: Boolean): AtomicInteger {
+        val field = SerialTableExecutor::class.java.getDeclaredField("executors").apply { isAccessible = true }
+        val map = field.get(executor) as ConcurrentHashMap<TableId, ExecutorService?>
+        val rejections = AtomicInteger()
+        map[tableId] = object : AbstractExecutorService() {
+            override fun execute(command: Runnable) {
+                rejections.incrementAndGet()
+                if (removeOnReject) map.remove(tableId)
+                throw RejectedExecutionException("shutdown")
+            }
+            override fun shutdown() {}
+            override fun shutdownNow(): MutableList<Runnable> = mutableListOf()
+            override fun isShutdown(): Boolean = true
+            override fun isTerminated(): Boolean = true
+            override fun awaitTermination(timeout: Long, unit: TimeUnit): Boolean = true
+        }
+        return rejections
+    }
+
+    @Test
+    fun `종료된 실행기에 제출해 거부되면 새 실행기로 한 번 다시 내서 작업이 실행된다`() {
+        val executor = SerialTableExecutor(SerialExecutorFakeHoldemTableRepository())
+        val tableId = TableId(1L)
+        val rejections = plantRejectingExecutors(executor, tableId, removeOnReject = true)
+
+        val name = executor.call(tableId) { Thread.currentThread().name }
+
+        assertEquals(1, rejections.get())
+        assertEquals("holdem-table-1", name)
+    }
+
+    @Test
+    fun `다시 낸 제출도 거부되면 더 재시도하지 않고 거부 예외를 던진다`() {
+        val executor = SerialTableExecutor(SerialExecutorFakeHoldemTableRepository())
+        val tableId = TableId(1L)
+        val rejections = plantRejectingExecutors(executor, tableId, removeOnReject = false)
+
+        assertFailsWith<RejectedExecutionException> { executor.call(tableId) { 1 } }
+
+        assertEquals(2, rejections.get())
+    }
+
+    @Test
+    fun `테이블이 닫히면 그 실행기는 종료되고 같은 테이블이 다시 열려도 새 스레드에서 돈다`() {
+        val executor = SerialTableExecutor(SerialExecutorFakeHoldemTableRepository())
+        val tableId = TableId(1L)
+        val before = executor.call(tableId) { Thread.currentThread() }
+
+        executor.onTableClosed(TableClosed(tableId))
+        before.join(5_000)
+
+        assertFalse(before.isAlive)
+        val after = executor.call(tableId) { Thread.currentThread() }
+        assertTrue(after !== before)
     }
 }

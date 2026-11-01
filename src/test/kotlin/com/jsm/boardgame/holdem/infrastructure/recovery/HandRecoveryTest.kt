@@ -747,4 +747,98 @@ class HandRecoveryTest {
 
         assertEquals(2, timerScheduler.scheduledCalls.size) // 먼저 처리된 사용자가 던져도 나머지의 감시가 걸린다
     }
+
+    private fun newRecovery(
+        handStore: HandStore,
+        tables: HoldemTableRepository,
+        scheduler: HandRecoveryFakeTaskScheduler,
+        resumeUseCase: HandRecoveryFakeResumeHandUseCase,
+        cancelUseCase: HandRecoveryFakeCancelHandUseCase = HandRecoveryFakeCancelHandUseCase(),
+        applyChips: HandRecoveryFakeApplyChipsReservationsUseCase = HandRecoveryFakeApplyChipsReservationsUseCase(),
+    ) = HandRecovery(handStore, tables, scheduler, clock, resumeUseCase, cancelUseCase, newConnectionTimer(tables), nextHandTimer, HandRecoveryFakeTableExecutor(), HandRecoveryFakeUserConnections(), applyChips, Duration.ofMinutes(3))
+
+    @Test
+    fun `진행 중 핸드의 테이블이 사라졌으면 유예도 재개도 취소도 하지 않는다`() {
+        val handStore = HandRecoveryFakeHandStore()
+        val tables = HandRecoveryFakeTableRepository()
+        val scheduler = HandRecoveryFakeTaskScheduler()
+        val resumeUseCase = HandRecoveryFakeResumeHandUseCase()
+        val cancelUseCase = HandRecoveryFakeCancelHandUseCase()
+        val hand = seatTableWithHand(tables, 1L, 1, 2)
+        handStore.put(TableId(9L), hand) // 9번 테이블은 저장소에 없다
+        val recovery = newRecovery(handStore, tables, scheduler, resumeUseCase, cancelUseCase)
+
+        recovery.onApplicationReady()
+
+        assertEquals(0, scheduler.scheduledCalls.size)
+        assertEquals(0, resumeUseCase.calls.size)
+        assertEquals(0, cancelUseCase.calls.size)
+    }
+
+    @Test
+    fun `복구 대상으로 나열된 핸드가 읽기 전에 사라졌으면 아무것도 하지 않는다`() {
+        val tables = HandRecoveryFakeTableRepository()
+        val scheduler = HandRecoveryFakeTaskScheduler()
+        val resumeUseCase = HandRecoveryFakeResumeHandUseCase()
+        seatTableWithHand(tables, 1L, 1, 2)
+        val vanishing = object : HandStore {
+            override fun find(tableId: TableId): Hand? = null
+            override fun save(tableId: TableId, hand: Hand) {}
+            override fun remove(tableId: TableId) {}
+            override fun findAllInProgress(): List<TableId> = listOf(TableId(1L))
+        }
+        val recovery = newRecovery(vanishing, tables, scheduler, resumeUseCase)
+
+        recovery.onApplicationReady()
+
+        assertEquals(0, scheduler.scheduledCalls.size)
+        assertEquals(0, resumeUseCase.calls.size)
+    }
+
+    @Test
+    fun `부팅 중 테이블 목록에 있던 테이블이 사라졌으면 카운트다운도 예약 적용도 올리지 않는다`() {
+        val handStore = HandRecoveryFakeHandStore()
+        val tables = HandRecoveryFakeTableRepository()
+        val applyChips = HandRecoveryFakeApplyChipsReservationsUseCase()
+        val staleListing = object : HoldemTableRepository by tables {
+            override fun findAllTableIds(): List<TableId> = listOf(TableId(77L))
+        }
+        val recovery = newRecovery(handStore, staleListing, HandRecoveryFakeTaskScheduler(), HandRecoveryFakeResumeHandUseCase(), applyChips = applyChips)
+
+        recovery.onApplicationReady()
+
+        assertTrue(applyChips.calls.isEmpty())
+    }
+
+    @Test
+    fun `유예 중이 아닌 테이블의 핸드 진행 이벤트는 감시도 재개도 건드리지 않는다`() {
+        val handStore = HandRecoveryFakeHandStore()
+        val tables = HandRecoveryFakeTableRepository()
+        val scheduler = HandRecoveryFakeTaskScheduler()
+        val resumeUseCase = HandRecoveryFakeResumeHandUseCase()
+        val hand = seatTableWithHand(tables, 1L, 1, 2)
+        val recovery = newRecovery(handStore, tables, scheduler, resumeUseCase)
+
+        recovery.onHandBroadcastRequested(HandBroadcastRequested(TableId(1L), tables.findById(TableId(1L))!!, hand))
+
+        assertEquals(0, scheduler.scheduledCalls.size)
+        assertEquals(0, resumeUseCase.calls.size)
+    }
+
+    @Test
+    fun `전원 재접속으로 유예가 끝난 뒤 낡은 타임아웃이 깨어나도 핸드를 또 재개하지 않는다`() {
+        val handStore = HandRecoveryFakeHandStore()
+        val tables = HandRecoveryFakeTableRepository()
+        val scheduler = HandRecoveryFakeTaskScheduler()
+        val resumeUseCase = HandRecoveryFakeResumeHandUseCase()
+        handStore.put(TableId(1L), seatTableWithHand(tables, 1L, 1, 2))
+        val recovery = newRecovery(handStore, tables, scheduler, resumeUseCase)
+        recovery.onApplicationReady()
+
+        recovery.onSessionConnected(connectedEvent(1000L))
+        recovery.onSessionConnected(connectedEvent(2000L))
+        scheduler.scheduledCalls[0].task.run()
+
+        assertEquals(1, resumeUseCase.calls.size)
+    }
 }

@@ -17,6 +17,16 @@ import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
+import com.jsm.boardgame.holdem.domain.repository.FakeHandStore
+import com.jsm.boardgame.holdem.domain.repository.FakeHoldemTableRepository
+import com.jsm.boardgame.holdem.application.port.FakeLastHandResultStore
+import com.jsm.boardgame.holdem.application.port.FakeNextHandCountdown
+import com.jsm.boardgame.holdem.domain.model.Hand
+import com.jsm.boardgame.holdem.domain.service.Shuffler
+import com.jsm.boardgame.holdem.presentation.ws.payload.SeatPrivateView
+import com.jsm.boardgame.holdem.presentation.ws.payload.TableClosedView
+import org.springframework.messaging.MessageHandler
+import kotlin.test.assertFailsWith
 import com.jsm.boardgame.holdem.presentation.ws.payload.JoinQueueView
 import com.jsm.boardgame.holdem.presentation.ws.payload.TablePublicView
 import org.assertj.core.api.Assertions.assertThat
@@ -83,6 +93,10 @@ class HoldemSubscriptionSnapshotListenerTest {
 
         override fun convertAndSendToUser(user: String, destination: String, payload: Any, headers: MutableMap<String, Any>?) {
             sent += Sent(user, destination, payload, headers as? MessageHeaders)
+        }
+
+        override fun convertAndSendToUser(user: String, destination: String, payload: Any) {
+            sent += Sent(user, destination, payload, null)
         }
     }
 
@@ -297,4 +311,191 @@ class HoldemSubscriptionSnapshotListenerTest {
 
     private inline fun <reified T : Any> nullStub(): T =
         Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { _, _, _ -> null } as T
+
+    private val brokerHandler = SimpleBrokerMessageHandler(
+        ExecutorSubscribableChannel(), ExecutorSubscribableChannel(), ExecutorSubscribableChannel(), listOf("/topic"),
+    )
+
+    private class SnapshotFixture {
+        val tables = FakeHoldemTableRepository()
+        val handStore = FakeHandStore()
+        var tableId: TableId = TableId(0)
+        lateinit var hand: Hand
+    }
+
+    /** 사용자 7(좌석 1)과 8(좌석 2)이 앉아 있고 핸드가 진행 중인 테이블. */
+    private fun fixtureWithHand(): SnapshotFixture {
+        val f = SnapshotFixture()
+        val t = HoldemTable.create("t", TestTablePolicy).apply {
+            sitDown(user, Chips.of(10_000))
+            sitDown(UserId(8), Chips.of(10_000))
+        }
+        val saved = f.tables.save(t)
+        f.tableId = saved.id!!
+        f.hand = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)), 1, 1, 2, saved.smallBlind, saved.bigBlind, Shuffler { it },
+        )
+        f.handStore.save(f.tableId, f.hand)
+        return f
+    }
+
+    private fun snapshotListener(
+        tables: HoldemTableRepository,
+        handStore: HandStore = FakeHandStore(),
+        messagingTemplate: SimpMessagingTemplate = template,
+        registry: SimpUserRegistry = userRegistry,
+    ) = HoldemSubscriptionSnapshotListener(
+        tables = tables,
+        handStore = handStore,
+        lastHandResults = FakeLastHandResultStore(),
+        messagingTemplate = messagingTemplate,
+        sequence = TableViewSequence(),
+        nextHandCountdown = FakeNextHandCountdown(),
+        turnCountdown = nullStub<TurnCountdown>(),
+        joinQueue = unused<JoinQueue>(),
+        tableExecutor = executor,
+        tableQuery = unused<HoldemTableQueryRepository>(),
+        userRegistry = registry,
+    )
+
+    private fun deliver(
+        listener: HoldemSubscriptionSnapshotListener,
+        destination: String?,
+        handler: MessageHandler,
+        command: StompCommand = StompCommand.SUBSCRIBE,
+        principalName: String? = user.value.toString(),
+        ex: Exception? = null,
+    ) {
+        val accessor = StompHeaderAccessor.create(command).apply {
+            destination?.let { this.destination = it }
+            sessionId = "sess-1"
+            principalName?.let { name -> this.user = Principal { name } }
+        }
+        listener.afterMessageHandled(MessageBuilder.createMessage(ByteArray(0), accessor.messageHeaders), MessageChannel { _, _ -> true }, handler, ex)
+    }
+
+    @Test
+    fun `처리 중 예외가 났거나 구독이 아니거나 목적지·사용자를 알 수 없으면 스냅샷을 올리지 않는다`() {
+        val f = fixtureWithHand()
+        val listener = snapshotListener(f.tables, f.handStore)
+        val topic = HoldemDestinations.publicTopicOf(f.tableId.value)
+
+        deliver(listener, topic, brokerHandler, ex = IllegalStateException("handler failed"))
+        deliver(listener, topic, brokerHandler, command = StompCommand.SEND)
+        deliver(listener, null, brokerHandler)
+        deliver(listener, topic, brokerHandler, principalName = null)
+        deliver(listener, topic, brokerHandler, principalName = "not-a-number")
+        deliver(listener, "/topic/lobby", brokerHandler)
+
+        assertThat(executor.posted).isEmpty()
+        assertThat(publicSent).isEmpty()
+        assertThat(sent).isEmpty()
+    }
+
+    @Test
+    fun `구독을 실제로 등록한 핸들러가 아니면 개인 큐든 공개 토픽이든 join-queue 든 스냅샷을 올리지 않는다`() {
+        val f = fixtureWithHand()
+        val listener = snapshotListener(f.tables, f.handStore)
+        val annotationHandler = MessageHandler { }
+
+        deliver(listener, HoldemDestinations.privateQueueOf(f.tableId.value), brokerHandler) // 개인 큐는 UserDestinationMessageHandler 만
+        deliver(listener, HoldemDestinations.privateQueueOf(f.tableId.value), annotationHandler)
+        deliver(listener, HoldemDestinations.publicTopicOf(f.tableId.value), userDestinationHandler) // 공개 토픽은 SimpleBrokerMessageHandler 만
+        deliver(listener, HoldemDestinations.publicTopicOf(f.tableId.value), annotationHandler)
+        deliver(listener, HoldemDestinations.joinQueueDestination(), brokerHandler)
+
+        assertThat(executor.posted).isEmpty()
+        assertThat(sent).isEmpty()
+    }
+
+    @Test
+    fun `닫혔거나 없는 테이블의 공개 토픽 구독에는 닫힘 알림을 다시 보내고 개인 큐 구독에는 아무것도 보내지 않는다`() {
+        val listener = snapshotListener(FakeHoldemTableRepository())
+
+        deliver(listener, HoldemDestinations.publicTopicOf(99), brokerHandler)
+        executor.posted.single().second()
+        assertThat(publicSent.single()).isEqualTo(TableClosedView(99))
+
+        publicSent.clear()
+        executor.posted.clear()
+        deliver(listener, HoldemDestinations.privateQueueOf(99), userDestinationHandler)
+        executor.posted.single().second()
+
+        assertThat(publicSent).isEmpty()
+        assertThat(sent).isEmpty()
+    }
+
+    @Test
+    fun `착석자의 개인 큐 구독은 공개 뷰와 본인 개인 뷰만 보내고 공개 쪽에는 개인 뷰가 섞이지 않으며 상대 카드는 어디에도 없다`() {
+        val f = fixtureWithHand()
+        val listener = snapshotListener(f.tables, f.handStore)
+
+        deliver(listener, HoldemDestinations.privateQueueOf(f.tableId.value), userDestinationHandler)
+        executor.posted.single().second()
+
+        assertThat(publicSent.single()).isInstanceOf(TablePublicView::class.java)
+        val privateSend = sent.single()
+        assertThat(privateSend.user).isEqualTo("7")
+        assertThat(privateSend.dest).isEqualTo(HoldemDestinations.privateQueueSendTargetOf(f.tableId.value))
+        val view = privateSend.payload as SeatPrivateView
+        assertThat(view.seatNo).isEqualTo(1)
+        val own = f.hand.holeCardsOf(1).map { it.toString() }
+        assertThat(view.hand!!.holeCards).isEqualTo(own)
+        val opponent = f.hand.holeCardsOf(2).map { it.toString() }
+        assertThat(view.hand.holeCards).doesNotContainAnyElementsOf(opponent)
+    }
+
+    @Test
+    fun `좌석이 없는 사용자의 개인 큐 구독은 공개 뷰만 받고 개인 뷰는 전혀 나가지 않는다`() {
+        val f = fixtureWithHand()
+        val listener = snapshotListener(f.tables, f.handStore)
+
+        deliver(listener, HoldemDestinations.privateQueueOf(f.tableId.value), userDestinationHandler, principalName = "99")
+        executor.posted.single().second()
+
+        assertThat(publicSent.single()).isInstanceOf(TablePublicView::class.java)
+        assertThat(sent).isEmpty()
+    }
+
+    @Test
+    fun `활성 세션이 레지스트리에 없어도 개인 뷰는 그 사용자 앞으로만 나가고 공개 토픽에는 흘러가지 않는다`() {
+        val f = fixtureWithHand()
+        val listener = snapshotListener(f.tables, f.handStore, registry = nullStub<SimpUserRegistry>())
+
+        deliver(listener, HoldemDestinations.privateQueueOf(f.tableId.value), userDestinationHandler)
+        executor.posted.single().second()
+
+        assertThat(publicSent).allMatch { it is TablePublicView }
+        assertThat(sent.map { it.user }).containsExactly("7")
+        assertThat(sent.single().payload).isInstanceOf(SeatPrivateView::class.java)
+    }
+
+    @Test
+    fun `개인 뷰 전송이 실패해도 공개 토픽으로 개인 뷰를 대신 보내지 않는다`() {
+        val f = fixtureWithHand()
+        val failingPublic = mutableListOf<Any>()
+        val failingTemplate = object : SimpMessagingTemplate(MessageChannel { _, _ -> true }) {
+            override fun convertAndSend(destination: String, payload: Any) { failingPublic += payload }
+            override fun convertAndSendToUser(user: String, destination: String, payload: Any) =
+                throw IllegalStateException("broker down")
+        }
+        val listener = snapshotListener(f.tables, f.handStore, messagingTemplate = failingTemplate)
+
+        deliver(listener, HoldemDestinations.privateQueueOf(f.tableId.value), userDestinationHandler)
+
+        assertFailsWith<IllegalStateException> { executor.posted.single().second() }
+        assertThat(failingPublic).allMatch { it is TablePublicView }
+    }
+
+    @Test
+    fun `join-queue 스냅샷은 실행기 안에서 대기도 착석도 아니게 됐으면 아무것도 보내지 않는다`() {
+        val queue = FakeJoinQueue(QueuePosition(table, 1))
+        subscribe(queue, FakeQuery(null))
+
+        queue.position = null
+        executor.posted.single().second()
+
+        assertThat(sent).isEmpty()
+        assertThat(executor.posted).hasSize(1)
+    }
 }

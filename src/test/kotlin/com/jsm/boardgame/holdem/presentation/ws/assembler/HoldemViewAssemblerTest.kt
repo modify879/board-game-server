@@ -822,4 +822,35 @@ class HoldemViewAssemblerTest {
 
         assertEquals(15_000L, finished.seats.single { it.seatNo == 2 }.stack)
     }
+
+    @Test
+    fun `런아웃 중이거나 끝난 핸드는 차례가 없어 턴 시간이 주어져도 turnRemainingMs 와 turnTimeoutMs 는 null 이다`() {
+        val table = tableWithSeats(1 to 8_000L, 2 to 8_000L)
+        table.placeButtonAtFirstSeat()
+        val hand = Hand.start(
+            mapOf(1 to Chips.of(100), 2 to Chips.of(100)),
+            table.buttonSeatNo!!, smallBlindSeatNo = 1, bigBlindSeatNo = 2, table.smallBlind, table.bigBlind, identityShuffler,
+        )
+        assertTrue(hand.isRunningOut)
+
+        val runout = publicViewOf(TableId(1), table, hand, null, 1L, null, Duration.ofSeconds(30), Duration.ofSeconds(30))
+        assertNull(runout.turnRemainingMs)
+        assertNull(runout.turnTimeoutMs)
+
+        while (hand.isRunningOut) hand.advanceRunout()
+        val finished = publicViewOf(TableId(1), table, hand, lastOf(hand), 2L, null, Duration.ofSeconds(30), Duration.ofSeconds(30))
+        assertNull(finished.turnRemainingMs)
+        assertNull(finished.turnTimeoutMs)
+        assertTrue(finished.revealedHands.isEmpty())
+    }
+
+    @Test
+    fun `핸드가 없으면 공개 뷰는 어느 좌석의 카드도 공개하지 않는다`() {
+        val table = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+
+        val view = publicViewOf(TableId(1), table, null, null, 1L, null, null, null)
+
+        assertTrue(view.revealedHands.isEmpty())
+        assertNull(view.result)
+    }
 }
