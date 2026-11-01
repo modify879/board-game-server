@@ -8,7 +8,6 @@ import com.jsm.boardgame.holdem.application.port.QaAccounts
 import com.jsm.boardgame.holdem.application.port.RecentDepartures
 import com.jsm.boardgame.holdem.application.port.WalletBalance
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
-import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.UserId
 import com.jsm.boardgame.holdem.domain.repository.HoldemTableRepository
 import org.springframework.context.annotation.Profile
