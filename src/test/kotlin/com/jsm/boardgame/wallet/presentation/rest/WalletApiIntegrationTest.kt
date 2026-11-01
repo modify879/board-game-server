@@ -235,6 +235,59 @@ class WalletApiIntegrationTest {
     }
 
     @Test
+    fun `본인 환전 요청을 취소하면 204, 잔액이 환급되고 WITHDRAWAL_REFUND 가 남으며 다시 취소하면 409 이고 이중 환급되지 않는다`() {
+        val (userId, accessToken) = signUpAndLogin()
+        fundWallet(userId, 10_000)
+        val requestId = requestWithdrawal(accessToken, 4_000)
+        assertThat(balance(accessToken)).isEqualTo(6_000)
+
+        authDelete("/api/wallet/withdrawal-requests/$requestId", accessToken)
+            .andExpect(status().isNoContent)
+
+        assertThat(balance(accessToken)).isEqualTo(10_000)
+        val ledger = authGet("/api/wallet/ledger", accessToken).andExpect(status().isOk).andReturn()
+        val types = JsonPath.read<List<String>>(ledger.response.contentAsString, "$.content[*].type")
+        assertThat(types).contains("WITHDRAWAL_HOLD")
+        assertThat(types.count { it == "WITHDRAWAL_REFUND" }).isEqualTo(1)
+
+        authDelete("/api/wallet/withdrawal-requests/$requestId", accessToken)
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("WITHDRAWAL_REQUEST_ALREADY_PROCESSED"))
+        assertThat(balance(accessToken)).isEqualTo(10_000)
+    }
+
+    // 남의 요청과 없는 요청이 같은 응답이어야 id 열거가 막힌다(충전 취소 테스트와 같은 이유).
+    @Test
+    fun `남의 환전 요청 취소는 없는 요청과 똑같이 404 WITHDRAWAL_REQUEST_NOT_FOUND 이고 요청과 잔액은 그대로다`() {
+        val (ownerId, ownerToken) = signUpAndLogin()
+        val (otherId, otherToken) = signUpAndLogin()
+        fundWallet(ownerId, 10_000)
+        fundWallet(otherId, 5_000)
+        val requestId = requestWithdrawal(ownerToken, 4_000)
+
+        authDelete("/api/wallet/withdrawal-requests/$requestId", otherToken)
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.errorCode").value("WITHDRAWAL_REQUEST_NOT_FOUND"))
+            .andExpect(jsonPath("$.detail").doesNotExist())
+        authDelete("/api/wallet/withdrawal-requests/999999999", otherToken)
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.errorCode").value("WITHDRAWAL_REQUEST_NOT_FOUND"))
+            .andExpect(jsonPath("$.detail").doesNotExist())
+
+        assertThat(balance(ownerToken)).isEqualTo(6_000)
+        assertThat(balance(otherToken)).isEqualTo(5_000)
+        // 소유자는 여전히 취소할 수 있다 = 요청이 PENDING 으로 남아 있다.
+        authDelete("/api/wallet/withdrawal-requests/$requestId", ownerToken).andExpect(status().isNoContent)
+    }
+
+    @Test
+    fun `인증 없이 환전 요청을 취소하면 401 AUTHENTICATION_REQUIRED 다`() {
+        mockMvc.perform(delete("/api/wallet/withdrawal-requests/1"))
+            .andExpect(status().isUnauthorized)
+            .andExpect(jsonPath("$.errorCode").value("AUTHENTICATION_REQUIRED"))
+    }
+
+    @Test
     fun `환전 요청 목록 조회는 본인 것만 돌려준다`() {
         val (userIdA, accessTokenA) = signUpAndLogin()
         val (userIdB, accessTokenB) = signUpAndLogin()

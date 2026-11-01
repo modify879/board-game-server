@@ -73,4 +73,54 @@ class BankAccountTest {
         assertEquals("abc-123", account.accountNumber)
         assertEquals("  ", account.accountHolder)
     }
+
+    @Test
+    fun `계좌번호가 blank 면 BANK_ACCOUNT_INVALID`() {
+        val e = assertFailsWith<InvalidBankAccountException> {
+            BankAccount.of("국민은행", " - ", "홍길동")
+        }
+        assertEquals(WalletErrorCode.BANK_ACCOUNT_INVALID, e.errorCode)
+    }
+
+    @Test
+    fun `은행명이 50자를 넘으면 BANK_ACCOUNT_INVALID 이고 50자는 허용된다`() {
+        val e = assertFailsWith<InvalidBankAccountException> {
+            BankAccount.of("가".repeat(51), "123456789012", "홍길동")
+        }
+        assertEquals(WalletErrorCode.BANK_ACCOUNT_INVALID, e.errorCode)
+        assertEquals(50, BankAccount.of("가".repeat(50), "123456789012", "홍길동").bankName.length)
+    }
+
+    @Test
+    fun `예금주가 50자를 넘으면 BANK_ACCOUNT_INVALID 이고 50자는 허용된다`() {
+        val e = assertFailsWith<InvalidBankAccountException> {
+            BankAccount.of("국민은행", "123456789012", "가".repeat(51))
+        }
+        assertEquals(WalletErrorCode.BANK_ACCOUNT_INVALID, e.errorCode)
+        assertEquals(50, BankAccount.of("국민은행", "123456789012", "가".repeat(50)).accountHolder.length)
+    }
+
+    // 길이는 UTF-16 char 가 아니라 코드포인트로 센다 — 보충 문자 25개는 char 50개지만 코드포인트로는 25다.
+    @Test
+    fun `이름 길이는 코드포인트로 센다`() {
+        val emoji = "\uD83D\uDE00"
+        assertEquals(50, BankAccount.of("국민은행", "123456789012", emoji.repeat(50)).accountHolder.codePointCount(0, 100))
+        assertFailsWith<InvalidBankAccountException> {
+            BankAccount.of(emoji.repeat(51), "123456789012", "홍길동")
+        }
+    }
+
+    @Test
+    fun `계좌번호 길이 경계 8자와 20자는 허용된다`() {
+        BankAccount.of("국민은행", "1".repeat(8), "홍길동")
+        BankAccount.of("국민은행", "1".repeat(20), "홍길동")
+    }
+
+    @Test
+    fun `앞뒤 공백은 잘라내고 정규화한다`() {
+        val account = BankAccount.of("  국민은행 ", "123456789012", " 홍길동  ")
+
+        assertEquals("국민은행", account.bankName)
+        assertEquals("홍길동", account.accountHolder)
+    }
 }

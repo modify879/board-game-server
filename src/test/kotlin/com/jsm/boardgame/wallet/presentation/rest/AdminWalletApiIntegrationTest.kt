@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -101,6 +102,14 @@ class AdminWalletApiIntegrationTest {
         headers.forEach { (name, value) -> builder.header(name, value) }
         if (body != null) builder.contentType(MediaType.APPLICATION_JSON).content(body)
         return mockMvc.perform(builder)
+    }
+
+    private fun authDelete(url: String, accessToken: String): ResultActions =
+        mockMvc.perform(delete(url).header("Authorization", "Bearer $accessToken"))
+
+    private fun ledgerTypes(accessToken: String): List<String> {
+        val result = authGet("/api/wallet/ledger", accessToken).andExpect(status().isOk).andReturn()
+        return JsonPath.read(result.response.contentAsString, "$.content[*].type")
     }
 
     private fun requestDeposit(accessToken: String, amount: Int): Long {
@@ -377,5 +386,170 @@ class AdminWalletApiIntegrationTest {
         authPost("/api/admin/wallets/$targetId/adjustments", adminToken, """{"amount":1000,"reason":"사유"}""")
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.errorCode").value("IDEMPOTENCY_KEY_INVALID"))
+    }
+
+    @Test
+    fun `관리자가 충전 요청을 반려하면 204, 잔액과 원장은 그대로이고 상태가 REJECTED 이며 다시 반려하거나 승인하면 409 다`() {
+        val (_, adminToken) = signUpAdminAndLogin()
+        val (_, userToken) = signUpAndLogin()
+        val requestId = requestDeposit(userToken, 5000)
+
+        authPost("/api/admin/deposit-requests/$requestId/reject", adminToken, """{"reason":"입금 확인 불가"}""")
+            .andExpect(status().isNoContent)
+
+        assertThat(balanceOf(userToken)).isEqualTo(0)
+        assertThat(ledgerTypes(userToken)).isEmpty()
+        val listed = authGet("/api/admin/deposit-requests?status=REJECTED", adminToken).andExpect(status().isOk).andReturn()
+        val ids = JsonPath.read<List<Int>>(listed.response.contentAsString, "$.content[*].id")
+        assertThat(ids).contains(requestId.toInt())
+
+        authPost("/api/admin/deposit-requests/$requestId/reject", adminToken, """{"reason":"재반려"}""")
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("DEPOSIT_REQUEST_ALREADY_PROCESSED"))
+        authPost("/api/admin/deposit-requests/$requestId/approve", adminToken)
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("DEPOSIT_REQUEST_ALREADY_PROCESSED"))
+        assertThat(balanceOf(userToken)).isEqualTo(0)
+    }
+
+    @Test
+    fun `승인된 충전 요청을 반려하면 409 이고 잔액이 그대로다`() {
+        val (_, adminToken) = signUpAdminAndLogin()
+        val (_, userToken) = signUpAndLogin()
+        val requestId = requestDeposit(userToken, 5000)
+        authPost("/api/admin/deposit-requests/$requestId/approve", adminToken).andExpect(status().isNoContent)
+
+        authPost("/api/admin/deposit-requests/$requestId/reject", adminToken, """{"reason":"뒤늦은 반려"}""")
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("DEPOSIT_REQUEST_ALREADY_PROCESSED"))
+
+        assertThat(balanceOf(userToken)).isEqualTo(5000)
+    }
+
+    @Test
+    fun `충전 요청 반려 사유가 비어 있으면 400과 REJECTION_REASON_BLANK 이고 요청은 PENDING 으로 남는다`() {
+        val (_, adminToken) = signUpAdminAndLogin()
+        val (_, userToken) = signUpAndLogin()
+        val requestId = requestDeposit(userToken, 5000)
+
+        authPost("/api/admin/deposit-requests/$requestId/reject", adminToken, """{"reason":"  "}""")
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("REJECTION_REASON_BLANK"))
+
+        authPost("/api/admin/deposit-requests/$requestId/approve", adminToken).andExpect(status().isNoContent)
+    }
+
+    @Test
+    fun `없는 충전 요청을 반려하면 404 DEPOSIT_REQUEST_NOT_FOUND 다`() {
+        val (_, adminToken) = signUpAdminAndLogin()
+
+        authPost("/api/admin/deposit-requests/999999999/reject", adminToken, """{"reason":"사유"}""")
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.errorCode").value("DEPOSIT_REQUEST_NOT_FOUND"))
+    }
+
+    @Test
+    fun `일반 사용자는 충전 반려와 환전 승인 환전 반려에서 403 ACCESS_DENIED 이고 요청은 처리되지 않는다`() {
+        val (_, adminToken) = signUpAdminAndLogin()
+        val (_, userToken) = signUpAndLogin()
+        val depositId = requestDeposit(userToken, 10_000)
+        authPost("/api/admin/deposit-requests/$depositId/approve", adminToken).andExpect(status().isNoContent)
+        val withdrawalId = requestWithdrawal(userToken, 4_000)
+        val pendingDepositId = requestDeposit(userToken, 3_000)
+
+        authPost("/api/admin/deposit-requests/$pendingDepositId/reject", userToken, """{"reason":"사유"}""")
+            .andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"))
+        authPost("/api/admin/withdrawal-requests/$withdrawalId/approve", userToken)
+            .andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"))
+        authPost("/api/admin/withdrawal-requests/$withdrawalId/reject", userToken, """{"reason":"사유"}""")
+            .andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"))
+
+        // 거절된 호출이 아무것도 바꾸지 못했다: 여전히 PENDING 이라 관리자가 처리할 수 있다.
+        assertThat(balanceOf(userToken)).isEqualTo(6_000)
+        authPost("/api/admin/deposit-requests/$pendingDepositId/approve", adminToken).andExpect(status().isNoContent)
+        authPost("/api/admin/withdrawal-requests/$withdrawalId/approve", adminToken).andExpect(status().isNoContent)
+    }
+
+    @Test
+    fun `관리자가 환전 요청을 승인하면 204, 돈은 요청 때 이미 나갔으므로 잔액과 원장이 변하지 않고 상태가 APPROVED 다`() {
+        val (_, adminToken) = signUpAdminAndLogin()
+        val (_, userToken) = signUpAndLogin()
+        val depositId = requestDeposit(userToken, 10_000)
+        authPost("/api/admin/deposit-requests/$depositId/approve", adminToken).andExpect(status().isNoContent)
+        val requestId = requestWithdrawal(userToken, 4_000)
+        val ledgerBefore = ledgerTypes(userToken)
+        assertThat(balanceOf(userToken)).isEqualTo(6_000)
+
+        authPost("/api/admin/withdrawal-requests/$requestId/approve", adminToken)
+            .andExpect(status().isNoContent)
+
+        assertThat(balanceOf(userToken)).isEqualTo(6_000)
+        assertThat(ledgerTypes(userToken)).containsExactlyInAnyOrderElementsOf(ledgerBefore)
+        assertThat(ledgerTypes(userToken)).doesNotContain("WITHDRAWAL_REFUND")
+        val listed = authGet("/api/admin/withdrawal-requests?status=APPROVED", adminToken).andExpect(status().isOk).andReturn()
+        val ids = JsonPath.read<List<Int>>(listed.response.contentAsString, "$.content[*].id")
+        assertThat(ids).contains(requestId.toInt())
+    }
+
+    @Test
+    fun `반려된 환전 요청을 승인하면 409 이고, 반려 환급은 한 번뿐이며 승인된 요청의 반려도 409 로 환급되지 않는다`() {
+        val (_, adminToken) = signUpAdminAndLogin()
+        val (_, userToken) = signUpAndLogin()
+        val depositId = requestDeposit(userToken, 10_000)
+        authPost("/api/admin/deposit-requests/$depositId/approve", adminToken).andExpect(status().isNoContent)
+
+        val rejectedId = requestWithdrawal(userToken, 4_000)
+        authPost("/api/admin/withdrawal-requests/$rejectedId/reject", adminToken, """{"reason":"계좌 오류"}""")
+            .andExpect(status().isNoContent)
+        assertThat(balanceOf(userToken)).isEqualTo(10_000)
+
+        authPost("/api/admin/withdrawal-requests/$rejectedId/approve", adminToken)
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("WITHDRAWAL_REQUEST_ALREADY_PROCESSED"))
+        authPost("/api/admin/withdrawal-requests/$rejectedId/reject", adminToken, """{"reason":"재반려"}""")
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("WITHDRAWAL_REQUEST_ALREADY_PROCESSED"))
+        assertThat(balanceOf(userToken)).isEqualTo(10_000)
+
+        val approvedId = requestWithdrawal(userToken, 3_000)
+        authPost("/api/admin/withdrawal-requests/$approvedId/approve", adminToken).andExpect(status().isNoContent)
+        authPost("/api/admin/withdrawal-requests/$approvedId/approve", adminToken)
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("WITHDRAWAL_REQUEST_ALREADY_PROCESSED"))
+        authPost("/api/admin/withdrawal-requests/$approvedId/reject", adminToken, """{"reason":"뒤늦은 반려"}""")
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("WITHDRAWAL_REQUEST_ALREADY_PROCESSED"))
+
+        assertThat(balanceOf(userToken)).isEqualTo(7_000)
+        assertThat(ledgerTypes(userToken).count { it == "WITHDRAWAL_REFUND" }).isEqualTo(1)
+    }
+
+    @Test
+    fun `없는 환전 요청을 승인하면 404 WITHDRAWAL_REQUEST_NOT_FOUND 다`() {
+        val (_, adminToken) = signUpAdminAndLogin()
+
+        authPost("/api/admin/withdrawal-requests/999999999/approve", adminToken)
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.errorCode").value("WITHDRAWAL_REQUEST_NOT_FOUND"))
+    }
+
+    @Test
+    fun `승인된 환전 요청을 사용자가 취소하면 409 이고 잔액은 환급되지 않는다`() {
+        val (_, adminToken) = signUpAdminAndLogin()
+        val (_, userToken) = signUpAndLogin()
+        val depositId = requestDeposit(userToken, 10_000)
+        authPost("/api/admin/deposit-requests/$depositId/approve", adminToken).andExpect(status().isNoContent)
+        val requestId = requestWithdrawal(userToken, 4_000)
+        authPost("/api/admin/withdrawal-requests/$requestId/approve", adminToken).andExpect(status().isNoContent)
+
+        authDelete("/api/wallet/withdrawal-requests/$requestId", userToken)
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("WITHDRAWAL_REQUEST_ALREADY_PROCESSED"))
+
+        assertThat(balanceOf(userToken)).isEqualTo(6_000)
+        assertThat(ledgerTypes(userToken)).doesNotContain("WITHDRAWAL_REFUND")
     }
 }
