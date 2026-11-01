@@ -45,4 +45,13 @@ class StompDestinationGuardTest {
         val message = subscribe(destination)
         assertThat(guard.preSend(message, channel)).isSameAs(message)
     }
+
+    @Test
+    fun `목적지가 없는 SUBSCRIBE 프레임은 메시지를 그대로 통과시킨다`() {
+        val accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE)
+        accessor.setSubscriptionId("sub-0")
+        val message = MessageBuilder.createMessage(ByteArray(0), accessor.messageHeaders)
+
+        assertThat(guard.preSend(message, channel)).isSameAs(message)
+    }
 }
