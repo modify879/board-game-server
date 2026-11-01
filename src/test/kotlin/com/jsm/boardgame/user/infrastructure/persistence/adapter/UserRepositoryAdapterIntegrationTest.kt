@@ -90,6 +90,20 @@ class UserRepositoryAdapterIntegrationTest {
     }
 
     @Test
+    fun `알 수 없는 무결성 위반은 도메인 예외로 바꾸지 않고 그대로 던진다`() {
+        // text 컬럼은 NUL 문자를 받지 못해 22021 이 나고, 이는 DataIntegrityViolationException 으로 번역된다 — unique 제약이 아니다.
+        val bad = User.register(
+            username = Username.of(uniqueUsername()),
+            passwordHash = PasswordHash("hashed-password-value"),
+            nickname = Nickname.reconstitute("a\u0000b"),
+        )
+
+        val e = assertFailsWith<org.springframework.dao.DataIntegrityViolationException> { users.save(bad) }
+
+        assertFalse(e is DuplicateNicknameException || e is DuplicateUsernameException)
+    }
+
+    @Test
     fun `현재 닉네임 규칙을 위반하는 값도 findByUsername 으로 예외 없이 복원된다`() {
         // Nickname.of() 는 2~12자만 허용하지만, 상한이 더 넓던 과거에 가입해 저장된 닉네임은
         // 이 규칙을 위반할 수 있다. UserJpaRepository 를 직접 써서 도메인 검증(Nickname.of)을

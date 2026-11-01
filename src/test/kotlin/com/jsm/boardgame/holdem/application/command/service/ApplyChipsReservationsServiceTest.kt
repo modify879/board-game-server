@@ -209,4 +209,49 @@ class ApplyChipsReservationsServiceTest {
         assertEquals(Chips.of(13_000), seat(tableId, 2)!!.stack)
         assertEquals(listOf(ApplyChipsFakeWallet.ToGameCall(UserId(2000), 3_000, tableId)), wallet.toGameCalls)
     }
+
+    @Test
+    fun `테이블이 없으면 아무것도 하지 않는다`() {
+        apply(TableId(999))
+
+        assertTrue(wallet.toGameCalls.isEmpty())
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun `적용기는 예약이 없는 좌석이나 없는 사용자나 없는 테이블에는 적용도 버리기도 하지 않는다`() {
+        val tableId = table(Triple(1, 10_000, null), Triple(2, 10_000, 3_000L))
+        wallet.balance = 50_000
+
+        applier.apply(tableId, UserId(1000)) // 예약 없음
+        applier.apply(tableId, UserId(9999)) // 앉아 있지 않음
+        applier.apply(TableId(999), UserId(2000)) // 테이블 없음
+        applier.drop(tableId, UserId(1000))
+        applier.drop(tableId, UserId(9999))
+        applier.drop(TableId(999), UserId(2000))
+
+        assertTrue(wallet.toGameCalls.isEmpty())
+        assertTrue(events.isEmpty())
+        assertTrue(countdown.restarted.isEmpty())
+        assertEquals(Chips.of(10_000), seat(tableId, 1)!!.stack)
+        assertEquals(Chips.of(3_000), seat(tableId, 2)!!.chipsReservation)
+    }
+
+    @Test
+    fun `핸드 진행 중에는 적용기가 직접 불려도 적용하지도 버리지도 않는다`() {
+        val tableId = table(Triple(1, 10_000, 3_000L), Triple(2, 10_000, null))
+        handStore.save(
+            tableId,
+            Hand.start(mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)), buttonSeatNo = 1, smallBlindSeatNo = 1, bigBlindSeatNo = 2, TestTablePolicy.smallBlind, TestTablePolicy.bigBlind, Shuffler { it }),
+        )
+        wallet.balance = 50_000
+
+        applier.apply(tableId, UserId(1000))
+        applier.drop(tableId, UserId(1000))
+
+        assertTrue(wallet.toGameCalls.isEmpty())
+        assertEquals(Chips.of(10_000), seat(tableId, 1)!!.stack)
+        assertEquals(Chips.of(3_000), seat(tableId, 1)!!.chipsReservation)
+        assertTrue(events.isEmpty())
+    }
 }

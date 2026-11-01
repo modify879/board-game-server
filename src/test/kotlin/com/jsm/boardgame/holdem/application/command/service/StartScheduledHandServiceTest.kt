@@ -135,5 +135,46 @@ class StartScheduledHandServiceTest {
         assertFalse(walletTransfer.touched)
         assertEquals(Chips.of(10_000), tables.findById(tableId)!!.seatAt(2)!!.stack)
     }
-}
 
+    @Test
+    fun `트랜잭션을 여는 사이 테이블이 사라졌으면 핸드를 시작하지 않는다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        var lookups = 0
+        val vanishingAfterFirst = object : HoldemTableRepository by tables {
+            override fun findById(id: TableId): HoldemTable? = if (++lookups == 1) tables.findById(id) else null
+        }
+        val racing = StartScheduledHandService(vanishingAfterFirst, handStore, handStarter, TransactionOperations.withoutTransaction())
+
+        racing.start(StartScheduledHandCommand(tableId.value))
+
+        assertNull(handStore.find(tableId))
+        assertTrue(countdown.restarted.isEmpty())
+    }
+
+    @Test
+    fun `트랜잭션을 여는 사이 다른 경로가 핸드를 시작했으면 두 번째 핸드를 만들지 않는다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        val table = tables.findById(tableId)!!
+        table.placeButtonAtFirstSeat()
+        val other = Hand.start(
+            mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)),
+            buttonSeatNo = table.buttonSeatNo!!, smallBlindSeatNo = table.buttonSeatNo!!, bigBlindSeatNo = 2,
+            table.smallBlind, table.bigBlind, identityShuffler,
+        )
+        val handAppearsBeforeTransaction = TransactionOperations.withoutTransaction().let { plain ->
+            object : TransactionOperations {
+                override fun <T> execute(action: org.springframework.transaction.support.TransactionCallback<T>): T {
+                    handStore.save(tableId, other)
+                    return plain.execute(action)
+                }
+            }
+        }
+        // 첫 확인(트랜잭션 밖)은 핸드가 없는 상태로 통과하고, 트랜잭션 안의 재확인이 새로 생긴 핸드를 본다.
+        val racing = StartScheduledHandService(tables, handStore, handStarter, handAppearsBeforeTransaction)
+
+        racing.start(StartScheduledHandCommand(tableId.value))
+
+        assertTrue(handStore.find(tableId) === other)
+        assertTrue(countdown.restarted.isEmpty())
+    }
+}

@@ -313,4 +313,49 @@ class StompSessionRegistryTest {
         assertThat(registry.sessionIds()).doesNotContain("session-1")
         assertThat(registry.registeredSessionIds()).doesNotContain("session-1")
     }
+
+    @Test
+    fun `replaceToken 은 등록되지 않은 세션이면 아무 것도 예약하지 않는다`() {
+        registry.replaceToken("unknown", "jti-x", fixedInstant.plusSeconds(60))
+
+        assertThat(scheduler.scheduled).isEmpty()
+        assertThat(registry.registeredSessionIds()).isEmpty()
+    }
+
+    @Test
+    fun `disconnect 로 이미 정리된 세션의 예약 작업이 늦게 실행돼도 아무 일도 일어나지 않는다`() {
+        val session = RegistryFakeWebSocketSession("session-1")
+        registry.registerSession("session-1", session)
+        registry.register("session-1", "jti-1", 1L, fixedInstant.plusSeconds(60))
+        registry.onSessionDisconnect(SessionDisconnectEvent(this, MessageBuilder.withPayload(ByteArray(0)).build(), "session-1", CloseStatus.NORMAL))
+
+        scheduler.scheduled[0].task.run()
+
+        assertThat(session.closeEntered.await(200, TimeUnit.MILLISECONDS)).isFalse()
+        assertThat(session.closeStatus).isNull()
+    }
+
+    @Test
+    fun `소켓이 캡처되지 않은 세션도 종료 작업이 예외 없이 항목만 지운다`() {
+        registry.register("session-1", "jti-1", 1L, fixedInstant.plusSeconds(60))
+
+        scheduler.scheduled[0].task.run()
+
+        assertThat(registry.registeredSessionIds()).doesNotContain("session-1")
+    }
+
+    @Test
+    fun `같은 세션의 종료 작업이 두 번 실행돼도 소켓은 한 번만 닫힌다`() {
+        val session = RegistryFakeWebSocketSession("session-1")
+        registry.registerSession("session-1", session)
+        registry.register("session-1", "jti-1", 1L, fixedInstant.plusSeconds(60))
+
+        registry.closeAllOf(1L)
+        scheduler.scheduled.last().task.run()
+        session.awaitClosed()
+        val first = session.closeStatus
+        scheduler.scheduled[0].task.run()
+
+        assertThat(session.closeStatus).isSameAs(first)
+    }
 }

@@ -660,4 +660,29 @@ class BettingRoundTest {
         assertFalse(round.isComplete)
         assertEquals(2, round.toActSeatNo)
     }
+
+    @Test
+    fun `콜이든 레이즈든 스택을 정확히 비우면 ALL_IN 이 되고 스택이 남으면 ACTIVE 로 남는다`() {
+        val round = BettingRound.open(
+            seats = listOf(seat(1, 1_000), seat(2, 300), seat(3, 1_000)),
+            bigBlind = chips(200),
+            firstToActSeatNo = 1,
+        )
+        fun statusOf(seatNo: Int) = round.seats.first { it.seatNo == seatNo }.status
+
+        round.act(1, BettingAction.RaiseTo(chips(600)))
+        assertEquals(SeatStatus.ACTIVE, statusOf(1)) // 400 이 남았다
+
+        round.act(2, BettingAction.Call) // 300 이 전부라 짧은 콜로 올인
+        assertEquals(SeatStatus.ALL_IN, statusOf(2))
+
+        round.act(3, BettingAction.RaiseTo(chips(1_000))) // 스택 전부 레이즈
+        assertEquals(SeatStatus.ALL_IN, statusOf(3))
+        assertEquals(1, round.toActSeatNo)
+
+        round.act(1, BettingAction.Call) // 400 을 더 내 스택을 비운다
+        assertEquals(SeatStatus.ALL_IN, statusOf(1))
+        assertTrue(round.isComplete)
+        assertNull(round.toActSeatNo)
+    }
 }

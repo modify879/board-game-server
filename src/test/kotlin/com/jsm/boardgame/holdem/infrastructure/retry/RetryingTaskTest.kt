@@ -129,4 +129,18 @@ class RetryingTaskTest {
             Thread.interrupted() // 다른 테스트에 플래그가 새지 않게 지운다
         }
     }
+
+    @Test
+    fun `실행 중 낡아졌으면 실패해도 재시도도 포기 처리도 하지 않는다`() {
+        var stale = false
+        scheduler.runRetrying("test", clock, Duration.ofSeconds(2), 1, { stale }, { gaveUp++ }) {
+            runs++
+            stale = true
+            throw IllegalStateException("fail")
+        }
+
+        assertEquals(1, runs)
+        assertEquals(0, scheduler.calls.size)
+        assertEquals(0, gaveUp)
+    }
 }

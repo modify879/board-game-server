@@ -301,4 +301,16 @@ class WithdrawServiceTest {
     fun `없는 사용자면 USER_NOT_FOUND 다`() {
         assertFailsWith<UserNotFoundException> { service.withdraw(WithdrawCommand(9L, "password1")) }
     }
+
+    @Test
+    fun `확인한 뒤 행 락 전에 사용자가 사라졌으면 USER_NOT_FOUND 이고 세션 정리와 카운터 초기화를 하지 않는다`() {
+        seed()
+        concurrentChange = { users.stored.remove(1) }
+
+        val e = assertFailsWith<UserNotFoundException> { service.withdraw(WithdrawCommand(1L, "password1")) }
+
+        assertEquals(UserErrorCode.USER_NOT_FOUND, e.errorCode)
+        assertEquals("jti-1", sessions.currentAccessTokenId(UserId(1)))
+        assertEquals(0, limiter.resets)
+    }
 }

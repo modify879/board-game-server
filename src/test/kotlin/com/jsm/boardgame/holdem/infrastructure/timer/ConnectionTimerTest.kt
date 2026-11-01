@@ -605,4 +605,55 @@ class ConnectionTimerTest {
         assertEquals(0, expire.calls.size)
         assertEquals(1, scheduler.scheduledCalls.size)
     }
+
+    @Test
+    fun `principal 이 없거나 숫자가 아닌 연결 이벤트는 감시를 풀지도 presence 를 바꾸지도 않는다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        val presence = ConnectionTimerFakeUpdateSeatPresenceUseCase()
+        val timer = newTimer(scheduler, presence, ConnectionTimerFakeExpireConnectionUseCase(null))
+        val nonNumeric = object : Principal { override fun getName(): String = "not-a-number" }
+
+        timer.onSessionConnected(SessionConnectedEvent(this, fakeMessage, null))
+        timer.onSessionConnected(SessionConnectedEvent(this, fakeMessage, nonNumeric))
+        timer.onSessionDisconnect(SessionDisconnectEvent(this, fakeMessage, "session-1", CloseStatus.NORMAL, nonNumeric))
+
+        assertTrue(presence.calls.isEmpty())
+        assertTrue(scheduler.scheduledCalls.isEmpty())
+    }
+
+    @Test
+    fun `만료 처리가 실패한 사이 재접속해 토큰이 바뀌었으면 연결 감시를 다시 걸지 않는다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        lateinit var timer: ConnectionTimer
+        val failingAfterReconnect = object : ExpireConnectionUseCase {
+            override fun expire(command: ExpireConnectionCommand): Long? {
+                timer.onSessionConnected(connectedEvent(command.userId))
+                throw IllegalStateException("db down")
+            }
+        }
+        timer = newTimer(scheduler, ConnectionTimerFakeUpdateSeatPresenceUseCase(), failingAfterReconnect)
+
+        timer.onSessionDisconnect(disconnectEvent(42L))
+        scheduler.scheduledCalls[0].task.run()
+
+        assertEquals(1, scheduler.scheduledCalls.size)
+    }
+
+    @Test
+    fun `연결 감시를 다시 거는 중에 presence 갱신이 던져도 예외는 퍼지지 않고 만료 예약은 남는다`() {
+        val scheduler = ConnectionTimerFakeTaskScheduler()
+        var presenceCalls = 0
+        val presenceFailingOnRearm = object : UpdateSeatPresenceUseCase {
+            override fun update(command: UpdateSeatPresenceCommand) {
+                if (++presenceCalls > 1) throw IllegalStateException("db down")
+            }
+        }
+        val timer = ConnectionTimer(scheduler, clock, presenceFailingOnRearm, ConnectionTimerFailingExpireConnectionUseCase(), tables, InMemoryJoinQueue(50), ConnectionTimerFakeJoinQueueNotifier(), ConnectionTimerFakeUserConnections(), ConnectionTimerFakeTableExecutor(), Duration.ofMinutes(3))
+
+        timer.onSessionDisconnect(disconnectEvent(42L))
+        scheduler.scheduledCalls[0].task.run()
+
+        assertEquals(2, presenceCalls)
+        assertEquals(2, scheduler.scheduledCalls.size)
+    }
 }

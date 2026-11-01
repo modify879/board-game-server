@@ -216,4 +216,19 @@ class CancelHandServiceTest {
         assertTrue(countdown.restarted.isEmpty())
         assertTrue(events.any { it is JoinRequestsDue })
     }
+
+    @Test
+    fun `핸드는 있는데 테이블이 없으면 환불도 삭제도 알림도 하지 않는다`() {
+        val tableId = tableWithSeats(1 to 10_000L, 2 to 10_000L)
+        val hand = startAndStoreHand(tableId, mapOf(1 to Chips.of(10_000), 2 to Chips.of(10_000)))
+        val orphanTableId = TableId(tableId.value + 1_000)
+        handStore.save(orphanTableId, hand)
+
+        service.cancel(CancelHandCommand(orphanTableId.value))
+
+        assertTrue(handStore.find(orphanTableId) === hand)
+        assertTrue(walletTransfer.fromGameCalls.isEmpty())
+        assertTrue(events.isEmpty())
+        assertTrue(countdown.restarted.isEmpty())
+    }
 }

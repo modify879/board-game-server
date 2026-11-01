@@ -22,6 +22,10 @@ private class DeckFakeDuplicatingShuffler : Shuffler {
     override fun shuffle(cards: List<Card>): List<Card> = cards + cards.first()
 }
 
+private class DeckFakeSameSizeDuplicatingShuffler : Shuffler {
+    override fun shuffle(cards: List<Card>): List<Card> = cards.dropLast(1) + cards.first()
+}
+
 class DeckTest {
 
     @Test
@@ -116,5 +120,31 @@ class DeckTest {
         assertEquals(Deck.FULL[0], first)
         assertEquals(Deck.FULL[1], second)
         assertEquals(50, deck.remaining)
+    }
+
+    @Test
+    fun `셔플러가 장수는 맞추고 카드를 복제하면 에러를 던진다`() {
+        assertFailsWith<IllegalStateException> {
+            Deck.shuffled(DeckFakeSameSizeDuplicatingShuffler())
+        }
+    }
+
+    @Test
+    fun `reconstitute 는 남은 카드를 셔플러가 준 순서대로 뽑게 한다`() {
+        val remaining = Deck.FULL.drop(5)
+
+        val deck = Deck.reconstitute(DeckFakeReverseShuffler(), remaining)
+
+        assertEquals(47, deck.remaining)
+        assertEquals(remaining.reversed().take(3), deck.draw(3))
+    }
+
+    @Test
+    fun `reconstitute 는 셔플러가 카드를 잃거나 복제하거나 장수만 맞춰 바꿔치면 에러를 던진다`() {
+        val remaining = Deck.FULL.drop(5)
+
+        assertFailsWith<IllegalStateException> { Deck.reconstitute(DeckFakeLosingShuffler(), remaining) }
+        assertFailsWith<IllegalStateException> { Deck.reconstitute(DeckFakeDuplicatingShuffler(), remaining) }
+        assertFailsWith<IllegalStateException> { Deck.reconstitute(DeckFakeSameSizeDuplicatingShuffler(), remaining) }
     }
 }

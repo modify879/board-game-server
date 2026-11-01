@@ -2,6 +2,7 @@ package com.jsm.boardgame.wallet.application.command.service
 
 import com.jsm.boardgame.wallet.application.command.usecase.RejectWithdrawalRequestCommand
 import com.jsm.boardgame.wallet.domain.exception.WalletErrorCode
+import com.jsm.boardgame.wallet.domain.exception.WithdrawalRequestNotFoundException
 import com.jsm.boardgame.wallet.domain.exception.WithdrawalRequestAlreadyProcessedException
 import com.jsm.boardgame.wallet.domain.model.BankAccount
 import com.jsm.boardgame.wallet.domain.model.LedgerEntryType
@@ -87,5 +88,16 @@ class RejectWithdrawalRequestServiceTest {
         assertEquals(WalletErrorCode.WITHDRAWAL_REQUEST_ALREADY_PROCESSED, e.errorCode)
         assertEquals(Money.ZERO, wallets.findByUserId(UserId(1))!!.balance)
         assertTrue(ledger.stored.isEmpty())
+    }
+
+    @Test
+    fun `없는 환전 요청을 반려하면 WITHDRAWAL_REQUEST_NOT_FOUND 이고 원장과 이벤트가 없다`() {
+        val e = assertFailsWith<WithdrawalRequestNotFoundException> {
+            service.reject(RejectWithdrawalRequestCommand(requestId = 404, adminUserId = 99, reason = "서류 미비"))
+        }
+
+        assertEquals(WalletErrorCode.WITHDRAWAL_REQUEST_NOT_FOUND, e.errorCode)
+        assertTrue(ledger.stored.isEmpty())
+        assertTrue(eventPublisher.events.isEmpty())
     }
 }
