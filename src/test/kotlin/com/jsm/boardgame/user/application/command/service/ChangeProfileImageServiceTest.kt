@@ -130,6 +130,18 @@ class ChangeProfileImageServiceTest {
     }
 
     @Test
+    fun `저장 실패 뒤 새 파일 정리마저 실패해도 원래 예외가 그대로 전달된다`() {
+        users.put(1L, "1/old.png")
+        users.failOnSave = true
+        storage.failOnDelete = true
+
+        val e = assertFailsWith<IllegalStateException> { change.change(ChangeProfileImageCommand(1L, png)) }
+
+        assertEquals("db down", e.message)
+        assertEquals(setOf("1/1.png"), storage.files)
+    }
+
+    @Test
     fun `옛 파일 삭제가 실패해도 변경은 성공한다`() {
         users.put(1L, "1/old.png")
         storage.failOnDelete = true

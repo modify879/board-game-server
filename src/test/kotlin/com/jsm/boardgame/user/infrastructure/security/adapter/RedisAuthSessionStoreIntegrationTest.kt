@@ -397,6 +397,77 @@ class RedisAuthSessionStoreIntegrationTest {
         assertThat(authSessionStore.userIdForRefreshToken(rotated.refreshToken)).isEqualTo(userId)
     }
 
+    @Test
+    fun `start 에 이미 지난 만료 시각을 주면 세션도 인덱스도 쓰지 않는다`() {
+        val userId = newUserId()
+        val expired = newSession(refreshTokenExpiresAt = Instant.now().minusSeconds(1))
+
+        authSessionStore.start(userId, expired)
+
+        assertThat(redisTemplate.hasKey("auth:session:${userId.value}")).isFalse()
+        assertThat(authSessionStore.userIdForRefreshToken(expired.refreshToken)).isNull()
+        assertThat(authSessionStore.currentAccessTokenId(userId)).isNull()
+    }
+
+    @Test
+    fun `이미 만료된 액세스 토큰은 블랙리스트에 쓰지 않는다`() {
+        val jti = "jti-${UUID.randomUUID()}"
+
+        authSessionStore.blacklistAccessToken(jti, Instant.now().minusSeconds(1))
+        authSessionStore.blacklistAccessToken("$jti-now", Instant.now())
+
+        assertThat(authSessionStore.isAccessTokenBlacklisted(jti)).isFalse()
+        assertThat(authSessionStore.isAccessTokenBlacklisted("$jti-now")).isFalse()
+    }
+
+    @Test
+    fun `유예 안이어도 재생 레코드를 복호화할 수 없으면 Mismatch 다`() {
+        val userId = newUserId()
+        val t0 = newSession()
+        authSessionStore.start(userId, t0)
+        authSessionStore.rotateWith(userId, t0.refreshToken, newSession())
+        redisTemplate.opsForValue().set("auth:refresh:replay:${sha256Hex(t0.refreshToken)}", "garbage", Duration.ofSeconds(30))
+
+        assertThat(authSessionStore.rotateWith(userId, t0.refreshToken, newSession())).isEqualTo(RotationResult.Mismatch)
+    }
+
+    @Test
+    fun `다른 토큰의 재생 레코드는 복호화되지 않아 Mismatch 다`() {
+        val userId = newUserId()
+        val t0 = newSession()
+        authSessionStore.start(userId, t0)
+        authSessionStore.rotateWith(userId, t0.refreshToken, newSession())
+        // 다른 사용자의 유효한 재생 레코드를 가져다 놓아도, 제시한 토큰으로 유도한 키가 달라 풀리지 않는다.
+        val otherUser = newUserId()
+        val o0 = newSession()
+        authSessionStore.start(otherUser, o0)
+        authSessionStore.rotateWith(otherUser, o0.refreshToken, newSession())
+        val foreign = redisTemplate.opsForValue().get("auth:refresh:replay:${sha256Hex(o0.refreshToken)}")!!
+        redisTemplate.opsForValue().set("auth:refresh:replay:${sha256Hex(t0.refreshToken)}", foreign, Duration.ofSeconds(30))
+
+        assertThat(authSessionStore.rotateWith(userId, t0.refreshToken, newSession())).isEqualTo(RotationResult.Mismatch)
+    }
+
+    @Test
+    fun `저장된 세션 문자열의 필드가 3개 미만이면 currentAccessTokenId 가 null 이다`() {
+        val userId = newUserId()
+        redisTemplate.opsForValue().set("auth:session:${userId.value}", "only-access-id:hash", Duration.ofMinutes(5))
+
+        assertThat(authSessionStore.currentAccessTokenId(userId)).isNull()
+        val shortest = newUserId()
+        redisTemplate.opsForValue().set("auth:session:${shortest.value}", "garbage", Duration.ofMinutes(5))
+        assertThat(authSessionStore.currentAccessTokenId(shortest)).isNull()
+    }
+
+    @Test
+    fun `저장된 세션 문자열의 필드가 3개 미만이면 rotate 는 Mismatch 이고 세션을 건드리지 않는다`() {
+        val userId = newUserId()
+        redisTemplate.opsForValue().set("auth:session:${userId.value}", "only-access-id:hash", Duration.ofMinutes(5))
+
+        assertThat(authSessionStore.rotateWith(userId, "아무-토큰", newSession())).isEqualTo(RotationResult.Mismatch)
+        assertThat(redisTemplate.opsForValue().get("auth:session:${userId.value}")).isEqualTo("only-access-id:hash")
+    }
+
     /** 재생 키(PX = 유예)가 사라질 때까지 기다린다. 상한 5초. */
     private fun awaitReplayExpired(presentedRefreshToken: String) {
         val key = "auth:refresh:replay:${sha256Hex(presentedRefreshToken)}"
