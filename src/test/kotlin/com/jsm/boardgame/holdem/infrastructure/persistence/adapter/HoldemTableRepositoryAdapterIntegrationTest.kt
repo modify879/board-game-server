@@ -7,6 +7,7 @@ import com.jsm.boardgame.holdem.domain.model.placeButtonAtFirstSeat
 import com.jsm.boardgame.UniqueNames
 import com.jsm.boardgame.holdem.domain.exception.AlreadySeatedException
 import com.jsm.boardgame.holdem.domain.exception.HoldemErrorCode
+import com.jsm.boardgame.holdem.domain.exception.SeatTakenException
 import com.jsm.boardgame.holdem.domain.model.Chips
 import com.jsm.boardgame.holdem.domain.model.HoldemTable
 import com.jsm.boardgame.holdem.domain.model.TableId
@@ -21,10 +22,16 @@ import com.jsm.boardgame.user.domain.model.Username
 import com.jsm.boardgame.user.domain.repository.UserRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -218,5 +225,45 @@ class HoldemTableRepositoryAdapterIntegrationTest {
         val found = tables.findById(TableId(id))
 
         assertEquals(TablePolicy.of(100, 200, 20, 100), found?.policy)
+    }
+
+    @Autowired
+    private lateinit var txManager: PlatformTransactionManager
+
+    @Test
+    fun `같은 좌석에 동시에 앉으면 uk_holdem_seats_table_seat 위반은 SeatTakenException 으로 번역된다`() {
+        // 단일 스레드에서는 save 가 기존 좌석 행의 id 를 재사용해 UPDATE 가 되므로 제약이 안 튄다 — 커밋 전 INSERT 두 개가 겹쳐야 한다.
+        val userA = uniqueUserId()
+        val userB = uniqueUserId()
+        val saved = tables.save(HoldemTable.create("race-seat", TestTablePolicy))
+        val tableForA = tables.findById(saved.id!!)!!.also { it.sitDown(userA, buyIn) }
+        val tableForB = tables.findById(saved.id)!!.also { it.sitDown(userB, buyIn) }
+        val aInserted = CountDownLatch(1)
+        val releaseA = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val a = executor.submit {
+                TransactionTemplate(txManager).executeWithoutResult {
+                    tables.save(tableForA)
+                    aInserted.countDown()
+                    releaseA.await(10, TimeUnit.SECONDS)
+                }
+            }
+            assertTrue(aInserted.await(10, TimeUnit.SECONDS))
+            val b = executor.submit<Throwable?> {
+                runCatching { TransactionTemplate(txManager).executeWithoutResult { tables.save(tableForB) } }.exceptionOrNull()
+            }
+            Thread.sleep(300) // B 의 INSERT 가 A 의 커밋을 기다리는 상태
+            releaseA.countDown()
+            a.get(10, TimeUnit.SECONDS)
+
+            val e = assertIs<SeatTakenException>(b.get(10, TimeUnit.SECONDS))
+            assertEquals(HoldemErrorCode.SEAT_TAKEN, e.errorCode)
+            assertNotNull(tables.findByUserId(userA))
+            assertNull(tables.findByUserId(userB))
+        } finally {
+            releaseA.countDown()
+            executor.shutdownNow()
+        }
     }
 }

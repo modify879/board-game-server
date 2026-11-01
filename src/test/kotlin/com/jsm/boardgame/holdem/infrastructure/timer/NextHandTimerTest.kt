@@ -323,4 +323,52 @@ class NextHandTimerTest {
 
         assertEquals(2, scheduler.scheduledCalls.size)
     }
+
+    /** 실행기 자체가 던지는 경우(거부 등) — [beforeThrow] 는 그 직전에 다른 경로가 끼어드는 것을 흉내 낸다. */
+    private fun timerWithThrowingExecutor(beforeThrow: () -> Unit = {}) = NextHandTimer(
+        scheduler, useCase,
+        object : TableExecutor {
+            override fun <T> call(tableId: TableId, task: () -> T): T {
+                beforeThrow()
+                throw IllegalStateException("executor down")
+            }
+            override fun post(tableId: TableId, task: () -> Unit) = throw IllegalStateException("executor down")
+        },
+        clock, nextHandDelay,
+    )
+
+    @Test
+    fun `실행기가 던지고 토큰이 그대로면 카운트다운을 다시 건다`() {
+        val failing = timerWithThrowingExecutor()
+        failing.restart(tableId)
+
+        scheduler.scheduledCalls[0].task.run()
+
+        assertEquals(2, scheduler.scheduledCalls.size)
+        assertEquals(0, useCase.calls.size)
+    }
+
+    @Test
+    fun `실행기가 던졌어도 그 사이 테이블이 닫혔으면 다시 걸지 않는다`() {
+        lateinit var failing: NextHandTimer
+        failing = timerWithThrowingExecutor { failing.onTableClosed(TableClosed(tableId)) }
+        failing.restart(tableId)
+
+        scheduler.scheduledCalls[0].task.run()
+
+        assertEquals(1, scheduler.scheduledCalls.size)
+        assertNull(failing.remaining(tableId))
+    }
+
+    @Test
+    fun `실행기가 던졌어도 그 사이 취소되어 토큰이 바뀌었으면 다시 걸지 않는다`() {
+        lateinit var failing: NextHandTimer
+        failing = timerWithThrowingExecutor { failing.cancel(tableId) }
+        failing.restart(tableId)
+
+        scheduler.scheduledCalls[0].task.run()
+
+        assertEquals(1, scheduler.scheduledCalls.size)
+        assertNull(failing.remaining(tableId))
+    }
 }

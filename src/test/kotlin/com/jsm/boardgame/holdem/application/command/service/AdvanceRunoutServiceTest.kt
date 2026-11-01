@@ -117,4 +117,15 @@ class AdvanceRunoutServiceTest {
         assertEquals(2_000L, lastHandResults.find(tableId)!!.payouts.sumOf { it.amount })
         assertEquals(Chips.of(2_000), tables.findById(tableId)!!.occupiedSeats().fold(Chips.ZERO) { a, s -> a + s.stack })
     }
+
+    @Test
+    fun `테이블은 있는데 핸드가 없으면 아무것도 하지 않는다`() {
+        val tableId = tableWithHand(allIn = true)
+        handStore.remove(tableId)
+
+        service.advance(AdvanceRunoutCommand(tableId.value))
+
+        assertEquals(0, handStore.saves)
+        assertTrue(eventPublisher.events.isEmpty())
+    }
 }

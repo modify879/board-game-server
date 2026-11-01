@@ -275,4 +275,26 @@ class SitDownServiceTest {
 
         assertTrue(joinQueue.isQueued(UserId(1)))
     }
+
+    @Test
+    fun `롤백 시점에 다른 테이블로 다시 대기한 사용자의 항목은 지우지 않는다`() {
+        val tableId = createTable()
+        val otherTableId = createTable()
+        userConnections.connect(1)
+
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            service.sitDown(SitDownCommand(tableId = tableId.value, userId = 1, buyIn = 8_000, postBlindImmediately = true))
+            // 롤백 전에 이 항목이 빠지고 사용자가 다른 테이블에 다시 대기했다
+            joinQueue.removeByUserId(UserId(1))
+            joinQueue.enqueue(otherTableId, UserId(1), false, Chips.of(8_000))
+            TransactionSynchronizationUtils.invokeAfterCompletion(
+                TransactionSynchronizationManager.getSynchronizations(), TransactionSynchronization.STATUS_ROLLED_BACK,
+            )
+        } finally {
+            TransactionSynchronizationManager.clear()
+        }
+
+        assertEquals(otherTableId, joinQueue.tableOf(UserId(1)))
+    }
 }
