@@ -199,6 +199,14 @@ private class RefreshProbeRealtime(
     }
 }
 
+// 저장소가 직전 액세스 토큰 id 를 모르는 회전(Rotated(null)) 을 흉내 낸다.
+private class RefreshNoPreviousSessions(private val inner: AuthSessionStore) : AuthSessionStore by inner {
+    override fun rotate(userId: UserId, presentedRefreshToken: String, next: AuthSession, nextAccessToken: String, nextAccessTokenExpiresAt: Instant, nextRole: UserRole): RotationResult {
+        inner.rotate(userId, presentedRefreshToken, next, nextAccessToken, nextAccessTokenExpiresAt, nextRole)
+        return RotationResult.Rotated(null)
+    }
+}
+
 class RefreshTokenServiceTest {
 
     private val tokenIssuer = RefreshFakeAuthTokenIssuer()
@@ -397,5 +405,29 @@ class RefreshTokenServiceTest {
         failAt.clear()
         assertFailsWith<InvalidRefreshTokenException> { service.refresh(RefreshTokenCommand(first.refreshToken)) }
         assertNull(sessions.currentAccessTokenId(UserId(22L)))
+    }
+
+    @Test
+    fun `회전 결과에 직전 액세스 토큰 id 가 없으면 블랙리스트도 소켓 유예 종료도 하지 않고 새 토큰을 돌려준다`() {
+        val first = loginSession(30L)
+        val noPrevious = RefreshTokenService(tokenIssuer, RefreshNoPreviousSessions(sessions), realtimeConnections, users, Duration.ofMinutes(30), Clock.systemUTC())
+
+        val rotated = noPrevious.refresh(RefreshTokenCommand(first.refreshToken))
+
+        assertNotEquals(first.refreshToken, rotated.refreshToken)
+        assertFalse(sessions.isAccessTokenBlacklisted(first.accessTokenId))
+        assertTrue(realtimeConnections.closeAfterGraceCalls.isEmpty())
+    }
+
+    @Test
+    fun `토큰 인덱스는 남아 있지만 세션이 이미 없으면 REFRESH_TOKEN_INVALID 이고 블랙리스트도 소켓 종료도 하지 않는다`() {
+        val first = loginSession(31L)
+        sessions.clear(UserId(31L))
+
+        val e = assertFailsWith<InvalidRefreshTokenException> { service.refresh(RefreshTokenCommand(first.refreshToken)) }
+
+        assertEquals(UserErrorCode.REFRESH_TOKEN_INVALID, e.errorCode)
+        assertFalse(sessions.isAccessTokenBlacklisted(first.accessTokenId))
+        assertTrue(realtimeConnections.closeAllOfCalls.isEmpty())
     }
 }

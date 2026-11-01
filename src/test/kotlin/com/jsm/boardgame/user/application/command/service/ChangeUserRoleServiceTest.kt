@@ -94,6 +94,9 @@ private class ChangeRoleProbeUsers(
     private val inner: UserRepository,
     private val failAt: Set<String>,
 ) : UserRepository by inner {
+    // 첫 findById 가 끝난 뒤 락 재조회 전에 사용자가 사라진 경우를 흉내 낸다.
+    override fun findByIdForUpdate(id: UserId): User? = if ("lockNull" in failAt) null else inner.findByIdForUpdate(id)
+
     override fun save(user: User): User {
         if ("save" in failAt) throw IllegalStateException("db down: save")
         return inner.save(user)
@@ -252,5 +255,16 @@ class ChangeUserRoleServiceTest {
         assertFailsWith<IllegalStateException> { service.changeRole(ChangeUserRoleCommand(1L, "USER")) }
 
         assertTrue(sessions.isAccessTokenBlacklisted("jti-1"))
+    }
+
+    @Test
+    fun `락 재조회 전에 사용자가 사라졌으면 USER_NOT_FOUND 이고 역할은 저장되지 않는다`() {
+        users.put(1L)
+        failAt += "lockNull"
+
+        val e = assertFailsWith<UserNotFoundException> { service.changeRole(ChangeUserRoleCommand(1L, "ADMIN")) }
+
+        assertEquals(UserErrorCode.USER_NOT_FOUND, e.errorCode)
+        assertEquals(UserRole.USER, users.findById(UserId(1L))!!.role)
     }
 }

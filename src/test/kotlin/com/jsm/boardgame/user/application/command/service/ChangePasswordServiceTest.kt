@@ -236,4 +236,15 @@ class ChangePasswordServiceTest {
     fun `없는 사용자면 USER_NOT_FOUND 다`() {
         assertFailsWith<UserNotFoundException> { change() }
     }
+
+    @Test
+    fun `확인한 뒤 행 락 전에 사용자가 사라졌으면 USER_NOT_FOUND 이고 세션은 그대로다`() {
+        seed()
+        users.beforeLockedRead = { users.stored.remove(1) }
+
+        val e = assertFailsWith<UserNotFoundException> { change() }
+
+        assertEquals(UserErrorCode.USER_NOT_FOUND, e.errorCode)
+        assertEquals("old-jti", sessions.currentAccessTokenId(UserId(1)))
+    }
 }
